@@ -14,6 +14,8 @@ import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 import { format } from 'date-fns';
 
+import { Redis } from '@upstash/redis';
+
 const cn = (...inputs: ClassValue[]) => {
   return twMerge(clsx(inputs));
 };
@@ -50,58 +52,50 @@ const exportToCSV = (logs: Log[]) => {
 };
 
 // ==========================================
-// UPSTASH REDIS / VERCEL KV CLOUD STORE INTEGRATION
-// Safe implementation to prevent "process is not defined" error
+// UPSTASH REDIS / VERCEL KV SDK INTEGRATION
+// Super Big Upgrade: Using Official @upstash/redis SDK
 // ==========================================
+const initRedis = () => {
+  try {
+    // Automatically reads from process.env if available directly
+    if (typeof process !== 'undefined' && process.env && process.env.UPSTASH_REDIS_REST_URL) {
+       return Redis.fromEnv();
+    }
+    
+    // Comprehensive fallback for Next.js Client Components (NEXT_PUBLIC_ vars)
+    return new Redis({
+      url: (typeof process !== 'undefined' ? (process.env.NEXT_PUBLIC_KV_REST_API_URL || process.env.NEXT_PUBLIC_UPSTASH_REDIS_REST_URL) : '') || '',
+      token: (typeof process !== 'undefined' ? (process.env.NEXT_PUBLIC_KV_REST_API_TOKEN || process.env.NEXT_PUBLIC_UPSTASH_REDIS_REST_TOKEN) : '') || '',
+    });
+  } catch (error) {
+    console.warn("Redis initialization warning:", error);
+    return null;
+  }
+};
+
+const redis = initRedis();
+
 const CloudStore = {
-  getUrl: () => {
-    if (typeof process !== 'undefined' && process.env) {
-      if (process.env.NEXT_PUBLIC_KV_REST_API_URL) return process.env.NEXT_PUBLIC_KV_REST_API_URL;
-      if (process.env.NEXT_PUBLIC_UPSTASH_REDIS_REST_URL) return process.env.NEXT_PUBLIC_UPSTASH_REDIS_REST_URL;
-    }
-    // Fallback if Vercel strips non-NEXT_PUBLIC envs
-    if (typeof window !== 'undefined') return localStorage.getItem('axaxyz_sys_kv_url') || '';
-    return '';
-  },
-  getToken: () => {
-    if (typeof process !== 'undefined' && process.env) {
-      if (process.env.NEXT_PUBLIC_KV_REST_API_TOKEN) return process.env.NEXT_PUBLIC_KV_REST_API_TOKEN;
-      if (process.env.NEXT_PUBLIC_UPSTASH_REDIS_REST_TOKEN) return process.env.NEXT_PUBLIC_UPSTASH_REDIS_REST_TOKEN;
-    }
-    if (typeof window !== 'undefined') return localStorage.getItem('axaxyz_sys_kv_token') || '';
-    return '';
-  },
-  isAvailable: function() { 
-    return !!(this.getUrl() && this.getToken()); 
+  isAvailable: () => { 
+    return redis !== null && redis.url !== '' && redis.token !== ''; 
   },
   async get(key: string) {
     if (!this.isAvailable()) return null;
     try {
-      const res = await fetch(`${this.getUrl()}/get/${key}`, {
-        headers: { Authorization: `Bearer ${this.getToken()}` },
-        cache: 'no-store'
-      });
-      const data = await res.json();
-      return data.result ? JSON.parse(data.result) : null;
+      const data = await redis!.get(key);
+      // @upstash/redis automatically parses JSON objects, fallback for legacy string data
+      return typeof data === 'string' ? JSON.parse(data) : data;
     } catch (e) {
-      console.error(`Cloud fetch error [${key}]:`, e);
+      console.error(`Upstash Redis fetch error [${key}]:`, e);
       return null;
     }
   },
   async set(key: string, value: any) {
     if (!this.isAvailable()) return;
     try {
-      const stringValue = typeof value === 'string' ? value : JSON.stringify(value);
-      await fetch(`${this.getUrl()}/set/${key}`, {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${this.getToken()}`,
-          'Content-Type': 'application/json'
-        },
-        body: stringValue
-      });
+      await redis!.set(key, value);
     } catch (e) {
-      console.error(`Cloud save error [${key}]:`, e);
+      console.error(`Upstash Redis save error [${key}]:`, e);
     }
   }
 };
@@ -681,37 +675,11 @@ const AdminLogin: React.FC<{ onLogin: () => void }> = ({ onLogin }) => {
   const [attempts, setAttempts] = useState(0);
   const [lockoutTimer, setLockoutTimer] = useState(0);
 
-  // Fallback Configuration States for Vercel environments without NEXT_PUBLIC
-  const [showConfig, setShowConfig] = useState(false);
-  const [sysKvUrl, setSysKvUrl] = useState('');
-  const [sysKvToken, setSysKvToken] = useState('');
-  const [sysAdminUser, setSysAdminUser] = useState('');
-  const [sysAdminPass, setSysAdminPass] = useState('');
-
-  useEffect(() => {
-    if (typeof window !== 'undefined') {
-      setSysKvUrl(localStorage.getItem('axaxyz_sys_kv_url') || '');
-      setSysKvToken(localStorage.getItem('axaxyz_sys_kv_token') || '');
-      setSysAdminUser(localStorage.getItem('axaxyz_sys_admin_user') || 'admin');
-      setSysAdminPass(localStorage.getItem('axaxyz_sys_admin_pass') || 'admin123');
-    }
-  }, []);
-
   useEffect(() => {
     let timer: NodeJS.Timeout;
     if (lockoutTimer > 0) timer = setTimeout(() => setLockoutTimer(lockoutTimer - 1), 1000);
     return () => clearTimeout(timer);
   }, [lockoutTimer]);
-
-  const saveConfig = () => {
-    localStorage.setItem('axaxyz_sys_kv_url', sysKvUrl);
-    localStorage.setItem('axaxyz_sys_kv_token', sysKvToken);
-    localStorage.setItem('axaxyz_sys_admin_user', sysAdminUser);
-    localStorage.setItem('axaxyz_sys_admin_pass', sysAdminPass);
-    setShowConfig(false);
-    setErr('✅ Konfigurasi sistem berhasil disimpan!');
-    setTimeout(() => window.location.reload(), 1500);
-  };
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -722,9 +690,9 @@ const AdminLogin: React.FC<{ onLogin: () => void }> = ({ onLogin }) => {
     setIsLoading(true); setErr('');
     await new Promise(resolve => setTimeout(resolve, 800));
 
-    // Dynamic ENV resolving (handles process safety)
-    let ADMIN_USER = sysAdminUser;
-    let ADMIN_PASS = sysAdminPass;
+    // Dynamic ENV resolving (handles process safety securely)
+    let ADMIN_USER = 'admin';
+    let ADMIN_PASS = 'admin123';
 
     if (typeof process !== 'undefined' && process.env) {
       if (process.env.NEXT_PUBLIC_ADMIN_USER) ADMIN_USER = process.env.NEXT_PUBLIC_ADMIN_USER;
@@ -747,41 +715,6 @@ const AdminLogin: React.FC<{ onLogin: () => void }> = ({ onLogin }) => {
     }
     setIsLoading(false);
   };
-
-  // Internal Fallback Configurator UI
-  if (showConfig) {
-    return (
-      <div className="min-h-screen bg-slate-950 flex items-center justify-center p-4">
-        <div className="w-full max-w-md bg-white/5 backdrop-blur-2xl border border-white/10 p-8 rounded-[2rem] shadow-2xl">
-          <h2 className="text-xl font-bold text-white mb-2">⚙️ Setup Sistem (Local Override)</h2>
-          <p className="text-xs text-slate-400 mb-6">Gunakan menu ini jika ENV Vercel tidak terbaca karena kehilangan prefix NEXT_PUBLIC_.</p>
-          
-          <div className="space-y-4">
-            <div>
-              <label className="text-xs text-slate-400 font-bold uppercase">KV_REST_API_URL</label>
-              <input type="text" value={sysKvUrl} onChange={e=>setSysKvUrl(e.target.value)} className="w-full bg-slate-900 border border-white/10 rounded-xl px-4 py-2 mt-1 text-white text-sm" placeholder="https://..." />
-            </div>
-            <div>
-              <label className="text-xs text-slate-400 font-bold uppercase">KV_REST_API_TOKEN</label>
-              <input type="password" value={sysKvToken} onChange={e=>setSysKvToken(e.target.value)} className="w-full bg-slate-900 border border-white/10 rounded-xl px-4 py-2 mt-1 text-white text-sm" placeholder="••••••••" />
-            </div>
-            <div className="pt-2 border-t border-white/10">
-              <label className="text-xs text-slate-400 font-bold uppercase">Admin Username</label>
-              <input type="text" value={sysAdminUser} onChange={e=>setSysAdminUser(e.target.value)} className="w-full bg-slate-900 border border-white/10 rounded-xl px-4 py-2 mt-1 text-white text-sm" />
-            </div>
-            <div>
-              <label className="text-xs text-slate-400 font-bold uppercase">Admin Password</label>
-              <input type="password" value={sysAdminPass} onChange={e=>setSysAdminPass(e.target.value)} className="w-full bg-slate-900 border border-white/10 rounded-xl px-4 py-2 mt-1 text-white text-sm" />
-            </div>
-            <div className="flex gap-2 mt-4">
-               <button onClick={() => setShowConfig(false)} className="flex-1 py-3 bg-white/10 text-white rounded-xl text-sm font-bold">Batal</button>
-               <button onClick={saveConfig} className="flex-1 py-3 bg-cyan-600 text-white rounded-xl text-sm font-bold">Simpan</button>
-            </div>
-          </div>
-        </div>
-      </div>
-    );
-  }
 
   return (
     <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center p-4 relative overflow-hidden w-full">
@@ -836,10 +769,6 @@ const AdminLogin: React.FC<{ onLogin: () => void }> = ({ onLogin }) => {
           </button>
         </form>
       </div>
-
-      <button onClick={() => setShowConfig(true)} className="absolute bottom-6 flex items-center gap-2 text-xs text-slate-600 hover:text-slate-400 transition-colors z-20">
-         <Server className="w-4 h-4" /> Config Override
-      </button>
     </div>
   );
 };
@@ -880,14 +809,14 @@ const AdminDashboardHome: React.FC = () => {
            {isCloudSync ? (
              <>
                <div className="w-10 h-10 rounded-full bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center mb-2 group-hover:scale-110 transition-transform"><Cloud className="w-5 h-5 text-emerald-400" /></div>
-               <h3 className="text-white font-bold text-sm">Cloud Sync Aktif</h3>
-               <p className="text-emerald-400/80 text-[10px] mt-1 leading-tight">Terhubung ke Database Vercel KV.</p>
+               <h3 className="text-white font-bold text-sm">Upstash Redis Aktif</h3>
+               <p className="text-emerald-400/80 text-[10px] mt-1 leading-tight">Terhubung ke Database Cloud.</p>
              </>
            ) : (
              <>
                <div className="w-10 h-10 rounded-full bg-rose-500/10 border border-rose-500/20 flex items-center justify-center mb-2"><CloudOff className="w-5 h-5 text-rose-400" /></div>
                <h3 className="text-white font-bold text-sm">Mode Lokal Saja</h3>
-               <p className="text-rose-400/80 text-[10px] mt-1 leading-tight">Atur Config Override di halaman Login!</p>
+               <p className="text-rose-400/80 text-[10px] mt-1 leading-tight">Environment Variables tidak ditemukan.</p>
              </>
            )}
         </div>
