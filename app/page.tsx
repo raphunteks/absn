@@ -293,8 +293,10 @@ const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
       <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center p-4">
         <div className="relative mb-6">
           <div className="absolute inset-0 bg-cyan-500/20 blur-3xl rounded-full"></div>
-          <div className="w-20 h-20 bg-gradient-to-br from-cyan-400 to-purple-600 rounded-3xl flex items-center justify-center shadow-lg animate-pulse relative z-10">
-            <span className="font-bold text-white text-3xl">A.</span>
+          {/* LOGO INJECTION: Loading Screen Logo with Fallback */}
+          <div className="w-20 h-20 bg-gradient-to-br from-cyan-400 to-purple-600 rounded-3xl flex items-center justify-center shadow-lg animate-pulse relative z-10 overflow-hidden p-3">
+             <img src="/axalogo.png" alt="AXAXYZ Logo" className="w-full h-full object-contain drop-shadow-md" onError={(e) => { e.currentTarget.style.display = 'none'; e.currentTarget.nextElementSibling?.classList.remove('hidden'); }} />
+             <span className="font-bold text-white text-3xl hidden">A.</span>
           </div>
         </div>
         <Loader2 className="w-8 h-8 text-cyan-400 animate-spin mb-4" />
@@ -739,7 +741,11 @@ const AttendanceWizard: React.FC = () => {
       <div className="absolute bottom-[-10%] right-[-10%] w-[40%] h-[40%] bg-cyan-600/20 rounded-full blur-[120px] pointer-events-none"></div>
       <header className="w-full p-6 flex justify-between items-center relative z-10 border-b border-white/5 bg-slate-950/50 backdrop-blur-md">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 bg-gradient-to-br from-cyan-400 to-purple-600 rounded-xl flex items-center justify-center shadow-lg"><span className="font-bold text-white text-xl tracking-tighter">A.</span></div>
+          {/* LOGO INJECTION: Student Portal Header */}
+          <div className="w-10 h-10 bg-gradient-to-br from-cyan-400 to-purple-600 rounded-xl flex items-center justify-center shadow-lg overflow-hidden p-1.5">
+             <img src="/axalogo.png" alt="AXAXYZ Logo" className="w-full h-full object-contain drop-shadow-sm" onError={(e) => { e.currentTarget.style.display = 'none'; e.currentTarget.nextElementSibling?.classList.remove('hidden'); }} />
+             <span className="font-bold text-white text-xl tracking-tighter hidden">A.</span>
+          </div>
           <span className="font-bold text-xl tracking-widest text-transparent bg-clip-text bg-gradient-to-r from-white to-slate-400">AXAXYZ</span>
         </div>
         <div className="text-xs font-medium px-4 py-1.5 bg-white/5 border border-white/10 rounded-full text-slate-300">Portal Mahasiswa</div>
@@ -833,8 +839,10 @@ const AdminLogin: React.FC<{ onLogin: () => void }> = ({ onLogin }) => {
       <div className="w-full max-w-md bg-white/5 backdrop-blur-2xl border border-white/10 p-8 rounded-[2rem] shadow-2xl relative z-10 animate-in slide-in-from-bottom-8 fade-in duration-700">
         <div className="flex flex-col items-center mb-8">
           <div className="relative mb-5">
-            <div className="w-20 h-20 bg-gradient-to-br from-cyan-400 to-purple-600 rounded-3xl flex items-center justify-center shadow-[0_0_30px_rgba(6,182,212,0.3)]">
-              <ShieldCheck className="w-10 h-10 text-white" />
+            {/* LOGO INJECTION: Admin Login Icon */}
+            <div className="w-20 h-20 bg-gradient-to-br from-cyan-400 to-purple-600 rounded-3xl flex items-center justify-center shadow-[0_0_30px_rgba(6,182,212,0.3)] p-3 overflow-hidden">
+              <img src="/axalogo.png" alt="AXAXYZ Logo" className="w-full h-full object-contain drop-shadow-md" onError={(e) => { e.currentTarget.style.display = 'none'; e.currentTarget.nextElementSibling?.classList.remove('hidden'); }} />
+              <ShieldCheck className="w-10 h-10 text-white hidden" />
             </div>
             <div className="absolute -bottom-2 -right-2 w-9 h-9 bg-slate-900 rounded-full border-2 border-slate-800 flex items-center justify-center">
               <Lock className="w-4 h-4 text-cyan-400" />
@@ -1124,8 +1132,10 @@ const AdminStudents: React.FC = () => {
                <div className="absolute bottom-[-50px] left-[-50px] w-48 h-48 bg-black/20 rounded-full blur-2xl"></div>
                
                <div className="text-center relative z-10 w-full mt-4">
-                 <div className="w-16 h-16 bg-white rounded-2xl flex items-center justify-center mx-auto mb-3 shadow-[0_10px_20px_rgba(0,0,0,0.3)]">
-                   <span className="font-bold text-slate-900 text-3xl">A.</span>
+                 {/* LOGO INJECTION: KTM Print Header */}
+                 <div className="w-16 h-16 bg-white rounded-2xl flex items-center justify-center mx-auto mb-3 shadow-[0_10px_20px_rgba(0,0,0,0.3)] p-2 overflow-hidden">
+                   <img src="/axalogo.png" alt="AXAXYZ Logo" className="w-full h-full object-contain" onError={(e) => { e.currentTarget.style.display = 'none'; e.currentTarget.nextElementSibling?.classList.remove('hidden'); }} />
+                   <span className="font-bold text-slate-900 text-3xl hidden">A.</span>
                  </div>
                  <h2 className="text-white font-black tracking-widest text-lg drop-shadow-md">AXAXYZ UNIVERSITY</h2>
                  <p className="text-cyan-200 text-[10px] tracking-[0.2em] font-bold uppercase mt-1 opacity-90">Kartu Tanda Mahasiswa</p>
@@ -1337,7 +1347,11 @@ const AdminLayout: React.FC<{ children: React.ReactNode, activeRoute: string, se
     <div className="min-h-screen bg-slate-950 flex text-slate-200 font-sans w-full">
       <aside className="w-72 bg-slate-900/50 border-r border-white/10 flex flex-col backdrop-blur-xl shrink-0">
         <div className="p-6 border-b border-white/10 flex items-center gap-3">
-          <div className="w-10 h-10 bg-gradient-to-br from-cyan-400 to-purple-600 rounded-xl flex items-center justify-center shadow-lg"><span className="font-bold text-white text-xl tracking-tighter">A.</span></div>
+          {/* LOGO INJECTION: Admin Sidebar Header */}
+          <div className="w-10 h-10 bg-gradient-to-br from-cyan-400 to-purple-600 rounded-xl flex items-center justify-center shadow-lg overflow-hidden p-1.5">
+             <img src="/axalogo.png" alt="AXAXYZ Logo" className="w-full h-full object-contain drop-shadow-sm" onError={(e) => { e.currentTarget.style.display = 'none'; e.currentTarget.nextElementSibling?.classList.remove('hidden'); }} />
+             <span className="font-bold text-white text-xl tracking-tighter hidden">A.</span>
+          </div>
           <div><h1 className="font-bold text-xl tracking-widest text-transparent bg-clip-text bg-gradient-to-r from-white to-slate-400">AXAXYZ</h1><p className="text-[10px] uppercase tracking-widest text-cyan-500 font-bold">Admin Portal</p></div>
         </div>
         <nav className="flex-1 p-4 space-y-2 mt-4 overflow-y-auto">
@@ -1373,6 +1387,21 @@ const AdminLayout: React.FC<{ children: React.ReactNode, activeRoute: string, se
 
 export default function App() {
   const [route, setRoute] = useState<string>('student');
+
+  // FAVICON & TITLE AUTO-INJECTION (Menambahkan axalogo.png sebagai Favicon secara dinamis)
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      let link = document.querySelector("link[rel~='icon']") as HTMLLinkElement;
+      if (!link) {
+        link = document.createElement('link');
+        link.rel = 'icon';
+        document.head.appendChild(link);
+      }
+      link.href = '/axalogo.png';
+      link.type = 'image/png';
+      document.title = "AXAXYZ - Portal Kehadiran Pintar";
+    }
+  }, []);
 
   useEffect(() => {
     const isAdminAuthed = localStorage.getItem('axaxyz_admin_auth') === 'true';
