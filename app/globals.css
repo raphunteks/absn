@@ -2,8 +2,8 @@
 @tailwind components;
 @tailwind utilities;
 
-/* Memperbaiki tinggi agar full screen */
 html, body {
   height: 100%;
   margin: 0;
+  background-color: #020617; /* Slate 950 (Opsional agar background gelap) */
 }
