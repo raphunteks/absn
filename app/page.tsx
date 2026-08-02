@@ -584,7 +584,7 @@ const AdminLogin: React.FC<{ onLogin: () => void }> = ({ onLogin }) => {
     const ADMIN_PASS = process.env.ADMIN_PASS;
 
     if (!ADMIN_USER || !ADMIN_PASS) {
-      setErr('Sistem keamanan belum dikonfigurasi. Harap atur NEXT_PUBLIC_ADMIN_USER dan NEXT_PUBLIC_ADMIN_PASS di Vercel Settings (Environment Variables).');
+      setErr('Sistem keamanan belum dikonfigurasi. Harap atur ADMIN_USER dan ADMIN_PASS di Vercel Settings (Environment Variables).');
       return;
     }
 
