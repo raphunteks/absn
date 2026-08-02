@@ -145,7 +145,7 @@ const CloudStore = {
 
 interface Session { id: string; name: string; startTime: string; endTime: string; toleranceMinutes: number; isActive: boolean; }
 interface Log { id: string; nim: string; name: string; timestamp: string; sessionName: string; status: 'Hadir' | 'Terlambat'; location: { lat: number; lng: number }; photoBase64: string; deviceId: string; }
-interface Student { id: string; nim: string; name: string; password?: string; }
+interface Student { id: string; nim: string; name: string; password?: string; deviceId?: string | null; }
 // UPDATED: Geofence now supports Location Name
 interface Geofence { lat: number; lng: number; radius: number; name?: string; }
 
@@ -163,6 +163,7 @@ interface AppContextType {
   addSession: (session: Omit<Session, 'id'>) => void;
   deleteSession: (id: string) => void;
   addStudent: (student: Omit<Student, 'id'>) => void;
+  updateStudent: (id: string, updates: Partial<Student>) => void;
   bulkAddStudents: (newStudents: Omit<Student, 'id'>[]) => void;
   deleteStudent: (id: string) => void;
   updateGeofence: (data: Geofence) => void;
@@ -262,6 +263,7 @@ const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const deleteSession = (id: string) => saveSessions(sessions.filter(s => s.id !== id));
   
   const addStudent = (studentData: Omit<Student, 'id'>) => saveStudents([...students, { ...studentData, id: Math.random().toString(36).substr(2, 9) }]);
+  const updateStudent = (id: string, updates: Partial<Student>) => saveStudents(students.map(s => s.id === id ? { ...s, ...updates } : s));
   const bulkAddStudents = (newStudents: Omit<Student, 'id'>[]) => {
     const formatted = newStudents.map(s => ({ ...s, id: Math.random().toString(36).substr(2, 9) }));
     saveStudents([...students, ...formatted]);
@@ -289,7 +291,7 @@ const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   return (
     <AppContext.Provider value={{ 
       isCloudSync, syncStatus, sessions, logs, students, geofence, 
-      addLog, updateSession, addSession, deleteSession, addStudent, bulkAddStudents, deleteStudent, updateGeofence, forceManualSync 
+      addLog, updateSession, addSession, deleteSession, addStudent, updateStudent, bulkAddStudents, deleteStudent, updateGeofence, forceManualSync 
     }}>
       {children}
     </AppContext.Provider>
@@ -440,7 +442,7 @@ const LocationCheck: React.FC<{ onComplete: (loc: {lat: number, lng: number}) =>
 };
 
 const QRScanner: React.FC<{ onComplete: (data: {nim: string, name: string, deviceId: string}) => void }> = ({ onComplete }) => {
-  const { students } = useAppContext();
+  const { students, updateStudent } = useAppContext();
   const [nimInput, setNimInput] = useState('');
   const [passInput, setPassInput] = useState('');
   const [error, setError] = useState('');
@@ -454,6 +456,12 @@ const QRScanner: React.FC<{ onComplete: (data: {nim: string, name: string, devic
     if (!targetNim) { setError('Masukkan atau Scan NIM Anda.'); return; }
 
     let studentName = 'Mahasiswa Tidak Dikenal';
+    let finalDeviceId = localStorage.getItem('axaxyz_device_id');
+    
+    if (!finalDeviceId) {
+      finalDeviceId = Math.random().toString(36).substring(2, 15);
+      localStorage.setItem('axaxyz_device_id', finalDeviceId);
+    }
     
     if (students.length > 0) {
       if (!passInput && !scannedNim) { setError('Masukkan Password Anda.'); return; }
@@ -466,25 +474,30 @@ const QRScanner: React.FC<{ onComplete: (data: {nim: string, name: string, devic
         setError('Password salah.'); return;
       }
       studentName = foundStudent.name;
+
+      // VERIFIKASI DEVICE KE DATABASE (ANTI-FRAUD SUPER)
+      if (foundStudent.deviceId && foundStudent.deviceId !== finalDeviceId) {
+        setError('⚠️ Fraud Alert: Akun (NIM) ini sudah tertaut pada perangkat/HP lain. Hubungi Admin untuk melakukan Reset Device.');
+        return;
+      }
+      
+      // BIND DEVICE OTOMATIS JIKA BELUM TERTAUT
+      if (!foundStudent.deviceId) {
+        updateStudent(foundStudent.id, { deviceId: finalDeviceId });
+      }
     } else {
       studentName = 'Mahasiswa Mode Bypass'; 
+      // LOKAL BINDING JIKA DATABASE KOSONG
+      let deviceOwner = localStorage.getItem('axaxyz_device_owner');
+      if (!deviceOwner) {
+        localStorage.setItem('axaxyz_device_owner', targetNim); 
+      } else if (deviceOwner !== targetNim) {
+        setError('⚠️ Fraud Alert: Perangkat ini sudah terdaftar untuk NIM lain.');
+        return;
+      }
     }
 
-    let deviceOwner = localStorage.getItem('axaxyz_device_owner');
-    let deviceId = localStorage.getItem('axaxyz_device_id');
-    
-    if (!deviceId) {
-      deviceId = Math.random().toString(36).substring(2, 15);
-      localStorage.setItem('axaxyz_device_id', deviceId);
-    }
-    if (!deviceOwner) {
-      localStorage.setItem('axaxyz_device_owner', targetNim); 
-    } else if (deviceOwner !== targetNim) {
-      setError('⚠️ Fraud Alert: Perangkat ini sudah terdaftar untuk NIM lain. Gunakan perangkat Anda sendiri.');
-      return;
-    }
-
-    onComplete({ nim: targetNim, name: studentName, deviceId });
+    onComplete({ nim: targetNim, name: studentName, deviceId: finalDeviceId });
   };
 
   const startScanner = async () => {
@@ -979,9 +992,10 @@ const AdminDashboardHome: React.FC = () => {
 };
 
 const AdminStudents: React.FC = () => {
-  const { students, addStudent, bulkAddStudents, deleteStudent } = useAppContext();
+  const { students, addStudent, updateStudent, bulkAddStudents, deleteStudent } = useAppContext();
   const [isAdding, setIsAdding] = useState(false);
   const [newS, setNewS] = useState({ name: '', nim: '', password: '' });
+  const [editingStudent, setEditingStudent] = useState<Student | null>(null);
   const [search, setSearch] = useState('');
   
   const [selectedStudentForKTM, setSelectedStudentForKTM] = useState<Student | null>(null);
@@ -991,6 +1005,20 @@ const AdminStudents: React.FC = () => {
     addStudent({ ...newS, password: newS.password || `${newS.nim}123` });
     setIsAdding(false);
     setNewS({ name: '', nim: '', password: '' });
+  };
+
+  const handleUpdate = (e: React.FormEvent) => {
+    e.preventDefault();
+    if(editingStudent) {
+       updateStudent(editingStudent.id, { name: editingStudent.name, nim: editingStudent.nim, password: editingStudent.password });
+       setEditingStudent(null);
+    }
+  };
+
+  const handleUnlinkDevice = (id: string, name: string) => {
+     if(confirm(`Yakin ingin mereset/logout perangkat terikat untuk mahasiswa ${name}?`)) {
+        updateStudent(id, { deviceId: null });
+     }
   };
 
   const handleBulkUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -1065,6 +1093,7 @@ const AdminStudents: React.FC = () => {
                 <th className="p-4 font-medium">NIM</th>
                 <th className="p-4 font-medium">Nama Lengkap</th>
                 <th className="p-4 font-medium">Password Aktif</th>
+                <th className="p-4 font-medium text-center">Status Device</th>
                 <th className="p-4 font-medium text-right">Aksi</th>
               </tr>
             </thead>
@@ -1074,19 +1103,62 @@ const AdminStudents: React.FC = () => {
                   <td className="p-4 font-mono">{st.nim}</td>
                   <td className="p-4 font-medium">{st.name}</td>
                   <td className="p-4"><span className="text-xs bg-slate-800 px-2 py-1 rounded border border-white/10 font-mono text-slate-400">{st.password}</span></td>
+                  <td className="p-4 text-center">
+                    {st.deviceId ? (
+                      <span className="inline-flex items-center gap-1.5 px-2 py-1 rounded bg-emerald-500/10 text-emerald-400 text-[10px] font-bold border border-emerald-500/20"><CheckCircle2 className="w-3 h-3"/> Tertaut</span>
+                    ) : (
+                      <span className="inline-flex items-center gap-1.5 px-2 py-1 rounded bg-slate-800 text-slate-400 text-[10px] font-bold border border-white/10">Belum Tertaut</span>
+                    )}
+                  </td>
                   <td className="p-4 text-right flex justify-end gap-2">
-                    <button onClick={() => setSelectedStudentForKTM(st)} className="px-3 py-1.5 text-xs text-cyan-400 bg-cyan-400/10 border border-cyan-400/20 hover:bg-cyan-400/20 rounded-lg transition-colors flex items-center gap-1">
-                      <CreditCard className="w-3 h-3"/> Cetak KTM
+                    {st.deviceId && (
+                      <button onClick={() => handleUnlinkDevice(st.id, st.name)} title="Reset/Logout Perangkat Tertaut" className="p-1.5 text-amber-400 hover:bg-amber-400/10 rounded-lg transition-colors border border-amber-400/20 bg-amber-400/5">
+                         <RefreshCcw className="w-4 h-4" />
+                      </button>
+                    )}
+                    <button onClick={() => setEditingStudent(st)} title="Edit Data Akun" className="p-1.5 text-blue-400 hover:bg-blue-400/10 rounded-lg transition-colors border border-blue-400/20 bg-blue-400/5">
+                       <Settings className="w-4 h-4" />
                     </button>
-                    <button onClick={() => deleteStudent(st.id)} className="p-1.5 text-slate-400 hover:text-rose-400 hover:bg-rose-400/10 rounded-lg transition-colors"><Trash2 className="w-4 h-4" /></button>
+                    <button onClick={() => setSelectedStudentForKTM(st)} title="Cetak KTM" className="px-3 py-1.5 text-xs text-cyan-400 bg-cyan-400/10 border border-cyan-400/20 hover:bg-cyan-400/20 rounded-lg transition-colors flex items-center gap-1">
+                      <CreditCard className="w-3 h-3"/> KTM
+                    </button>
+                    <button onClick={() => deleteStudent(st.id)} title="Hapus Data" className="p-1.5 text-slate-400 hover:text-rose-400 hover:bg-rose-400/10 rounded-lg transition-colors border border-transparent hover:border-rose-400/20"><Trash2 className="w-4 h-4" /></button>
                   </td>
                 </tr>
               ))}
-              {filtered.length === 0 && <tr><td colSpan={4} className="p-8 text-center text-slate-500">Belum ada data mahasiswa terdaftar.</td></tr>}
+              {filtered.length === 0 && <tr><td colSpan={5} className="p-8 text-center text-slate-500">Belum ada data mahasiswa terdaftar.</td></tr>}
             </tbody>
           </table>
         </div>
       </div>
+
+      {editingStudent && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-in fade-in zoom-in-95 duration-200">
+           <form onSubmit={handleUpdate} className="bg-slate-900 border border-white/10 p-6 rounded-3xl w-full max-w-md shadow-2xl relative">
+              <div className="flex justify-between items-center mb-6">
+                 <h3 className="text-xl font-bold text-white">Edit Akun Mahasiswa</h3>
+                 <button type="button" onClick={() => setEditingStudent(null)} className="p-1 text-slate-400 hover:text-white transition-colors"><X className="w-5 h-5"/></button>
+              </div>
+              <div className="space-y-4">
+                 <div className="space-y-1">
+                    <label className="text-xs text-slate-400">Nama Lengkap</label>
+                    <input required type="text" value={editingStudent.name} onChange={e=>setEditingStudent({...editingStudent, name: e.target.value})} className="w-full bg-slate-950 border border-white/10 rounded-xl px-4 py-3 text-white outline-none focus:border-blue-500" />
+                 </div>
+                 <div className="space-y-1">
+                    <label className="text-xs text-slate-400">NIM</label>
+                    <input required type="text" value={editingStudent.nim} onChange={e=>setEditingStudent({...editingStudent, nim: e.target.value})} className="w-full bg-slate-950 border border-white/10 rounded-xl px-4 py-3 text-white outline-none focus:border-blue-500" />
+                 </div>
+                 <div className="space-y-1">
+                    <label className="text-xs text-slate-400">Password</label>
+                    <input required type="text" value={editingStudent.password || ''} onChange={e=>setEditingStudent({...editingStudent, password: e.target.value})} className="w-full bg-slate-950 border border-white/10 rounded-xl px-4 py-3 text-white outline-none focus:border-blue-500" />
+                 </div>
+                 <button type="submit" className="w-full py-3.5 mt-2 bg-blue-600 hover:bg-blue-500 text-white font-bold rounded-xl transition-all shadow-[0_0_15px_rgba(59,130,246,0.3)]">
+                    Simpan Perubahan
+                 </button>
+              </div>
+           </form>
+        </div>
+      )}
 
       {selectedStudentForKTM && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
