@@ -1516,7 +1516,7 @@ export default function App() {
       )}
 
       {/* HAPUS TANDA KOMENTAR PADA BARIS DI BAWAH INI SAAT DI-DEPLOY KE VERCEL */}
-      {/* <SpeedInsights /> */}
+      {/<SpeedInsights />}
     </AppProvider>
   );
 }
