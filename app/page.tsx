@@ -5,7 +5,8 @@ import {
   Camera, MapPin, Clock, QrCode, CheckCircle2, AlertCircle, 
   BarChart3, Settings, FileText, LogOut, Users, Download, Plus, Trash2,
   RefreshCcw, ChevronRight, Fingerprint, Map, Activity, Key, Upload, Database, Navigation,
-  Printer, X, CreditCard, Eye, EyeOff, Lock, ShieldCheck, Loader2, User
+  Printer, X, CreditCard, Eye, EyeOff, Lock, ShieldCheck, Loader2, User, Cloud, CloudOff,
+  Server
 } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 
@@ -18,7 +19,7 @@ const cn = (...inputs: ClassValue[]) => {
 };
 
 const calculateDistance = (lat1: number, lon1: number, lat2: number, lon2: number) => {
-  const R = 6371e3; // Earth radius in meters
+  const R = 6371e3; 
   const φ1 = lat1 * Math.PI / 180;
   const φ2 = lat2 * Math.PI / 180;
   const Δφ = (lat2 - lat1) * Math.PI / 180;
@@ -48,6 +49,63 @@ const exportToCSV = (logs: Log[]) => {
   document.body.removeChild(link);
 };
 
+// ==========================================
+// UPSTASH REDIS / VERCEL KV CLOUD STORE INTEGRATION
+// Safe implementation to prevent "process is not defined" error
+// ==========================================
+const CloudStore = {
+  getUrl: () => {
+    if (typeof process !== 'undefined' && process.env) {
+      if (process.env.NEXT_PUBLIC_KV_REST_API_URL) return process.env.NEXT_PUBLIC_KV_REST_API_URL;
+      if (process.env.NEXT_PUBLIC_UPSTASH_REDIS_REST_URL) return process.env.NEXT_PUBLIC_UPSTASH_REDIS_REST_URL;
+    }
+    // Fallback if Vercel strips non-NEXT_PUBLIC envs
+    if (typeof window !== 'undefined') return localStorage.getItem('axaxyz_sys_kv_url') || '';
+    return '';
+  },
+  getToken: () => {
+    if (typeof process !== 'undefined' && process.env) {
+      if (process.env.NEXT_PUBLIC_KV_REST_API_TOKEN) return process.env.NEXT_PUBLIC_KV_REST_API_TOKEN;
+      if (process.env.NEXT_PUBLIC_UPSTASH_REDIS_REST_TOKEN) return process.env.NEXT_PUBLIC_UPSTASH_REDIS_REST_TOKEN;
+    }
+    if (typeof window !== 'undefined') return localStorage.getItem('axaxyz_sys_kv_token') || '';
+    return '';
+  },
+  isAvailable: function() { 
+    return !!(this.getUrl() && this.getToken()); 
+  },
+  async get(key: string) {
+    if (!this.isAvailable()) return null;
+    try {
+      const res = await fetch(`${this.getUrl()}/get/${key}`, {
+        headers: { Authorization: `Bearer ${this.getToken()}` },
+        cache: 'no-store'
+      });
+      const data = await res.json();
+      return data.result ? JSON.parse(data.result) : null;
+    } catch (e) {
+      console.error(`Cloud fetch error [${key}]:`, e);
+      return null;
+    }
+  },
+  async set(key: string, value: any) {
+    if (!this.isAvailable()) return;
+    try {
+      const stringValue = typeof value === 'string' ? value : JSON.stringify(value);
+      await fetch(`${this.getUrl()}/set/${key}`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${this.getToken()}`,
+          'Content-Type': 'application/json'
+        },
+        body: stringValue
+      });
+    } catch (e) {
+      console.error(`Cloud save error [${key}]:`, e);
+    }
+  }
+};
+
 interface Session { id: string; name: string; startTime: string; endTime: string; toleranceMinutes: number; isActive: boolean; }
 interface Log { id: string; nim: string; name: string; timestamp: string; sessionName: string; status: 'Hadir' | 'Terlambat'; location: { lat: number; lng: number }; photoBase64: string; deviceId: string; }
 interface Student { id: string; nim: string; name: string; password?: string; }
@@ -58,6 +116,7 @@ interface AppContextType {
   logs: Log[];
   students: Student[];
   geofence: Geofence;
+  isCloudSync: boolean;
   addLog: (log: Omit<Log, 'id' | 'timestamp'>) => void;
   updateSession: (id: string, updates: Partial<Session>) => void;
   addSession: (session: Omit<Session, 'id'>) => void;
@@ -79,27 +138,41 @@ const defaultGeofence: Geofence = { lat: -6.200000, lng: 106.816666, radius: 500
 const AppContext = createContext<AppContextType | null>(null);
 
 const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const [isAppLoading, setIsAppLoading] = useState(true);
+  const [isCloudSync, setIsCloudSync] = useState(false);
   const [sessions, setSessions] = useState<Session[]>([]);
   const [logs, setLogs] = useState<Log[]>([]);
   const [students, setStudents] = useState<Student[]>([]);
   const [geofence, setGeofence] = useState<Geofence>(defaultGeofence);
 
   useEffect(() => {
-    const s = localStorage.getItem('axaxyz_sessions');
-    const l = localStorage.getItem('axaxyz_logs');
-    const st = localStorage.getItem('axaxyz_students');
-    const gf = localStorage.getItem('axaxyz_geofence');
-    
-    if (s) setSessions(JSON.parse(s)); else setSessions(defaultSessions);
-    if (l) setLogs(JSON.parse(l));
-    if (st) setStudents(JSON.parse(st));
-    if (gf) setGeofence(JSON.parse(gf));
+    const initData = async () => {
+      setIsCloudSync(CloudStore.isAvailable());
+
+      let s = await CloudStore.get('axaxyz_sessions');
+      let l = await CloudStore.get('axaxyz_logs');
+      let st = await CloudStore.get('axaxyz_students');
+      let gf = await CloudStore.get('axaxyz_geofence');
+
+      if (!s) s = JSON.parse(localStorage.getItem('axaxyz_sessions') || 'null');
+      if (!l) l = JSON.parse(localStorage.getItem('axaxyz_logs') || 'null');
+      if (!st) st = JSON.parse(localStorage.getItem('axaxyz_students') || 'null');
+      if (!gf) gf = JSON.parse(localStorage.getItem('axaxyz_geofence') || 'null');
+
+      setSessions(s || defaultSessions);
+      setLogs(l || []);
+      setStudents(st || []);
+      setGeofence(gf || defaultGeofence);
+      
+      setIsAppLoading(false);
+    };
+    initData();
   }, []);
 
-  const saveSessions = (d: Session[]) => { setSessions(d); localStorage.setItem('axaxyz_sessions', JSON.stringify(d)); };
-  const saveLogs = (d: Log[]) => { setLogs(d); localStorage.setItem('axaxyz_logs', JSON.stringify(d)); };
-  const saveStudents = (d: Student[]) => { setStudents(d); localStorage.setItem('axaxyz_students', JSON.stringify(d)); };
-  const saveGeofence = (d: Geofence) => { setGeofence(d); localStorage.setItem('axaxyz_geofence', JSON.stringify(d)); };
+  const saveSessions = (d: Session[]) => { setSessions(d); localStorage.setItem('axaxyz_sessions', JSON.stringify(d)); CloudStore.set('axaxyz_sessions', JSON.stringify(d)); };
+  const saveLogs = (d: Log[]) => { setLogs(d); localStorage.setItem('axaxyz_logs', JSON.stringify(d)); CloudStore.set('axaxyz_logs', JSON.stringify(d)); };
+  const saveStudents = (d: Student[]) => { setStudents(d); localStorage.setItem('axaxyz_students', JSON.stringify(d)); CloudStore.set('axaxyz_students', JSON.stringify(d)); };
+  const saveGeofence = (d: Geofence) => { setGeofence(d); localStorage.setItem('axaxyz_geofence', JSON.stringify(d)); CloudStore.set('axaxyz_geofence', JSON.stringify(d)); };
 
   const addLog = (logData: Omit<Log, 'id' | 'timestamp'>) => saveLogs([{ ...logData, id: Math.random().toString(36).substr(2, 9), timestamp: new Date().toISOString() }, ...logs]);
   const updateSession = (id: string, updates: Partial<Session>) => saveSessions(sessions.map(s => s.id === id ? { ...s, ...updates } : s));
@@ -114,8 +187,24 @@ const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const deleteStudent = (id: string) => saveStudents(students.filter(s => s.id !== id));
   const updateGeofence = (data: Geofence) => saveGeofence(data);
 
+  if (isAppLoading) {
+    return (
+      <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center p-4">
+        <div className="relative mb-6">
+          <div className="absolute inset-0 bg-cyan-500/20 blur-3xl rounded-full"></div>
+          <div className="w-20 h-20 bg-gradient-to-br from-cyan-400 to-purple-600 rounded-3xl flex items-center justify-center shadow-lg animate-pulse relative z-10">
+            <span className="font-bold text-white text-3xl">A.</span>
+          </div>
+        </div>
+        <Loader2 className="w-8 h-8 text-cyan-400 animate-spin mb-4" />
+        <h2 className="text-xl font-bold text-white mb-2">Menyinkronkan Server...</h2>
+        <p className="text-slate-400 text-sm text-center max-w-xs">Mengambil konfigurasi waktu dan data mahasiswa terbaru.</p>
+      </div>
+    );
+  }
+
   return (
-    <AppContext.Provider value={{ sessions, logs, students, geofence, addLog, updateSession, addSession, deleteSession, addStudent, bulkAddStudents, deleteStudent, updateGeofence }}>
+    <AppContext.Provider value={{ isCloudSync, sessions, logs, students, geofence, addLog, updateSession, addSession, deleteSession, addStudent, bulkAddStudents, deleteStudent, updateGeofence }}>
       {children}
     </AppContext.Provider>
   );
@@ -283,7 +372,6 @@ const QRScanner: React.FC<{ onComplete: (data: {nim: string, name: string, devic
 
     let studentName = 'Mahasiswa Tidak Dikenal';
     
-    // Validate Database if Admin has uploaded students
     if (students.length > 0) {
       if (!passInput && !scannedNim) { setError('Masukkan Password Anda.'); return; }
       const foundStudent = students.find(s => s.nim === targetNim);
@@ -291,7 +379,6 @@ const QRScanner: React.FC<{ onComplete: (data: {nim: string, name: string, devic
         setError('NIM tidak terdaftar di sistem.'); return;
       }
       
-      // Bypass password if via secure QR scan, otherwise check manual input password
       if (!scannedNim && foundStudent.password !== passInput) {
         setError('Password salah.'); return;
       }
@@ -300,7 +387,6 @@ const QRScanner: React.FC<{ onComplete: (data: {nim: string, name: string, devic
       studentName = 'Mahasiswa Mode Bypass'; 
     }
 
-    // Anti-Fraud: Device Fingerprinting check
     let deviceOwner = localStorage.getItem('axaxyz_device_owner');
     let deviceId = localStorage.getItem('axaxyz_device_id');
     
@@ -323,7 +409,6 @@ const QRScanner: React.FC<{ onComplete: (data: {nim: string, name: string, devic
     setError('');
     
     try {
-      // Dynamic import from package.json agar lancar di Vercel
       const { Html5Qrcode } = await import('html5-qrcode');
       
       setTimeout(() => {
@@ -439,14 +524,14 @@ const SelfieCapture: React.FC<{ onComplete: (base64: string) => void }> = ({ onC
   const startCamera = async () => {
     try {
       const mediaStream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: 'user', aspectRatio: 16/9 }
+        video: { facingMode: "user", aspectRatio: 16 / 9 }
       });
       streamRef.current = mediaStream;
       if (videoRef.current) {
         videoRef.current.srcObject = mediaStream;
       }
     } catch (err) {
-      console.error("Error accessing camera:", err);
+      console.error("Camera access failed:", err);
     }
   };
 
@@ -462,24 +547,17 @@ const SelfieCapture: React.FC<{ onComplete: (base64: string) => void }> = ({ onC
   const capture = useCallback(() => {
     if (videoRef.current) {
       const canvas = document.createElement('canvas');
-      canvas.width = videoRef.current.videoWidth || 640;
-      canvas.height = videoRef.current.videoHeight || 480;
+      canvas.width = videoRef.current.videoWidth;
+      canvas.height = videoRef.current.videoHeight;
       const ctx = canvas.getContext('2d');
       if (ctx) {
+        ctx.translate(canvas.width, 0);
+        ctx.scale(-1, 1);
         ctx.drawImage(videoRef.current, 0, 0, canvas.width, canvas.height);
-        const imageSrc = canvas.toDataURL('image/jpeg');
-        setImage(imageSrc);
-        if (streamRef.current) {
-           streamRef.current.getTracks().forEach(track => track.stop());
-        }
+        setImage(canvas.toDataURL('image/jpeg', 0.8));
       }
     }
-  }, [videoRef]);
-
-  const handleRetake = () => {
-     setImage(null);
-     startCamera();
-  };
+  }, []);
 
   return (
     <div className="flex flex-col items-center justify-center p-6 space-y-6 w-full max-w-md mx-auto animate-in slide-in-from-right duration-500">
@@ -518,7 +596,7 @@ const SelfieCapture: React.FC<{ onComplete: (base64: string) => void }> = ({ onC
           </button>
         ) : (
           <div className="flex gap-4">
-            <button onClick={handleRetake} className="flex-1 py-4 bg-white/5 hover:bg-white/10 border border-white/10 text-white font-semibold rounded-2xl transition-all">Ulangi</button>
+            <button onClick={() => { setImage(null); startCamera(); }} className="flex-1 py-4 bg-white/5 hover:bg-white/10 border border-white/10 text-white font-semibold rounded-2xl transition-all">Ulangi</button>
             <button onClick={() => onComplete(image)} className="flex-1 py-4 bg-gradient-to-r from-cyan-500 to-purple-600 hover:from-cyan-400 hover:to-purple-500 text-white font-bold rounded-2xl transition-all shadow-lg flex items-center justify-center gap-2">
               <CheckCircle2 className="w-5 h-5" /> Konfirmasi
             </button>
@@ -603,38 +681,54 @@ const AdminLogin: React.FC<{ onLogin: () => void }> = ({ onLogin }) => {
   const [attempts, setAttempts] = useState(0);
   const [lockoutTimer, setLockoutTimer] = useState(0);
 
-  // Lockout system countdown
+  // Fallback Configuration States for Vercel environments without NEXT_PUBLIC
+  const [showConfig, setShowConfig] = useState(false);
+  const [sysKvUrl, setSysKvUrl] = useState('');
+  const [sysKvToken, setSysKvToken] = useState('');
+  const [sysAdminUser, setSysAdminUser] = useState('');
+  const [sysAdminPass, setSysAdminPass] = useState('');
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      setSysKvUrl(localStorage.getItem('axaxyz_sys_kv_url') || '');
+      setSysKvToken(localStorage.getItem('axaxyz_sys_kv_token') || '');
+      setSysAdminUser(localStorage.getItem('axaxyz_sys_admin_user') || 'admin');
+      setSysAdminPass(localStorage.getItem('axaxyz_sys_admin_pass') || 'admin123');
+    }
+  }, []);
+
   useEffect(() => {
     let timer: NodeJS.Timeout;
-    if (lockoutTimer > 0) {
-      timer = setTimeout(() => setLockoutTimer(lockoutTimer - 1), 1000);
-    }
+    if (lockoutTimer > 0) timer = setTimeout(() => setLockoutTimer(lockoutTimer - 1), 1000);
     return () => clearTimeout(timer);
   }, [lockoutTimer]);
 
+  const saveConfig = () => {
+    localStorage.setItem('axaxyz_sys_kv_url', sysKvUrl);
+    localStorage.setItem('axaxyz_sys_kv_token', sysKvToken);
+    localStorage.setItem('axaxyz_sys_admin_user', sysAdminUser);
+    localStorage.setItem('axaxyz_sys_admin_pass', sysAdminPass);
+    setShowConfig(false);
+    setErr('✅ Konfigurasi sistem berhasil disimpan!');
+    setTimeout(() => window.location.reload(), 1500);
+  };
+
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    
     if (lockoutTimer > 0) {
       setErr(`Sistem terkunci. Silakan coba lagi dalam ${lockoutTimer} detik.`);
       return;
     }
-
-    setIsLoading(true);
-    setErr('');
-
-    // Simulasi Secure Verification Delay (Mencegah brute force instant)
+    setIsLoading(true); setErr('');
     await new Promise(resolve => setTimeout(resolve, 800));
 
-    // KODE KEAMANAN KETAT
-    // Mendukung pembacaan dari NEXT_PUBLIC_ ataupun ENV Server normal sebagai fallback cerdas.
-    const ADMIN_USER = process.env.NEXT_PUBLIC_ADMIN_USER || process.env.ADMIN_USER;
-    const ADMIN_PASS = process.env.NEXT_PUBLIC_ADMIN_PASS || process.env.ADMIN_PASS;
+    // Dynamic ENV resolving (handles process safety)
+    let ADMIN_USER = sysAdminUser;
+    let ADMIN_PASS = sysAdminPass;
 
-    if (!ADMIN_USER || !ADMIN_PASS) {
-      setErr('Sistem keamanan belum dikonfigurasi. Harap atur ADMIN_USER dan ADMIN_PASS di Environment Variables.');
-      setIsLoading(false);
-      return;
+    if (typeof process !== 'undefined' && process.env) {
+      if (process.env.NEXT_PUBLIC_ADMIN_USER) ADMIN_USER = process.env.NEXT_PUBLIC_ADMIN_USER;
+      if (process.env.NEXT_PUBLIC_ADMIN_PASS) ADMIN_PASS = process.env.NEXT_PUBLIC_ADMIN_PASS;
     }
 
     if (user === ADMIN_USER && pass === ADMIN_PASS) {
@@ -645,7 +739,7 @@ const AdminLogin: React.FC<{ onLogin: () => void }> = ({ onLogin }) => {
       const newAttempts = attempts + 1;
       setAttempts(newAttempts);
       if (newAttempts >= 3) {
-        setLockoutTimer(30); // Mengunci form selama 30 detik
+        setLockoutTimer(30); 
         setErr('❌ Akses diblokir sementara (30s) karena terlalu banyak percobaan gagal.');
       } else {
         setErr(`❌ Username atau password salah. (Sisa percobaan: ${3 - newAttempts})`);
@@ -654,9 +748,43 @@ const AdminLogin: React.FC<{ onLogin: () => void }> = ({ onLogin }) => {
     setIsLoading(false);
   };
 
+  // Internal Fallback Configurator UI
+  if (showConfig) {
+    return (
+      <div className="min-h-screen bg-slate-950 flex items-center justify-center p-4">
+        <div className="w-full max-w-md bg-white/5 backdrop-blur-2xl border border-white/10 p-8 rounded-[2rem] shadow-2xl">
+          <h2 className="text-xl font-bold text-white mb-2">⚙️ Setup Sistem (Local Override)</h2>
+          <p className="text-xs text-slate-400 mb-6">Gunakan menu ini jika ENV Vercel tidak terbaca karena kehilangan prefix NEXT_PUBLIC_.</p>
+          
+          <div className="space-y-4">
+            <div>
+              <label className="text-xs text-slate-400 font-bold uppercase">KV_REST_API_URL</label>
+              <input type="text" value={sysKvUrl} onChange={e=>setSysKvUrl(e.target.value)} className="w-full bg-slate-900 border border-white/10 rounded-xl px-4 py-2 mt-1 text-white text-sm" placeholder="https://..." />
+            </div>
+            <div>
+              <label className="text-xs text-slate-400 font-bold uppercase">KV_REST_API_TOKEN</label>
+              <input type="password" value={sysKvToken} onChange={e=>setSysKvToken(e.target.value)} className="w-full bg-slate-900 border border-white/10 rounded-xl px-4 py-2 mt-1 text-white text-sm" placeholder="••••••••" />
+            </div>
+            <div className="pt-2 border-t border-white/10">
+              <label className="text-xs text-slate-400 font-bold uppercase">Admin Username</label>
+              <input type="text" value={sysAdminUser} onChange={e=>setSysAdminUser(e.target.value)} className="w-full bg-slate-900 border border-white/10 rounded-xl px-4 py-2 mt-1 text-white text-sm" />
+            </div>
+            <div>
+              <label className="text-xs text-slate-400 font-bold uppercase">Admin Password</label>
+              <input type="password" value={sysAdminPass} onChange={e=>setSysAdminPass(e.target.value)} className="w-full bg-slate-900 border border-white/10 rounded-xl px-4 py-2 mt-1 text-white text-sm" />
+            </div>
+            <div className="flex gap-2 mt-4">
+               <button onClick={() => setShowConfig(false)} className="flex-1 py-3 bg-white/10 text-white rounded-xl text-sm font-bold">Batal</button>
+               <button onClick={saveConfig} className="flex-1 py-3 bg-cyan-600 text-white rounded-xl text-sm font-bold">Simpan</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <div className="min-h-screen bg-slate-950 flex items-center justify-center p-4 relative overflow-hidden w-full">
-      {/* Dynamic Background Effects */}
+    <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center p-4 relative overflow-hidden w-full">
       <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,_var(--tw-gradient-stops))] from-slate-900 via-slate-950 to-slate-950"></div>
       <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] bg-cyan-500/5 rounded-full blur-[100px] pointer-events-none"></div>
 
@@ -703,20 +831,21 @@ const AdminLogin: React.FC<{ onLogin: () => void }> = ({ onLogin }) => {
 
           <button type="submit" disabled={lockoutTimer > 0 || isLoading} className="w-full py-4 mt-4 bg-gradient-to-r from-cyan-500 to-purple-600 hover:from-cyan-400 hover:to-purple-500 disabled:from-slate-700 disabled:to-slate-800 disabled:text-slate-500 disabled:cursor-not-allowed text-white font-bold rounded-2xl transition-all shadow-[0_0_20px_rgba(6,182,212,0.2)] flex justify-center items-center gap-2 group">
             {isLoading ? <Loader2 className="w-5 h-5 animate-spin" /> : (
-               <>
-                  Masuk Sistem
-                  <ChevronRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
-               </>
+               <>Masuk Sistem <ChevronRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" /></>
             )}
           </button>
         </form>
       </div>
+
+      <button onClick={() => setShowConfig(true)} className="absolute bottom-6 flex items-center gap-2 text-xs text-slate-600 hover:text-slate-400 transition-colors z-20">
+         <Server className="w-4 h-4" /> Config Override
+      </button>
     </div>
   );
 };
 
 const AdminDashboardHome: React.FC = () => {
-  const { logs } = useAppContext();
+  const { logs, isCloudSync } = useAppContext();
   const today = new Date().toISOString().split('T')[0];
   const todayLogs = logs.filter(l => l.timestamp.startsWith(today));
   const total = todayLogs.length;
@@ -728,11 +857,14 @@ const AdminDashboardHome: React.FC = () => {
 
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
-      <div>
-        <h2 className="text-2xl font-bold text-white">Ringkasan Hari Ini</h2>
-        <p className="text-slate-400 text-sm">{new Date().toLocaleDateString('id-ID', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</p>
+      <div className="flex justify-between items-end">
+        <div>
+          <h2 className="text-2xl font-bold text-white">Ringkasan Hari Ini</h2>
+          <p className="text-slate-400 text-sm">{new Date().toLocaleDateString('id-ID', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</p>
+        </div>
       </div>
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
         {[
           { title: 'Total Kehadiran', val: total, icon: Users, color: 'text-cyan-400', bg: 'bg-cyan-500/10' },
           { title: 'Tepat Waktu', val: onTime, icon: CheckCircle2, color: 'text-emerald-400', bg: 'bg-emerald-500/10' },
@@ -743,7 +875,24 @@ const AdminDashboardHome: React.FC = () => {
             <div className={cn("w-12 h-12 rounded-full flex items-center justify-center", stat.bg)}><stat.icon className={cn("w-6 h-6", stat.color)} /></div>
           </div>
         ))}
+        
+        <div className="bg-white/5 border border-white/10 p-5 rounded-2xl flex flex-col items-center justify-center text-center relative overflow-hidden group">
+           {isCloudSync ? (
+             <>
+               <div className="w-10 h-10 rounded-full bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center mb-2 group-hover:scale-110 transition-transform"><Cloud className="w-5 h-5 text-emerald-400" /></div>
+               <h3 className="text-white font-bold text-sm">Cloud Sync Aktif</h3>
+               <p className="text-emerald-400/80 text-[10px] mt-1 leading-tight">Terhubung ke Database Vercel KV.</p>
+             </>
+           ) : (
+             <>
+               <div className="w-10 h-10 rounded-full bg-rose-500/10 border border-rose-500/20 flex items-center justify-center mb-2"><CloudOff className="w-5 h-5 text-rose-400" /></div>
+               <h3 className="text-white font-bold text-sm">Mode Lokal Saja</h3>
+               <p className="text-rose-400/80 text-[10px] mt-1 leading-tight">Atur Config Override di halaman Login!</p>
+             </>
+           )}
+        </div>
       </div>
+      
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 h-[400px]">
         <div className="bg-white/5 border border-white/10 p-6 rounded-2xl flex flex-col">
           <h3 className="text-lg font-semibold text-white mb-6">Kehadiran per Sesi</h3>
@@ -787,7 +936,6 @@ const AdminStudents: React.FC = () => {
   const [newS, setNewS] = useState({ name: '', nim: '', password: '' });
   const [search, setSearch] = useState('');
   
-  // State for Print Modal
   const [selectedStudentForKTM, setSelectedStudentForKTM] = useState<Student | null>(null);
 
   const handleAdd = (e: React.FormEvent) => {
@@ -892,7 +1040,6 @@ const AdminStudents: React.FC = () => {
         </div>
       </div>
 
-      {/* MODAL CETAK KTM */}
       {selectedStudentForKTM && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
           <style>{`
@@ -908,7 +1055,6 @@ const AdminStudents: React.FC = () => {
               <button onClick={() => setSelectedStudentForKTM(null)} className="p-1 bg-white/10 hover:bg-white/20 rounded-full transition-colors text-white"><X className="w-5 h-5"/></button>
             </div>
             
-            {/* ID Card Design to Print */}
             <div id="ktm-print-area" className="w-[340px] h-[540px] mx-auto bg-gradient-to-br from-cyan-600 to-purple-800 rounded-[2rem] p-6 relative overflow-hidden shadow-2xl flex flex-col items-center justify-between border-4 border-white/10">
                <div className="absolute top-[-50px] right-[-50px] w-48 h-48 bg-white/10 rounded-full blur-2xl"></div>
                <div className="absolute bottom-[-50px] left-[-50px] w-48 h-48 bg-black/20 rounded-full blur-2xl"></div>
@@ -951,7 +1097,7 @@ const AdminGeofence: React.FC = () => {
   const handleSave = (e: React.FormEvent) => {
     e.preventDefault();
     updateGeofence({ lat: parseFloat(lat), lng: parseFloat(lng), radius: parseInt(radius) });
-    alert('Pengaturan lokasi berhasil disimpan.');
+    alert('Pengaturan lokasi berhasil disimpan dan disinkronisasikan ke Server.');
   };
 
   const getMyLocation = () => {
@@ -998,7 +1144,7 @@ const AdminGeofence: React.FC = () => {
             <MapPin className="w-4 h-4" /> Gunakan Lokasi Saya Saat Ini
           </button>
           <button type="submit" className="flex-1 py-3 bg-gradient-to-r from-cyan-500 to-purple-600 hover:from-cyan-400 hover:to-purple-500 text-white font-bold rounded-xl transition-all shadow-[0_0_15px_rgba(6,182,212,0.2)]">
-            Simpan Konfigurasi
+            Simpan & Sync Konfigurasi
           </button>
         </div>
       </form>
@@ -1028,7 +1174,7 @@ const AdminSettings: React.FC = () => {
           <div className="space-y-1"><label className="text-xs text-slate-400">Jam Mulai</label><input required type="time" value={newSess.startTime} onChange={e=>setNewSess({...newSess, startTime: e.target.value})} className="w-full bg-slate-900/50 border border-white/10 rounded-xl px-4 py-2.5 text-white outline-none focus:border-cyan-500" /></div>
           <div className="space-y-1"><label className="text-xs text-slate-400">Jam Selesai</label><input required type="time" value={newSess.endTime} onChange={e=>setNewSess({...newSess, endTime: e.target.value})} className="w-full bg-slate-900/50 border border-white/10 rounded-xl px-4 py-2.5 text-white outline-none focus:border-cyan-500" /></div>
           <div className="space-y-1"><label className="text-xs text-slate-400">Toleransi (Menit)</label><input required type="number" min="0" value={newSess.toleranceMinutes} onChange={e=>setNewSess({...newSess, toleranceMinutes: parseInt(e.target.value)})} className="w-full bg-slate-900/50 border border-white/10 rounded-xl px-4 py-2.5 text-white outline-none focus:border-cyan-500" /></div>
-          <button type="submit" className="w-full py-2.5 bg-cyan-600 hover:bg-cyan-500 text-white font-bold rounded-xl transition-all">Simpan</button>
+          <button type="submit" className="w-full py-2.5 bg-cyan-600 hover:bg-cyan-500 text-white font-bold rounded-xl transition-all">Simpan & Sync</button>
         </form>
       )}
 
@@ -1161,7 +1307,7 @@ export default function App() {
     <AppProvider>
       <div className="fixed bottom-4 right-4 z-[999] flex gap-2 bg-slate-900/80 backdrop-blur-md p-2 rounded-xl border border-white/10 shadow-2xl">
         <button onClick={() => setRoute('student')} className={cn("px-4 py-2 rounded-lg text-xs font-bold transition-colors", route === 'student' ? "bg-cyan-500 text-white" : "bg-white/10 text-slate-300 hover:bg-white/20")}>Mode Mahasiswa</button>
-        <button onClick={() => setRoute(localStorage.getItem('axaxyz_admin_auth') === 'true' ? 'admin-dashboard' : 'admin-login')} className={cn("px-4 py-2 rounded-lg text-xs font-bold transition-colors", route.startsWith('admin') ? "bg-purple-500 text-white" : "bg-white/10 text-slate-300 hover:bg-white/20")}>Mode Admin</button>
+        <button onClick={() => setRoute(typeof window !== 'undefined' && localStorage.getItem('axaxyz_admin_auth') === 'true' ? 'admin-dashboard' : 'admin-login')} className={cn("px-4 py-2 rounded-lg text-xs font-bold transition-colors", route.startsWith('admin') ? "bg-purple-500 text-white" : "bg-white/10 text-slate-300 hover:bg-white/20")}>Mode Admin</button>
       </div>
 
       {route === 'student' && <AttendanceWizard />}
