@@ -6,7 +6,7 @@ import {
   BarChart3, Settings, FileText, LogOut, Users, Download, Plus, Trash2,
   RefreshCcw, ChevronRight, Fingerprint, Map, Activity, Key, Upload, Database, Navigation,
   Printer, X, CreditCard, Eye, EyeOff, Lock, ShieldCheck, Loader2, User, Cloud, CloudOff,
-  Server, ServerCrash, DatabaseZap
+  Server, ServerCrash, DatabaseZap, Maximize
 } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 
@@ -16,7 +16,6 @@ import { format } from 'date-fns';
 
 // ==========================================
 // UPSTASH REDIS CLOUD CLIENT (REST API POST)
-// Diperbarui untuk menggunakan Pipeline Method yang lebih aman untuk JSON
 // ==========================================
 class Redis {
   url: string;
@@ -25,14 +24,12 @@ class Redis {
   constructor(config: { url: string; token: string }) {
     this.url = config.url || '';
     this.token = config.token || '';
-    // Hapus trailing slash jika ada
     if (this.url.endsWith('/')) this.url = this.url.slice(0, -1);
   }
   
   static fromEnv() {
     let url = '';
     let token = '';
-    // Pengecekan cerdas untuk environment variable Next.js Client Side
     if (typeof process !== 'undefined' && process.env) {
       url = process.env.NEXT_PUBLIC_UPSTASH_REDIS_REST_URL || process.env.NEXT_PUBLIC_KV_REST_API_URL || '';
       token = process.env.NEXT_PUBLIC_UPSTASH_REDIS_REST_TOKEN || process.env.NEXT_PUBLIC_KV_REST_API_TOKEN || '';
@@ -46,7 +43,7 @@ class Redis {
       const res = await fetch(this.url, { 
         method: 'POST',
         headers: { Authorization: `Bearer ${this.token}`, 'Content-Type': 'application/json' }, 
-        body: JSON.stringify(["GET", key]), // Metode REST Array yang direkomendasikan Upstash
+        body: JSON.stringify(["GET", key]), 
         cache: 'no-store' 
       });
       if (!res.ok) throw new Error('Fetch failed');
@@ -71,7 +68,7 @@ class Redis {
       const res = await fetch(this.url, { 
         method: 'POST', 
         headers: { Authorization: `Bearer ${this.token}`, 'Content-Type': 'application/json' }, 
-        body: JSON.stringify(["SET", key, strVal]) // Metode REST Array yang direkomendasikan Upstash
+        body: JSON.stringify(["SET", key, strVal]) 
       });
       const data = await res.json();
       if (data.error) throw new Error(data.error);
@@ -102,11 +99,12 @@ const calculateDistance = (lat1: number, lon1: number, lat2: number, lon2: numbe
 };
 
 const exportToCSV = (logs: Log[]) => {
-  const headers = ['ID,NIM,Name,Date,Time,Session,Status,Lat,Lng'];
+  const headers = ['ID,NIM,Name,Date,Time,Session,Status,Lat,Lng,Maps Link'];
   const rows = logs.map(log => {
     const date = new Date(log.timestamp).toLocaleDateString('id-ID');
     const time = new Date(log.timestamp).toLocaleTimeString('id-ID');
-    return `${log.id},${log.nim},${log.name},${date},${time},${log.sessionName},${log.status},${log.location.lat},${log.location.lng}`;
+    const mapsLink = `https://www.google.com/maps?q=${log.location.lat},${log.location.lng}`;
+    return `${log.id},${log.nim},${log.name},${date},${time},${log.sessionName},${log.status},${log.location.lat},${log.location.lng},${mapsLink}`;
   });
   const csvContent = "data:text/csv;charset=utf-8," + [headers, ...rows].join('\n');
   const encodedUri = encodeURI(csvContent);
@@ -145,7 +143,8 @@ const CloudStore = {
 interface Session { id: string; name: string; startTime: string; endTime: string; toleranceMinutes: number; isActive: boolean; }
 interface Log { id: string; nim: string; name: string; timestamp: string; sessionName: string; status: 'Hadir' | 'Terlambat'; location: { lat: number; lng: number }; photoBase64: string; deviceId: string; }
 interface Student { id: string; nim: string; name: string; password?: string; }
-interface Geofence { lat: number; lng: number; radius: number; }
+// UPDATED: Geofence now supports Location Name
+interface Geofence { lat: number; lng: number; radius: number; name?: string; }
 
 type SyncStatus = 'offline' | 'synced' | 'syncing' | 'error';
 
@@ -173,7 +172,7 @@ const defaultSessions: Session[] = [
   { id: '3', name: 'Sore', startTime: '16:00', endTime: '17:30', toleranceMinutes: 15, isActive: true },
 ];
 
-const defaultGeofence: Geofence = { lat: -6.200000, lng: 106.816666, radius: 500 };
+const defaultGeofence: Geofence = { lat: -6.200000, lng: 106.816666, radius: 500, name: 'Kampus Utama' };
 
 const AppContext = createContext<AppContextType | null>(null);
 
@@ -217,7 +216,6 @@ const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
     initData();
   }, []);
 
-  // Global Sync Wrapper with real-time status update
   const syncToCloud = async (key: string, data: any) => {
     if (!CloudStore.isAvailable()) return;
     setSyncStatus('syncing');
@@ -230,7 +228,6 @@ const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
     }
   };
 
-  // Dedicated function for manual force sync (used in dashboard diagnostic)
   const forceManualSync = async () => {
     if (!CloudStore.isAvailable()) {
       alert("❌ Sinkronisasi Gagal: Konfigurasi NEXT_PUBLIC_... Upstash tidak terbaca di Environment Variables.");
@@ -251,29 +248,10 @@ const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
     }
   };
 
-  const saveSessions = (d: Session[]) => { 
-    setSessions(d); 
-    localStorage.setItem('axaxyz_sessions', JSON.stringify(d)); 
-    syncToCloud('axaxyz_sessions', d); 
-  };
-  
-  const saveLogs = (d: Log[]) => { 
-    setLogs(d); 
-    localStorage.setItem('axaxyz_logs', JSON.stringify(d)); 
-    syncToCloud('axaxyz_logs', d); 
-  };
-  
-  const saveStudents = (d: Student[]) => { 
-    setStudents(d); 
-    localStorage.setItem('axaxyz_students', JSON.stringify(d)); 
-    syncToCloud('axaxyz_students', d); 
-  };
-  
-  const saveGeofence = (d: Geofence) => { 
-    setGeofence(d); 
-    localStorage.setItem('axaxyz_geofence', JSON.stringify(d)); 
-    syncToCloud('axaxyz_geofence', d); 
-  };
+  const saveSessions = (d: Session[]) => { setSessions(d); localStorage.setItem('axaxyz_sessions', JSON.stringify(d)); syncToCloud('axaxyz_sessions', d); };
+  const saveLogs = (d: Log[]) => { setLogs(d); localStorage.setItem('axaxyz_logs', JSON.stringify(d)); syncToCloud('axaxyz_logs', d); };
+  const saveStudents = (d: Student[]) => { setStudents(d); localStorage.setItem('axaxyz_students', JSON.stringify(d)); syncToCloud('axaxyz_students', d); };
+  const saveGeofence = (d: Geofence) => { setGeofence(d); localStorage.setItem('axaxyz_geofence', JSON.stringify(d)); syncToCloud('axaxyz_geofence', d); };
 
   const addLog = (logData: Omit<Log, 'id' | 'timestamp'>) => saveLogs([{ ...logData, id: Math.random().toString(36).substr(2, 9), timestamp: new Date().toISOString() }, ...logs]);
   const updateSession = (id: string, updates: Partial<Session>) => saveSessions(sessions.map(s => s.id === id ? { ...s, ...updates } : s));
@@ -293,7 +271,6 @@ const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
       <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center p-4">
         <div className="relative mb-6">
           <div className="absolute inset-0 bg-cyan-500/20 blur-3xl rounded-full"></div>
-          {/* LOGO INJECTION: Loading Screen Logo with Fallback */}
           <div className="w-20 h-20 bg-gradient-to-br from-cyan-400 to-purple-600 rounded-3xl flex items-center justify-center shadow-lg animate-pulse relative z-10 overflow-hidden p-3">
              <img src="/axalogo.png" alt="AXAXYZ Logo" className="w-full h-full object-contain drop-shadow-md" onError={(e) => { e.currentTarget.style.display = 'none'; e.currentTarget.nextElementSibling?.classList.remove('hidden'); }} />
              <span className="font-bold text-white text-3xl hidden">A.</span>
@@ -414,7 +391,8 @@ const LocationCheck: React.FC<{ onComplete: (loc: {lat: number, lng: number}) =>
           setTimeout(() => onComplete({ lat: latitude, lng: longitude }), 1500);
         } else {
           setStatus('error');
-          setErrorMsg(`Anda berada di luar radius area kampus.`);
+          // DYNAMIC NAME UPGRADE: Message now uses Geofence Location Name
+          setErrorMsg(`Anda berada di luar radius area ${geofence.name || 'kampus'}.`);
         }
       },
       (error) => { setStatus('error'); setErrorMsg('Gagal mendapatkan lokasi. Pastikan GPS aktif dan diizinkan.'); },
@@ -442,19 +420,15 @@ const LocationCheck: React.FC<{ onComplete: (loc: {lat: number, lng: number}) =>
           </div>
         )}
         {status === 'error' && (
-          <div className="space-y-4">
-            <div className="p-3 bg-rose-500/10 border border-rose-500/20 rounded-lg">
-              <p className="text-sm text-rose-400">{errorMsg}</p>
-              {distance && <p className="text-xs text-rose-500/70 mt-1">Jarak saat ini: {Math.round(distance)}m (Maks: {geofence.radius}m)</p>}
+          <div className="space-y-4 animate-in fade-in zoom-in">
+            <div className="p-4 bg-rose-500/10 border border-rose-500/20 rounded-xl text-center">
+              <p className="text-sm font-semibold text-rose-400 leading-relaxed">{errorMsg}</p>
+              {distance && <p className="text-xs text-rose-500/70 mt-2">Jarak saat ini: {Math.round(distance)}m (Maks: {geofence.radius}m)</p>}
             </div>
-            <div className="flex gap-2">
-              <button onClick={checkLocation} className="flex-1 py-3 bg-white/10 hover:bg-white/20 text-white rounded-xl text-sm font-semibold flex items-center justify-center gap-2 transition-colors">
-                <RefreshCcw className="w-4 h-4" /> Coba Lagi
-              </button>
-              <button onClick={() => onComplete({ lat: geofence.lat, lng: geofence.lng })} className="flex-1 py-3 bg-cyan-500/20 hover:bg-cyan-500/30 text-cyan-400 border border-cyan-500/50 rounded-xl text-sm font-semibold flex items-center justify-center gap-2 transition-colors">
-                <Map className="w-4 h-4" /> Bypass (Test)
-              </button>
-            </div>
+            {/* UPGRADE ANTI-BYPASS: Bypass button entirely removed. User is forced to be in location. */}
+            <button onClick={checkLocation} className="w-full py-4 bg-white/10 hover:bg-white/20 text-white rounded-xl text-sm font-bold flex items-center justify-center gap-2 transition-all">
+              <RefreshCcw className="w-5 h-5" /> Coba Lagi
+            </button>
           </div>
         )}
       </div>
@@ -657,8 +631,8 @@ const SelfieCapture: React.FC<{ onComplete: (base64: string) => void }> = ({ onC
       canvas.height = videoRef.current.videoHeight;
       const ctx = canvas.getContext('2d');
       if (ctx) {
-        ctx.translate(canvas.width, 0);
-        ctx.scale(-1, 1);
+        // UPGRADE NO-MIRRORING: 
+        // Menghapus fungsi flip (ctx.scale & translate) agar foto disimpan natural apa adanya.
         ctx.drawImage(videoRef.current, 0, 0, canvas.width, canvas.height);
         setImage(canvas.toDataURL('image/jpeg', 0.8));
       }
@@ -679,10 +653,12 @@ const SelfieCapture: React.FC<{ onComplete: (base64: string) => void }> = ({ onC
             autoPlay
             playsInline
             muted
+            // UX Standard: Viewfinder tetap ter-mirror sebagai cermin untuk memudahkan posisi muka
             className="w-full h-full object-cover transform scale-x-[-1]"
           />
         ) : (
-          <img src={image} alt="Selfie" className="w-full h-full object-cover transform scale-x-[-1]" />
+          // FOTO TERSIMPAN: Tidak lagi menggunakan scale-x-[-1] agar sesuai dengan asli
+          <img src={image} alt="Selfie" className="w-full h-full object-cover" />
         )}
         
         {!image && (
@@ -741,7 +717,6 @@ const AttendanceWizard: React.FC = () => {
       <div className="absolute bottom-[-10%] right-[-10%] w-[40%] h-[40%] bg-cyan-600/20 rounded-full blur-[120px] pointer-events-none"></div>
       <header className="w-full p-6 flex justify-between items-center relative z-10 border-b border-white/5 bg-slate-950/50 backdrop-blur-md">
         <div className="flex items-center gap-3">
-          {/* LOGO INJECTION: Student Portal Header */}
           <div className="w-10 h-10 bg-gradient-to-br from-cyan-400 to-purple-600 rounded-xl flex items-center justify-center shadow-lg overflow-hidden p-1.5">
              <img src="/axalogo.png" alt="AXAXYZ Logo" className="w-full h-full object-contain drop-shadow-sm" onError={(e) => { e.currentTarget.style.display = 'none'; e.currentTarget.nextElementSibling?.classList.remove('hidden'); }} />
              <span className="font-bold text-white text-xl tracking-tighter hidden">A.</span>
@@ -839,7 +814,6 @@ const AdminLogin: React.FC<{ onLogin: () => void }> = ({ onLogin }) => {
       <div className="w-full max-w-md bg-white/5 backdrop-blur-2xl border border-white/10 p-8 rounded-[2rem] shadow-2xl relative z-10 animate-in slide-in-from-bottom-8 fade-in duration-700">
         <div className="flex flex-col items-center mb-8">
           <div className="relative mb-5">
-            {/* LOGO INJECTION: Admin Login Icon */}
             <div className="w-20 h-20 bg-gradient-to-br from-cyan-400 to-purple-600 rounded-3xl flex items-center justify-center shadow-[0_0_30px_rgba(6,182,212,0.3)] p-3 overflow-hidden">
               <img src="/axalogo.png" alt="AXAXYZ Logo" className="w-full h-full object-contain drop-shadow-md" onError={(e) => { e.currentTarget.style.display = 'none'; e.currentTarget.nextElementSibling?.classList.remove('hidden'); }} />
               <ShieldCheck className="w-10 h-10 text-white hidden" />
@@ -941,7 +915,6 @@ const AdminDashboardHome: React.FC = () => {
         </div>
       </div>
       
-      {/* DIAGNOSTIC PANEL FOR TROUBLESHOOTING UPSTASH */}
       <div className="bg-slate-900 border border-indigo-500/30 p-6 rounded-2xl">
          <div className="flex items-center gap-3 mb-4">
             <DatabaseZap className="w-6 h-6 text-indigo-400" />
@@ -1132,7 +1105,6 @@ const AdminStudents: React.FC = () => {
                <div className="absolute bottom-[-50px] left-[-50px] w-48 h-48 bg-black/20 rounded-full blur-2xl"></div>
                
                <div className="text-center relative z-10 w-full mt-4">
-                 {/* LOGO INJECTION: KTM Print Header */}
                  <div className="w-16 h-16 bg-white rounded-2xl flex items-center justify-center mx-auto mb-3 shadow-[0_10px_20px_rgba(0,0,0,0.3)] p-2 overflow-hidden">
                    <img src="/axalogo.png" alt="AXAXYZ Logo" className="w-full h-full object-contain" onError={(e) => { e.currentTarget.style.display = 'none'; e.currentTarget.nextElementSibling?.classList.remove('hidden'); }} />
                    <span className="font-bold text-slate-900 text-3xl hidden">A.</span>
@@ -1167,10 +1139,12 @@ const AdminGeofence: React.FC = () => {
   const [lat, setLat] = useState(geofence.lat.toString());
   const [lng, setLng] = useState(geofence.lng.toString());
   const [radius, setRadius] = useState(geofence.radius.toString());
+  // UPGRADE: Location Name State
+  const [locationName, setLocationName] = useState(geofence.name || 'Kampus Utama');
 
   const handleSave = (e: React.FormEvent) => {
     e.preventDefault();
-    updateGeofence({ lat: parseFloat(lat), lng: parseFloat(lng), radius: parseInt(radius) });
+    updateGeofence({ lat: parseFloat(lat), lng: parseFloat(lng), radius: parseInt(radius), name: locationName });
     alert('Pengaturan lokasi berhasil disimpan dan disinkronisasikan ke Server.');
   };
 
@@ -1197,6 +1171,11 @@ const AdminGeofence: React.FC = () => {
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="space-y-1 md:col-span-2">
+             <label className="text-xs text-slate-400 font-semibold uppercase">Nama Area Absensi</label>
+             <input required type="text" value={locationName} onChange={e=>setLocationName(e.target.value)} className="w-full bg-slate-900/50 border border-white/10 rounded-xl px-4 py-3 text-white outline-none focus:border-cyan-500" placeholder="Contoh: Gedung A Kampus" />
+             <p className="text-xs text-slate-500 mt-1">Nama ini akan muncul pada notifikasi error saat Mahasiswa berada di luar batas.</p>
+          </div>
           <div className="space-y-1">
             <label className="text-xs text-slate-400 font-semibold uppercase">Latitude (Garis Lintang)</label>
             <input required type="number" step="any" value={lat} onChange={e=>setLat(e.target.value)} className="w-full bg-slate-900/50 border border-white/10 rounded-xl px-4 py-3 text-white outline-none focus:border-cyan-500 font-mono" />
@@ -1277,6 +1256,9 @@ const AdminReports: React.FC = () => {
   const { logs, sessions } = useAppContext();
   const [search, setSearch] = useState('');
   const [filterSession, setFilterSession] = useState('All');
+  
+  // UPGRADE: State untuk modal fullscreen gambar
+  const [previewImage, setPreviewImage] = useState<string | null>(null);
 
   const filteredLogs = logs.filter(log => {
     const matchSearch = log.name.toLowerCase().includes(search.toLowerCase()) || log.nim.includes(search);
@@ -1285,7 +1267,7 @@ const AdminReports: React.FC = () => {
   });
 
   return (
-    <div className="space-y-6 animate-in fade-in duration-500 h-full flex flex-col">
+    <div className="space-y-6 animate-in fade-in duration-500 h-full flex flex-col relative">
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div><h2 className="text-2xl font-bold text-white">Laporan Kehadiran</h2><p className="text-slate-400 text-sm">Data histori absensi mahasiswa.</p></div>
         <button onClick={() => exportToCSV(filteredLogs)} className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-400 hover:to-emerald-500 text-white rounded-xl transition-all font-medium shadow-lg"><Download className="w-4 h-4" /> Export CSV</button>
@@ -1304,22 +1286,38 @@ const AdminReports: React.FC = () => {
           <table className="w-full text-left border-collapse">
             <thead>
               <tr className="bg-white/5 border-b border-white/10 text-slate-400 text-sm">
-                <th className="p-4 font-medium">Profil</th><th className="p-4 font-medium">NIM / Nama</th><th className="p-4 font-medium">Waktu Absen</th><th className="p-4 font-medium">Sesi</th><th className="p-4 font-medium">Status</th>
+                <th className="p-4 font-medium">Profil</th>
+                <th className="p-4 font-medium">NIM / Nama</th>
+                <th className="p-4 font-medium">Waktu Absen</th>
+                <th className="p-4 font-medium">Sesi & Status</th>
+                <th className="p-4 font-medium">Lokasi Absen</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-white/5">
               {filteredLogs.map(log => (
                 <tr key={log.id} className="hover:bg-white/5 transition-colors">
                   <td className="p-4">
-                    <div className="w-10 h-10 rounded-lg overflow-hidden border border-white/10 bg-black relative group">
+                    {/* UPGRADE FULLSCREEN GAMBAR */}
+                    <div onClick={() => setPreviewImage(log.photoBase64)} className="w-12 h-12 rounded-lg overflow-hidden border border-white/10 bg-black relative group cursor-pointer shadow-lg hover:border-cyan-400 transition-colors">
                       <img src={log.photoBase64} alt="Selfie" className="w-full h-full object-cover" />
-                      <div className="absolute hidden group-hover:block w-48 h-64 z-50 left-12 top-0 border-2 border-white/20 rounded-xl overflow-hidden shadow-2xl bg-black"><img src={log.photoBase64} alt="Selfie Large" className="w-full h-full object-cover" /></div>
+                      <div className="absolute inset-0 bg-black/60 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                        <Maximize className="w-4 h-4 text-white" />
+                      </div>
                     </div>
                   </td>
                   <td className="p-4"><p className="font-semibold text-white">{log.name}</p><p className="text-xs text-slate-400 font-mono">{log.nim}</p></td>
                   <td className="p-4"><p className="text-slate-200">{new Date(log.timestamp).toLocaleTimeString('id-ID')}</p><p className="text-xs text-slate-400">{new Date(log.timestamp).toLocaleDateString('id-ID')}</p></td>
-                  <td className="p-4 text-slate-300">{log.sessionName}</td>
-                  <td className="p-4"><span className={cn("px-3 py-1 text-xs font-bold rounded-full", log.status === 'Hadir' ? "bg-emerald-500/20 text-emerald-400" : "bg-amber-500/20 text-amber-400")}>{log.status}</span></td>
+                  <td className="p-4">
+                     <p className="text-slate-300 text-sm mb-1">{log.sessionName}</p>
+                     <span className={cn("px-2.5 py-0.5 text-[10px] font-bold rounded-full", log.status === 'Hadir' ? "bg-emerald-500/20 text-emerald-400" : "bg-amber-500/20 text-amber-400")}>{log.status}</span>
+                  </td>
+                  <td className="p-4">
+                    {/* UPGRADE MAPS LINK & COORDINATES */}
+                    <a href={`https://www.google.com/maps?q=${log.location.lat},${log.location.lng}`} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-cyan-500/10 hover:bg-cyan-500/20 text-cyan-400 text-xs font-semibold rounded-lg border border-cyan-500/20 transition-colors shadow-sm">
+                      <MapPin className="w-3 h-3" /> Buka G-Maps
+                    </a>
+                    <p className="text-[10px] text-slate-500 mt-1.5 font-mono">{log.location.lat.toFixed(5)}, {log.location.lng.toFixed(5)}</p>
+                  </td>
                 </tr>
               ))}
               {filteredLogs.length === 0 && <tr><td colSpan={5} className="p-8 text-center text-slate-500">Tidak ada data ditemukan.</td></tr>}
@@ -1327,6 +1325,19 @@ const AdminReports: React.FC = () => {
           </table>
         </div>
       </div>
+      
+      {/* MODAL FULLSCREEN PREVIEW IMAGE */}
+      {previewImage && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/90 backdrop-blur-sm p-4 animate-in fade-in zoom-in-95 duration-300" onClick={() => setPreviewImage(null)}>
+          <div className="relative max-w-2xl max-h-[90vh] w-full flex flex-col items-center justify-center">
+            <button onClick={() => setPreviewImage(null)} className="absolute -top-12 right-0 p-2 bg-white/10 hover:bg-rose-500/80 hover:text-white rounded-full transition-colors text-slate-300">
+              <X className="w-6 h-6"/>
+            </button>
+            <img src={previewImage} alt="Preview Selfie Fullscreen" className="max-w-full max-h-[85vh] object-contain rounded-2xl border-4 border-white/10 shadow-2xl" onClick={e => e.stopPropagation()} />
+            <p className="mt-4 text-slate-400 text-sm">Klik di luar area gambar untuk menutup</p>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
@@ -1347,7 +1358,6 @@ const AdminLayout: React.FC<{ children: React.ReactNode, activeRoute: string, se
     <div className="min-h-screen bg-slate-950 flex text-slate-200 font-sans w-full">
       <aside className="w-72 bg-slate-900/50 border-r border-white/10 flex flex-col backdrop-blur-xl shrink-0">
         <div className="p-6 border-b border-white/10 flex items-center gap-3">
-          {/* LOGO INJECTION: Admin Sidebar Header */}
           <div className="w-10 h-10 bg-gradient-to-br from-cyan-400 to-purple-600 rounded-xl flex items-center justify-center shadow-lg overflow-hidden p-1.5">
              <img src="/axalogo.png" alt="AXAXYZ Logo" className="w-full h-full object-contain drop-shadow-sm" onError={(e) => { e.currentTarget.style.display = 'none'; e.currentTarget.nextElementSibling?.classList.remove('hidden'); }} />
              <span className="font-bold text-white text-xl tracking-tighter hidden">A.</span>
@@ -1368,7 +1378,6 @@ const AdminLayout: React.FC<{ children: React.ReactNode, activeRoute: string, se
 
       <main className="flex-1 relative overflow-y-auto w-full">
         <header className="absolute top-0 right-0 p-6 flex justify-end z-50 w-full pointer-events-none">
-           {/* UI Indikator Status Auto Save Database di Pojok Kanan Atas */}
            <div className="pointer-events-auto flex items-center gap-2 px-4 py-2 bg-slate-900/80 backdrop-blur-md border border-white/10 rounded-full text-xs font-bold shadow-xl transition-all">
                {syncStatus === 'syncing' && <><RefreshCcw className="w-3.5 h-3.5 animate-spin text-cyan-400"/> <span className="text-cyan-400">Syncing to Cloud...</span></>}
                {syncStatus === 'synced' && <><CheckCircle2 className="w-3.5 h-3.5 text-emerald-400"/> <span className="text-emerald-400">Database Synced</span></>}
@@ -1388,7 +1397,6 @@ const AdminLayout: React.FC<{ children: React.ReactNode, activeRoute: string, se
 export default function App() {
   const [route, setRoute] = useState<string>('student');
 
-  // FAVICON & TITLE AUTO-INJECTION (Menambahkan axalogo.png sebagai Favicon secara dinamis)
   useEffect(() => {
     if (typeof window !== 'undefined') {
       let link = document.querySelector("link[rel~='icon']") as HTMLLinkElement;
