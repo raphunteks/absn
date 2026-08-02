@@ -159,6 +159,7 @@ interface AppContextType {
   isCloudSync: boolean;
   syncStatus: SyncStatus;
   addLog: (log: Omit<Log, 'id' | 'timestamp'>) => void;
+  deleteLog: (id: string) => void;
   updateSession: (id: string, updates: Partial<Session>) => void;
   addSession: (session: Omit<Session, 'id'>) => void;
   deleteSession: (id: string) => void;
@@ -258,6 +259,7 @@ const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const saveGeofence = (d: Geofence) => { setGeofence(d); localStorage.setItem('axaxyz_geofence', JSON.stringify(d)); syncToCloud('axaxyz_geofence', d); };
 
   const addLog = (logData: Omit<Log, 'id' | 'timestamp'>) => saveLogs([{ ...logData, id: Math.random().toString(36).substr(2, 9), timestamp: new Date().toISOString() }, ...logs]);
+  const deleteLog = (id: string) => saveLogs(logs.filter(l => l.id !== id));
   const updateSession = (id: string, updates: Partial<Session>) => saveSessions(sessions.map(s => s.id === id ? { ...s, ...updates } : s));
   const addSession = (sessionData: Omit<Session, 'id'>) => saveSessions([...sessions, { ...sessionData, id: Math.random().toString(36).substr(2, 9) }]);
   const deleteSession = (id: string) => saveSessions(sessions.filter(s => s.id !== id));
@@ -291,7 +293,7 @@ const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   return (
     <AppContext.Provider value={{ 
       isCloudSync, syncStatus, sessions, logs, students, geofence, 
-      addLog, updateSession, addSession, deleteSession, addStudent, updateStudent, bulkAddStudents, deleteStudent, updateGeofence, forceManualSync 
+      addLog, deleteLog, updateSession, addSession, deleteSession, addStudent, updateStudent, bulkAddStudents, deleteStudent, updateGeofence, forceManualSync 
     }}>
       {children}
     </AppContext.Provider>
@@ -1328,7 +1330,7 @@ const AdminSettings: React.FC = () => {
 };
 
 const AdminReports: React.FC = () => {
-  const { logs, sessions } = useAppContext();
+  const { logs, sessions, deleteLog } = useAppContext();
   const [search, setSearch] = useState('');
   const [filterSession, setFilterSession] = useState('All');
   
@@ -1365,6 +1367,7 @@ const AdminReports: React.FC = () => {
                 <th className="p-4 font-medium">Waktu Absen</th>
                 <th className="p-4 font-medium">Sesi & Status</th>
                 <th className="p-4 font-medium">Lokasi Absen</th>
+                <th className="p-4 font-medium text-right">Aksi</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-white/5">
@@ -1390,9 +1393,14 @@ const AdminReports: React.FC = () => {
                     </a>
                     <p className="text-[10px] text-slate-500 mt-1.5 font-mono">{log.location.lat.toFixed(5)}, {log.location.lng.toFixed(5)}</p>
                   </td>
+                  <td className="p-4 text-right">
+                    <button onClick={() => { if(confirm(`Yakin ingin menghapus data absensi untuk ${log.name}?`)) deleteLog(log.id); }} title="Hapus Log Absensi" className="p-1.5 text-slate-400 hover:text-rose-400 hover:bg-rose-400/10 rounded-lg transition-colors border border-transparent hover:border-rose-400/20">
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </td>
                 </tr>
               ))}
-              {filteredLogs.length === 0 && <tr><td colSpan={5} className="p-8 text-center text-slate-500">Tidak ada data ditemukan.</td></tr>}
+              {filteredLogs.length === 0 && <tr><td colSpan={6} className="p-8 text-center text-slate-500">Tidak ada data ditemukan.</td></tr>}
             </tbody>
           </table>
         </div>
