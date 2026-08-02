@@ -14,8 +14,7 @@ import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 import { format } from 'date-fns';
 
-// PENTING: Hapus tanda komentar (//) pada baris di bawah ini di VSCode Anda saat akan di-deploy ke Vercel
-// import { SpeedInsights } from "@vercel/speed-insights/next";
+import { SpeedInsights } from "@vercel/speed-insights/next";
 
 // ==========================================
 // UPSTASH REDIS CLOUD CLIENT (REST API POST)
@@ -634,8 +633,8 @@ const SelfieCapture: React.FC<{ onComplete: (base64: string) => void }> = ({ onC
       canvas.height = videoRef.current.videoHeight;
       const ctx = canvas.getContext('2d');
       if (ctx) {
-        // UPGRADE NO-MIRRORING: 
-        // Menghapus fungsi flip (ctx.scale & translate) agar foto disimpan natural apa adanya.
+        // UPGRADE NO-MIRRORING FIX: 
+        // Menyimpan gambar di canvas SECARA NATURAL (apa adanya dari kamera).
         ctx.drawImage(videoRef.current, 0, 0, canvas.width, canvas.height);
         setImage(canvas.toDataURL('image/jpeg', 0.8));
       }
@@ -660,7 +659,8 @@ const SelfieCapture: React.FC<{ onComplete: (base64: string) => void }> = ({ onC
             className="w-full h-full object-cover transform scale-x-[-1]"
           />
         ) : (
-          // FOTO TERSIMPAN: Tidak lagi menggunakan scale-x-[-1] agar sesuai dengan asli
+          // FULL FIX: MENGHAPUS 'transform scale-x-[-1]' DARI SINI
+          // Sehingga hasil foto yang ditampilkan (dan diunggah) tidak lagi terbalik / mirrored!
           <img src={image} alt="Selfie" className="w-full h-full object-cover" />
         )}
         
@@ -1439,8 +1439,8 @@ export default function App() {
         </AdminLayout>
       )}
 
-      {/* PENTING: Hapus kurawal dan komentar pada baris di bawah ini di VSCode Anda */}
-      {/* <SpeedInsights /> */}
+      {/* VERCEL SPEED INSIGHTS */}
+      <SpeedInsights />
     </AppProvider>
   );
 }
