@@ -1,5 +1,5 @@
 import type { Metadata } from 'next'
-import './globals.css'
+import './globals.css' // <-- BARIS INI SANGAT WAJIB ADA
 
 export const metadata: Metadata = {
   title: 'AXAXYZ Attendance',
