@@ -5,19 +5,14 @@ import {
   Camera, MapPin, Clock, QrCode, CheckCircle2, AlertCircle, 
   BarChart3, Settings, FileText, LogOut, Users, Download, Plus, Trash2,
   RefreshCcw, ChevronRight, Fingerprint, Map, Activity, Key, Upload, Database, Navigation,
-  Printer, X, CreditCard
+  Printer, X, CreditCard, Eye, EyeOff, Lock, ShieldCheck, Loader2, User
 } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 
-// PENGGUNAAN PACKAGE BARU SESUAI PACKAGE.JSON
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 import Webcam from 'react-webcam';
 import { format } from 'date-fns';
-
-// ==========================================
-// UTILS & HELPER FUNCTIONS
-// ==========================================
 
 const cn = (...inputs: ClassValue[]) => {
   return twMerge(clsx(inputs));
@@ -53,10 +48,6 @@ const exportToCSV = (logs: Log[]) => {
   link.click();
   document.body.removeChild(link);
 };
-
-// ==========================================
-// TYPES & CONTEXT (Global State)
-// ==========================================
 
 interface Session { id: string; name: string; startTime: string; endTime: string; toleranceMinutes: number; isActive: boolean; }
 interface Log { id: string; nim: string; name: string; timestamp: string; sessionName: string; status: 'Hadir' | 'Terlambat'; location: { lat: number; lng: number }; photoBase64: string; deviceId: string; }
@@ -136,10 +127,6 @@ const useAppContext = () => {
   if (!context) throw new Error("useAppContext must be used within AppProvider");
   return context;
 };
-
-// ==========================================
-// STUDENT WIZARD COMPONENTS
-// ==========================================
 
 const TimeCheck: React.FC<{ onComplete: (data: { sessionName: string; status: 'Hadir' | 'Terlambat' }) => void }> = ({ onComplete }) => {
   const { sessions } = useAppContext();
@@ -568,54 +555,124 @@ const AttendanceWizard: React.FC = () => {
 };
 
 // ==========================================
-// ADMIN COMPONENTS
+// ADMIN COMPONENTS (UPGRADED)
 // ==========================================
 
 const AdminLogin: React.FC<{ onLogin: () => void }> = ({ onLogin }) => {
   const [user, setUser] = useState('');
   const [pass, setPass] = useState('');
   const [err, setErr] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
+  const [showPass, setShowPass] = useState(false);
+  const [attempts, setAttempts] = useState(0);
+  const [lockoutTimer, setLockoutTimer] = useState(0);
 
-  const handleLogin = (e: React.FormEvent) => {
+  // Lockout system countdown
+  useEffect(() => {
+    let timer: NodeJS.Timeout;
+    if (lockoutTimer > 0) {
+      timer = setTimeout(() => setLockoutTimer(lockoutTimer - 1), 1000);
+    }
+    return () => clearTimeout(timer);
+  }, [lockoutTimer]);
+
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    // KODE KEAMANAN KETAT (Menghapus hardcode password)
-    const ADMIN_USER = process.env.ADMIN_USER;
-    const ADMIN_PASS = process.env.ADMIN_PASS;
+    if (lockoutTimer > 0) {
+      setErr(`Sistem terkunci. Silakan coba lagi dalam ${lockoutTimer} detik.`);
+      return;
+    }
+
+    setIsLoading(true);
+    setErr('');
+
+    // Simulasi Secure Verification Delay (Mencegah brute force instant)
+    await new Promise(resolve => setTimeout(resolve, 800));
+
+    // KODE KEAMANAN KETAT
+    // Mendukung pembacaan dari NEXT_PUBLIC_ ataupun ENV Server normal sebagai fallback cerdas.
+    const ADMIN_USER = process.env.NEXT_PUBLIC_ADMIN_USER || process.env.ADMIN_USER;
+    const ADMIN_PASS = process.env.NEXT_PUBLIC_ADMIN_PASS || process.env.ADMIN_PASS;
 
     if (!ADMIN_USER || !ADMIN_PASS) {
-      setErr('Sistem keamanan belum dikonfigurasi. Harap atur ADMIN_USER dan ADMIN_PASS di Vercel Settings (Environment Variables).');
+      setErr('Sistem keamanan belum dikonfigurasi. Harap atur ADMIN_USER dan ADMIN_PASS di Environment Variables.');
+      setIsLoading(false);
       return;
     }
 
     if (user === ADMIN_USER && pass === ADMIN_PASS) {
+      setAttempts(0);
       localStorage.setItem('axaxyz_admin_auth', 'true');
       onLogin();
     } else {
-      setErr('Username atau password salah.');
+      const newAttempts = attempts + 1;
+      setAttempts(newAttempts);
+      if (newAttempts >= 3) {
+        setLockoutTimer(30); // Mengunci form selama 30 detik
+        setErr('❌ Akses diblokir sementara (30s) karena terlalu banyak percobaan gagal.');
+      } else {
+        setErr(`❌ Username atau password salah. (Sisa percobaan: ${3 - newAttempts})`);
+      }
     }
+    setIsLoading(false);
   };
 
   return (
     <div className="min-h-screen bg-slate-950 flex items-center justify-center p-4 relative overflow-hidden w-full">
+      {/* Dynamic Background Effects */}
       <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,_var(--tw-gradient-stops))] from-slate-900 via-slate-950 to-slate-950"></div>
-      <div className="w-full max-w-md bg-white/5 backdrop-blur-xl border border-white/10 p-8 rounded-3xl shadow-2xl relative z-10 animate-in fade-in zoom-in duration-500">
+      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] bg-cyan-500/5 rounded-full blur-[100px] pointer-events-none"></div>
+
+      <div className="w-full max-w-md bg-white/5 backdrop-blur-2xl border border-white/10 p-8 rounded-[2rem] shadow-2xl relative z-10 animate-in slide-in-from-bottom-8 fade-in duration-700">
         <div className="flex flex-col items-center mb-8">
-          <div className="w-16 h-16 bg-gradient-to-br from-cyan-400 to-purple-600 rounded-2xl flex items-center justify-center shadow-lg mb-4"><span className="font-bold text-white text-3xl tracking-tighter">A.</span></div>
+          <div className="relative mb-5">
+            <div className="w-20 h-20 bg-gradient-to-br from-cyan-400 to-purple-600 rounded-3xl flex items-center justify-center shadow-[0_0_30px_rgba(6,182,212,0.3)]">
+              <ShieldCheck className="w-10 h-10 text-white" />
+            </div>
+            <div className="absolute -bottom-2 -right-2 w-9 h-9 bg-slate-900 rounded-full border-2 border-slate-800 flex items-center justify-center">
+              <Lock className="w-4 h-4 text-cyan-400" />
+            </div>
+          </div>
           <h2 className="text-2xl font-bold text-white tracking-wide">AXAXYZ Admin</h2>
-          <p className="text-slate-400 text-sm mt-1">Enterprise Attendance System</p>
+          <p className="text-slate-400 text-sm mt-1">Enterprise Security Portal</p>
         </div>
+
         <form onSubmit={handleLogin} className="space-y-5">
-          {err && <div className="p-3 bg-rose-500/10 border border-rose-500/20 text-rose-400 text-sm rounded-xl">{err}</div>}
-          <div className="space-y-1">
+          {err && (
+            <div className="p-4 bg-rose-500/10 border border-rose-500/20 text-rose-400 text-sm rounded-2xl flex items-start gap-3 animate-in shake duration-300">
+              <AlertCircle className="w-5 h-5 shrink-0 mt-0.5" />
+              <p className="leading-tight">{err}</p>
+            </div>
+          )}
+
+          <div className="space-y-1.5">
             <label className="text-xs text-slate-400 font-semibold uppercase tracking-wider ml-1">Username</label>
-            <input type="text" value={user} onChange={e=>setUser(e.target.value)} className="w-full bg-slate-900/50 border border-white/10 rounded-xl px-4 py-3 text-white outline-none focus:border-cyan-500 transition-colors" placeholder="Masukkan username" required />
+            <div className="relative flex items-center bg-slate-900/50 border border-white/10 rounded-2xl overflow-hidden focus-within:border-cyan-500 focus-within:ring-1 focus-within:ring-cyan-500 transition-all">
+              <div className="pl-4 pr-3 text-slate-500"><User className="w-5 h-5"/></div>
+              <input type="text" value={user} onChange={e=>setUser(e.target.value)} disabled={lockoutTimer > 0 || isLoading} className="w-full bg-transparent py-3.5 pr-4 text-white outline-none placeholder-slate-600 disabled:opacity-50" placeholder="Masukkan username admin" required />
+            </div>
           </div>
-          <div className="space-y-1">
+
+          <div className="space-y-1.5">
             <label className="text-xs text-slate-400 font-semibold uppercase tracking-wider ml-1">Password</label>
-            <input type="password" value={pass} onChange={e=>setPass(e.target.value)} className="w-full bg-slate-900/50 border border-white/10 rounded-xl px-4 py-3 text-white outline-none focus:border-cyan-500 transition-colors" placeholder="••••••••" required />
+            <div className="relative flex items-center bg-slate-900/50 border border-white/10 rounded-2xl overflow-hidden focus-within:border-cyan-500 focus-within:ring-1 focus-within:ring-cyan-500 transition-all">
+              <div className="pl-4 pr-3 text-slate-500"><Key className="w-5 h-5"/></div>
+              <input type={showPass ? 'text' : 'password'} value={pass} onChange={e=>setPass(e.target.value)} disabled={lockoutTimer > 0 || isLoading} className="w-full bg-transparent py-3.5 pr-12 text-white outline-none placeholder-slate-600 disabled:opacity-50" placeholder="••••••••" required />
+              <button type="button" onClick={() => setShowPass(!showPass)} className="absolute right-4 text-slate-400 hover:text-cyan-400 transition-colors">
+                {showPass ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+              </button>
+            </div>
           </div>
-          <button type="submit" className="w-full py-3.5 mt-2 bg-gradient-to-r from-cyan-500 to-purple-600 hover:from-cyan-400 hover:to-purple-500 text-white font-bold rounded-xl transition-all shadow-[0_0_15px_rgba(6,182,212,0.2)]">Masuk Dashboard</button>
+
+          <button type="submit" disabled={lockoutTimer > 0 || isLoading} className="w-full py-4 mt-4 bg-gradient-to-r from-cyan-500 to-purple-600 hover:from-cyan-400 hover:to-purple-500 disabled:from-slate-700 disabled:to-slate-800 disabled:text-slate-500 disabled:cursor-not-allowed text-white font-bold rounded-2xl transition-all shadow-[0_0_20px_rgba(6,182,212,0.2)] flex justify-center items-center gap-2 group">
+            {isLoading ? <Loader2 className="w-5 h-5 animate-spin" /> : (
+               <>
+                  Masuk Sistem
+                  <ChevronRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
+               </>
+            )}
+          </button>
         </form>
       </div>
     </div>
@@ -1055,10 +1112,6 @@ const AdminLayout: React.FC<{ children: React.ReactNode, activeRoute: string, se
     </div>
   );
 };
-
-// ==========================================
-// MAIN APP ROUTER (Single File Execution Entry)
-// ==========================================
 
 export default function App() {
   const [route, setRoute] = useState<string>('student');
