@@ -1576,7 +1576,7 @@ export default function App() {
       )}
 
       {/* PENTING: Hapus tanda komentar di bawah ini saat kode dijalankan di lokal/Vercel */}
-      <SpeedInsights />
+      {/* <SpeedInsights /> */}
     </AppProvider>
   );
 }
