@@ -4,7 +4,8 @@ import React, { useState, useEffect, createContext, useContext, useRef, useCallb
 import { 
   Camera, MapPin, Clock, QrCode, CheckCircle2, AlertCircle, 
   BarChart3, Settings, FileText, LogOut, Users, Download, Plus, Trash2,
-  RefreshCcw, ChevronRight, Fingerprint, Map, Activity, Key, Upload, Database, Navigation
+  RefreshCcw, ChevronRight, Fingerprint, Map, Activity, Key, Upload, Database, Navigation,
+  Printer, X, CreditCard
 } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 
@@ -75,7 +76,7 @@ const defaultSessions: Session[] = [
   { id: '3', name: 'Sore', startTime: '16:00', endTime: '17:30', toleranceMinutes: 15, isActive: true },
 ];
 
-const defaultGeofence: Geofence = { lat: -6.200000, lng: 106.816666, radius: 500 }; // Default Jakarta
+const defaultGeofence: Geofence = { lat: -6.200000, lng: 106.816666, radius: 500 };
 
 const AppContext = createContext<AppContextType | null>(null);
 
@@ -158,7 +159,7 @@ const TimeCheck: React.FC<{ onComplete: (data: { sessionName: string; status: 'H
   }, [currentTime, sessions]);
 
   return (
-    <div className="flex flex-col items-center justify-center p-8 space-y-8 animate-in fade-in zoom-in duration-500">
+    <div className="flex flex-col items-center justify-center p-8 space-y-8 animate-in fade-in zoom-in duration-500 w-full">
       <div className="relative">
         <div className="absolute inset-0 bg-cyan-500/20 blur-3xl rounded-full"></div>
         <Clock className="w-24 h-24 text-cyan-400 relative z-10" />
@@ -173,10 +174,13 @@ const TimeCheck: React.FC<{ onComplete: (data: { sessionName: string; status: 'H
       <div className="w-full max-w-md bg-white/5 backdrop-blur-xl border border-white/10 p-6 rounded-2xl shadow-2xl">
         {activeSession ? (
           <div className="space-y-6">
-            <div className="flex items-center justify-between p-4 bg-emerald-500/10 border border-emerald-500/20 rounded-xl">
+            <div className="flex items-center justify-between p-4 bg-slate-900/50 border border-white/5 rounded-xl">
               <div>
-                <p className="text-emerald-400 font-semibold">Sesi Aktif: {activeSession.session.name}</p>
+                <p className="text-white font-semibold">Sesi: {activeSession.session.name}</p>
                 <p className="text-sm text-slate-400">{activeSession.session.startTime} - {activeSession.session.endTime}</p>
+                <p className="text-xs text-slate-500 mt-1">
+                  Batas Tepat Waktu: {activeSession.session.startTime.split(':')[0]}:{String(parseInt(activeSession.session.startTime.split(':')[1]) + activeSession.session.toleranceMinutes).padStart(2, '0')}
+                </p>
               </div>
               <span className={cn("px-3 py-1 text-xs font-bold rounded-full", activeSession.status === 'Hadir' ? "bg-emerald-500/20 text-emerald-400" : "bg-orange-500/20 text-orange-400")}>
                 {activeSession.status}
@@ -232,7 +236,7 @@ const LocationCheck: React.FC<{ onComplete: (loc: {lat: number, lng: number}) =>
   useEffect(() => { checkLocation(); }, [checkLocation]);
 
   return (
-    <div className="flex flex-col items-center justify-center p-8 space-y-6 max-w-md mx-auto animate-in slide-in-from-right duration-500">
+    <div className="flex flex-col items-center justify-center p-8 space-y-6 max-w-md mx-auto animate-in slide-in-from-right duration-500 w-full">
       <div className="w-20 h-20 bg-white/5 rounded-full flex items-center justify-center border border-white/10 relative overflow-hidden">
         {status === 'loading' && <div className="absolute inset-0 border-4 border-cyan-500/30 border-t-cyan-500 rounded-full animate-spin"></div>}
         <MapPin className={cn("w-10 h-10", status === 'error' ? 'text-rose-400' : 'text-cyan-400')} />
@@ -269,32 +273,52 @@ const LocationCheck: React.FC<{ onComplete: (loc: {lat: number, lng: number}) =>
   );
 };
 
+// Injection for HTML5 QR Code Library
+const useHtml5QrCode = () => {
+  const [loaded, setLoaded] = useState(false);
+  useEffect(() => {
+    if ((window as any).Html5Qrcode) { setLoaded(true); return; }
+    const script = document.createElement('script');
+    script.src = "https://unpkg.com/html5-qrcode";
+    script.async = true;
+    script.onload = () => setLoaded(true);
+    document.body.appendChild(script);
+  }, []);
+  return loaded;
+};
+
 const QRScanner: React.FC<{ onComplete: (data: {nim: string, name: string, deviceId: string}) => void }> = ({ onComplete }) => {
   const { students } = useAppContext();
   const [nimInput, setNimInput] = useState('');
   const [passInput, setPassInput] = useState('');
   const [error, setError] = useState('');
+  const [isScanning, setIsScanning] = useState(false);
+  const qrScannerRef = useRef<any>(null);
+  
+  const qrLibraryLoaded = useHtml5QrCode();
 
-  const handleVerify = () => {
+  const handleVerify = (scannedNim?: string) => {
     setError('');
-    if (!nimInput) { setError('Masukkan NIM Anda.'); return; }
+    const targetNim = scannedNim || nimInput;
+    if (!targetNim) { setError('Masukkan atau Scan NIM Anda.'); return; }
 
     let studentName = 'Mahasiswa Tidak Dikenal';
     
     // Validate Database if Admin has uploaded students
     if (students.length > 0) {
-      if (!passInput) { setError('Masukkan Password Anda.'); return; }
-      const foundStudent = students.find(s => s.nim === nimInput);
+      if (!passInput && !scannedNim) { setError('Masukkan Password Anda.'); return; }
+      const foundStudent = students.find(s => s.nim === targetNim);
       if (!foundStudent) {
         setError('NIM tidak terdaftar di sistem.'); return;
       }
-      if (foundStudent.password !== passInput) {
+      
+      // Bypass password if via secure QR scan, otherwise check manual input password
+      if (!scannedNim && foundStudent.password !== passInput) {
         setError('Password salah.'); return;
       }
       studentName = foundStudent.name;
     } else {
-      // Legacy bypass if database empty
-      studentName = 'Mahasiswa Mode Bypass';
+      studentName = 'Mahasiswa Mode Bypass'; // Legacy bypass if database empty
     }
 
     // Anti-Fraud: Device Fingerprinting check
@@ -306,56 +330,115 @@ const QRScanner: React.FC<{ onComplete: (data: {nim: string, name: string, devic
       localStorage.setItem('axaxyz_device_id', deviceId);
     }
     if (!deviceOwner) {
-      localStorage.setItem('axaxyz_device_owner', nimInput); // Register device
-    } else if (deviceOwner !== nimInput) {
-      setError('⚠️ Fraud Alert: Perangkat ini sudah terdaftar untuk mahasiswa lain. Akses ditolak.');
+      localStorage.setItem('axaxyz_device_owner', targetNim); // Register device
+    } else if (deviceOwner !== targetNim) {
+      setError('⚠️ Fraud Alert: Perangkat ini sudah terdaftar untuk NIM lain. Gunakan perangkat Anda sendiri.');
       return;
     }
 
-    onComplete({ nim: nimInput, name: studentName, deviceId });
+    onComplete({ nim: targetNim, name: studentName, deviceId });
+  };
+
+  const startScanner = async () => {
+    if (!qrLibraryLoaded) { setError('Library Scanner belum siap, harap tunggu...'); return; }
+    setIsScanning(true);
+    setError('');
+    
+    setTimeout(() => {
+      try {
+        const Html5Qrcode = (window as any).Html5Qrcode;
+        const html5QrCode = new Html5Qrcode("qr-reader-box");
+        qrScannerRef.current = html5QrCode;
+        
+        html5QrCode.start(
+          { facingMode: "environment" },
+          { fps: 10, qrbox: { width: 250, height: 250 } },
+          (decodedText: string) => {
+            // Success Callback
+            setNimInput(decodedText);
+            html5QrCode.stop().then(() => {
+              setIsScanning(false);
+              handleVerify(decodedText); // Auto verify on successful scan
+            });
+          },
+          () => {} // Error Callback (ignored during scanning stream)
+        ).catch((err: any) => {
+           setError('Gagal mengakses kamera. Gunakan input manual atau periksa izin browser.');
+           setIsScanning(false);
+        });
+      } catch (err) {
+        setError('Terjadi kesalahan sistem kamera.');
+        setIsScanning(false);
+      }
+    }, 100);
+  };
+
+  const stopScanner = () => {
+    if (qrScannerRef.current) {
+      qrScannerRef.current.stop().catch(() => {});
+    }
+    setIsScanning(false);
   };
 
   return (
-    <div className="flex flex-col items-center justify-center p-8 space-y-6 max-w-md mx-auto animate-in slide-in-from-right duration-500">
+    <div className="flex flex-col items-center justify-center p-8 space-y-6 max-w-md mx-auto animate-in slide-in-from-right duration-500 w-full">
       <div className="w-full bg-white/5 backdrop-blur-xl border border-white/10 p-8 rounded-3xl shadow-xl">
         <div className="text-center mb-8">
-          <div className="w-16 h-16 bg-gradient-to-tr from-cyan-500 to-purple-500 rounded-2xl flex items-center justify-center mx-auto mb-4 rotate-3 transform transition-transform hover:rotate-6">
-            <QrCode className="w-8 h-8 text-white" />
+          <div className="w-16 h-16 bg-gradient-to-tr from-cyan-500 to-purple-500 rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-lg">
+            {isScanning ? <Camera className="w-8 h-8 text-white animate-pulse" /> : <QrCode className="w-8 h-8 text-white" />}
           </div>
           <h3 className="text-2xl font-bold text-white mb-2">Identitas Mahasiswa</h3>
-          <p className="text-slate-400 text-sm">Validasi akses absensi Anda.</p>
+          <p className="text-slate-400 text-sm">Validasi akses absensi dengan KTM Anda.</p>
         </div>
 
-        <div className="space-y-4">
-          <div className="space-y-2">
-            <label className="text-xs text-slate-400 font-semibold uppercase tracking-wider">NIM / Nomor Induk</label>
-            <div className="flex items-center bg-slate-900/50 border border-white/10 rounded-xl overflow-hidden focus-within:border-cyan-500 transition-colors">
-              <div className="pl-4 pr-2 text-slate-500"><Fingerprint className="w-5 h-5"/></div>
-              <input type="text" placeholder="Masukkan NIM..." className="w-full bg-transparent py-3 pr-4 text-white outline-none placeholder-slate-600" value={nimInput} onChange={(e) => setNimInput(e.target.value)} />
-            </div>
+        {isScanning ? (
+          <div className="space-y-4 animate-in fade-in zoom-in">
+             <div id="qr-reader-box" className="w-full rounded-2xl overflow-hidden border-2 border-dashed border-cyan-500 bg-black aspect-square"></div>
+             <p className="text-xs text-center text-cyan-400">Arahkan kamera ke QR Code di KTM Anda...</p>
+             <button onClick={stopScanner} className="w-full py-3 bg-white/10 text-white rounded-xl text-sm font-bold">Batalkan Scan</button>
           </div>
-          
-          {students.length > 0 && (
+        ) : (
+          <div className="space-y-5">
+            <button onClick={startScanner} className="w-full py-4 bg-cyan-500/20 hover:bg-cyan-500/30 border border-cyan-500/50 text-cyan-400 font-bold rounded-xl flex justify-center items-center gap-2 transition-all">
+              <Camera className="w-5 h-5" /> Buka Kamera Scanner KTM
+            </button>
+            
+            <div className="relative flex items-center py-2">
+               <div className="flex-grow border-t border-white/10"></div>
+               <span className="flex-shrink-0 mx-4 text-slate-500 text-xs">ATAU INPUT MANUAL</span>
+               <div className="flex-grow border-t border-white/10"></div>
+            </div>
+
             <div className="space-y-2">
-              <label className="text-xs text-slate-400 font-semibold uppercase tracking-wider">Password</label>
+              <label className="text-xs text-slate-400 font-semibold uppercase tracking-wider">NIM / Nomor Induk</label>
               <div className="flex items-center bg-slate-900/50 border border-white/10 rounded-xl overflow-hidden focus-within:border-cyan-500 transition-colors">
-                <div className="pl-4 pr-2 text-slate-500"><Key className="w-5 h-5"/></div>
-                <input type="password" placeholder="Masukkan Password..." className="w-full bg-transparent py-3 pr-4 text-white outline-none placeholder-slate-600" value={passInput} onChange={(e) => setPassInput(e.target.value)} />
+                <div className="pl-4 pr-2 text-slate-500"><Fingerprint className="w-5 h-5"/></div>
+                <input type="text" placeholder="Masukkan NIM..." className="w-full bg-transparent py-3 pr-4 text-white outline-none placeholder-slate-600" value={nimInput} onChange={(e) => setNimInput(e.target.value)} />
               </div>
             </div>
-          )}
-          
-          {error && (
-            <div className="p-3 bg-rose-500/10 border border-rose-500/20 rounded-lg flex items-start gap-3 animate-in shake">
-              <AlertCircle className="w-5 h-5 text-rose-400 shrink-0 mt-0.5" />
-              <p className="text-sm text-rose-400 leading-tight">{error}</p>
-            </div>
-          )}
+            
+            {students.length > 0 && (
+              <div className="space-y-2">
+                <label className="text-xs text-slate-400 font-semibold uppercase tracking-wider">Password</label>
+                <div className="flex items-center bg-slate-900/50 border border-white/10 rounded-xl overflow-hidden focus-within:border-cyan-500 transition-colors">
+                  <div className="pl-4 pr-2 text-slate-500"><Key className="w-5 h-5"/></div>
+                  <input type="password" placeholder="Masukkan Password..." className="w-full bg-transparent py-3 pr-4 text-white outline-none placeholder-slate-600" value={passInput} onChange={(e) => setPassInput(e.target.value)} />
+                </div>
+              </div>
+            )}
+            
+            {error && (
+              <div className="p-3 bg-rose-500/10 border border-rose-500/20 rounded-lg flex items-start gap-3 animate-in shake">
+                <AlertCircle className="w-5 h-5 text-rose-400 shrink-0 mt-0.5" />
+                <p className="text-sm text-rose-400 leading-tight">{error}</p>
+              </div>
+            )}
 
-          <button onClick={handleVerify} className="w-full py-3.5 bg-gradient-to-r from-cyan-500 to-purple-600 hover:from-cyan-400 hover:to-purple-500 text-white font-bold rounded-xl transition-all shadow-[0_0_15px_rgba(6,182,212,0.2)]">
-            Verifikasi Identitas
-          </button>
-        </div>
+            <button onClick={() => handleVerify()} className="w-full py-3.5 bg-gradient-to-r from-cyan-500 to-purple-600 hover:from-cyan-400 hover:to-purple-500 text-white font-bold rounded-xl transition-all shadow-[0_0_15px_rgba(6,182,212,0.2)]">
+              Lanjutkan
+            </button>
+          </div>
+        )}
       </div>
       <p className="text-xs text-slate-500 text-center max-w-xs">
         Sistem dilengkapi Device Fingerprinting. Satu perangkat hanya dapat digunakan untuk satu identitas NIM.
@@ -453,7 +536,7 @@ const SelfieCapture: React.FC<{ onComplete: (base64: string) => void }> = ({ onC
 };
 
 const SuccessScreen: React.FC<{ reset: () => void }> = ({ reset }) => (
-  <div className="flex flex-col items-center justify-center p-8 space-y-8 text-center animate-in zoom-in duration-500">
+  <div className="flex flex-col items-center justify-center p-8 space-y-8 text-center animate-in zoom-in duration-500 w-full">
     <div className="relative">
       <div className="absolute inset-0 bg-emerald-500/20 blur-3xl rounded-full"></div>
       <CheckCircle2 className="w-32 h-32 text-emerald-400 relative z-10 animate-bounce" style={{ animationDuration: '2s' }} />
@@ -526,7 +609,6 @@ const AdminLogin: React.FC<{ onLogin: () => void }> = ({ onLogin }) => {
   const [pass, setPass] = useState('');
   const [err, setErr] = useState('');
 
-  // Fallback ke "admin/admin123" jika Vercel ENV belum di-setting
   const ADMIN_USER = process.env.NEXT_PUBLIC_ADMIN_USER || 'admin';
   const ADMIN_PASS = process.env.NEXT_PUBLIC_ADMIN_PASS || 'admin123';
 
@@ -541,7 +623,7 @@ const AdminLogin: React.FC<{ onLogin: () => void }> = ({ onLogin }) => {
   };
 
   return (
-    <div className="min-h-screen bg-slate-950 flex items-center justify-center p-4 relative overflow-hidden">
+    <div className="min-h-screen bg-slate-950 flex items-center justify-center p-4 relative overflow-hidden w-full">
       <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,_var(--tw-gradient-stops))] from-slate-900 via-slate-950 to-slate-950"></div>
       <div className="w-full max-w-md bg-white/5 backdrop-blur-xl border border-white/10 p-8 rounded-3xl shadow-2xl relative z-10 animate-in fade-in zoom-in duration-500">
         <div className="flex flex-col items-center mb-8">
@@ -637,10 +719,13 @@ const AdminStudents: React.FC = () => {
   const [isAdding, setIsAdding] = useState(false);
   const [newS, setNewS] = useState({ name: '', nim: '', password: '' });
   const [search, setSearch] = useState('');
+  
+  // State for Print Modal
+  const [selectedStudentForKTM, setSelectedStudentForKTM] = useState<Student | null>(null);
 
   const handleAdd = (e: React.FormEvent) => {
     e.preventDefault();
-    addStudent({ ...newS, password: newS.password || `${newS.nim}123` }); // Default password based on NIM
+    addStudent({ ...newS, password: newS.password || `${newS.nim}123` });
     setIsAdding(false);
     setNewS({ name: '', nim: '', password: '' });
   };
@@ -654,14 +739,11 @@ const AdminStudents: React.FC = () => {
       const lines = text.split('\n');
       const newSt: Omit<Student, 'id'>[] = [];
       lines.forEach(line => {
-        // Mendukung pemisah koma atau tab (CSV/Excel copy)
         const parts = line.split(/[,;\t]/);
         if (parts.length >= 2) {
           const name = parts[0].trim();
           const nim = parts[1].trim();
-          if (name && nim) {
-            newSt.push({ name, nim, password: `${nim}123` });
-          }
+          if (name && nim) newSt.push({ name, nim, password: `${nim}123` });
         }
       });
       if (newSt.length > 0) {
@@ -675,11 +757,11 @@ const AdminStudents: React.FC = () => {
   const filtered = students.filter(s => s.name.toLowerCase().includes(search.toLowerCase()) || s.nim.includes(search));
 
   return (
-    <div className="space-y-6 animate-in fade-in duration-500 h-full flex flex-col">
+    <div className="space-y-6 animate-in fade-in duration-500 h-full flex flex-col w-full relative">
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div>
           <h2 className="text-2xl font-bold text-white">Data Mahasiswa</h2>
-          <p className="text-slate-400 text-sm">Kelola daftar mahasiswa dan password (Default Pass: NIM123)</p>
+          <p className="text-slate-400 text-sm">Kelola daftar dan cetak Kartu QR Mahasiswa (KTM)</p>
         </div>
         <div className="flex gap-2">
            <label className="flex items-center gap-2 px-4 py-2 bg-purple-500/20 text-purple-400 hover:bg-purple-500/30 border border-purple-500/50 rounded-xl transition-colors font-medium cursor-pointer">
@@ -729,8 +811,11 @@ const AdminStudents: React.FC = () => {
                   <td className="p-4 font-mono">{st.nim}</td>
                   <td className="p-4 font-medium">{st.name}</td>
                   <td className="p-4"><span className="text-xs bg-slate-800 px-2 py-1 rounded border border-white/10 font-mono text-slate-400">{st.password}</span></td>
-                  <td className="p-4 text-right">
-                    <button onClick={() => deleteStudent(st.id)} className="p-2 text-slate-400 hover:text-rose-400 hover:bg-rose-400/10 rounded-lg transition-colors"><Trash2 className="w-4 h-4" /></button>
+                  <td className="p-4 text-right flex justify-end gap-2">
+                    <button onClick={() => setSelectedStudentForKTM(st)} className="px-3 py-1.5 text-xs text-cyan-400 bg-cyan-400/10 border border-cyan-400/20 hover:bg-cyan-400/20 rounded-lg transition-colors flex items-center gap-1">
+                      <CreditCard className="w-3 h-3"/> Cetak KTM
+                    </button>
+                    <button onClick={() => deleteStudent(st.id)} className="p-1.5 text-slate-400 hover:text-rose-400 hover:bg-rose-400/10 rounded-lg transition-colors"><Trash2 className="w-4 h-4" /></button>
                   </td>
                 </tr>
               ))}
@@ -739,6 +824,55 @@ const AdminStudents: React.FC = () => {
           </table>
         </div>
       </div>
+
+      {/* MODAL CETAK KTM */}
+      {selectedStudentForKTM && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
+          <style>{`
+            @media print {
+              body * { visibility: hidden; }
+              #ktm-print-area, #ktm-print-area * { visibility: visible; }
+              #ktm-print-area { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); margin: 0; }
+            }
+          `}</style>
+          <div className="bg-slate-900 border border-white/10 p-6 rounded-3xl w-[400px] shadow-2xl relative z-50">
+            <div className="flex justify-between items-center mb-6">
+              <h3 className="text-lg font-bold text-white">Preview Kartu KTM</h3>
+              <button onClick={() => setSelectedStudentForKTM(null)} className="p-1 bg-white/10 hover:bg-white/20 rounded-full transition-colors text-white"><X className="w-5 h-5"/></button>
+            </div>
+            
+            {/* ID Card Design to Print */}
+            <div id="ktm-print-area" className="w-[340px] h-[540px] mx-auto bg-gradient-to-br from-cyan-600 to-purple-800 rounded-[2rem] p-6 relative overflow-hidden shadow-2xl flex flex-col items-center justify-between border-4 border-white/10">
+               {/* background pattern elements */}
+               <div className="absolute top-[-50px] right-[-50px] w-48 h-48 bg-white/10 rounded-full blur-2xl"></div>
+               <div className="absolute bottom-[-50px] left-[-50px] w-48 h-48 bg-black/20 rounded-full blur-2xl"></div>
+               
+               <div className="text-center relative z-10 w-full mt-4">
+                 <div className="w-16 h-16 bg-white rounded-2xl flex items-center justify-center mx-auto mb-3 shadow-[0_10px_20px_rgba(0,0,0,0.3)]">
+                   <span className="font-bold text-slate-900 text-3xl">A.</span>
+                 </div>
+                 <h2 className="text-white font-black tracking-widest text-lg drop-shadow-md">AXAXYZ UNIVERSITY</h2>
+                 <p className="text-cyan-200 text-[10px] tracking-[0.2em] font-bold uppercase mt-1 opacity-90">Kartu Tanda Mahasiswa</p>
+               </div>
+
+               <div className="bg-white p-3.5 rounded-2xl relative z-10 shadow-[0_10px_30px_rgba(0,0,0,0.5)]">
+                  {/* API Generate Real QR Code from NIM */}
+                  <img src={`https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${selectedStudentForKTM.nim}&margin=0`} alt="QR Code" className="w-40 h-40" />
+               </div>
+
+               <div className="text-center relative z-10 w-full bg-black/40 p-5 rounded-2xl backdrop-blur-md border border-white/10 mb-2">
+                 <h1 className="text-xl font-bold text-white uppercase leading-tight mb-1">{selectedStudentForKTM.name}</h1>
+                 <div className="h-px w-12 bg-cyan-500 mx-auto my-2"></div>
+                 <p className="text-cyan-300 font-mono text-xl tracking-[0.1em] font-bold">{selectedStudentForKTM.nim}</p>
+               </div>
+            </div>
+
+            <button onClick={() => window.print()} className="w-full mt-8 py-3.5 bg-white hover:bg-slate-200 text-slate-900 font-bold rounded-xl flex items-center justify-center gap-2 transition-colors">
+              <Printer className="w-5 h-5" /> Cetak (Print) Sekarang
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
@@ -924,8 +1058,8 @@ const AdminLayout: React.FC<{ children: React.ReactNode, activeRoute: string, se
   ];
 
   return (
-    <div className="min-h-screen bg-slate-950 flex text-slate-200 font-sans">
-      <aside className="w-72 bg-slate-900/50 border-r border-white/10 flex flex-col backdrop-blur-xl">
+    <div className="min-h-screen bg-slate-950 flex text-slate-200 font-sans w-full">
+      <aside className="w-72 bg-slate-900/50 border-r border-white/10 flex flex-col backdrop-blur-xl shrink-0">
         <div className="p-6 border-b border-white/10 flex items-center gap-3">
           <div className="w-10 h-10 bg-gradient-to-br from-cyan-400 to-purple-600 rounded-xl flex items-center justify-center shadow-lg"><span className="font-bold text-white text-xl tracking-tighter">A.</span></div>
           <div><h1 className="font-bold text-xl tracking-widest text-transparent bg-clip-text bg-gradient-to-r from-white to-slate-400">AXAXYZ</h1><p className="text-[10px] uppercase tracking-widest text-cyan-500 font-bold">Admin Portal</p></div>
@@ -941,7 +1075,7 @@ const AdminLayout: React.FC<{ children: React.ReactNode, activeRoute: string, se
           <button onClick={handleLogout} className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-rose-400 hover:bg-rose-500/10 transition-colors text-sm font-medium"><LogOut className="w-5 h-5" /> Keluar</button>
         </div>
       </aside>
-      <main className="flex-1 relative overflow-y-auto">
+      <main className="flex-1 relative overflow-y-auto w-full">
         <div className="absolute top-[-20%] right-[-10%] w-[50%] h-[50%] bg-cyan-600/10 rounded-full blur-[150px] pointer-events-none"></div>
         <div className="absolute bottom-[-20%] left-[-10%] w-[50%] h-[50%] bg-purple-600/10 rounded-full blur-[150px] pointer-events-none"></div>
         <div className="p-8 max-w-7xl mx-auto relative z-10 min-h-full">{children}</div>
@@ -964,7 +1098,7 @@ export default function App() {
 
   return (
     <AppProvider>
-      <div className="fixed bottom-4 right-4 z-50 flex gap-2 bg-slate-900/80 backdrop-blur-md p-2 rounded-xl border border-white/10 shadow-2xl">
+      <div className="fixed bottom-4 right-4 z-[999] flex gap-2 bg-slate-900/80 backdrop-blur-md p-2 rounded-xl border border-white/10 shadow-2xl">
         <button onClick={() => setRoute('student')} className={cn("px-4 py-2 rounded-lg text-xs font-bold transition-colors", route === 'student' ? "bg-cyan-500 text-white" : "bg-white/10 text-slate-300 hover:bg-white/20")}>Mode Mahasiswa</button>
         <button onClick={() => setRoute(localStorage.getItem('axaxyz_admin_auth') === 'true' ? 'admin-dashboard' : 'admin-login')} className={cn("px-4 py-2 rounded-lg text-xs font-bold transition-colors", route.startsWith('admin') ? "bg-purple-500 text-white" : "bg-white/10 text-slate-300 hover:bg-white/20")}>Mode Admin</button>
       </div>
