@@ -580,8 +580,8 @@ const AdminLogin: React.FC<{ onLogin: () => void }> = ({ onLogin }) => {
     e.preventDefault();
     
     // KODE KEAMANAN KETAT (Menghapus hardcode password)
-    const ADMIN_USER = process.env.NEXT_PUBLIC_ADMIN_USER;
-    const ADMIN_PASS = process.env.NEXT_PUBLIC_ADMIN_PASS;
+    const ADMIN_USER = process.env.ADMIN_USER;
+    const ADMIN_PASS = process.env.ADMIN_PASS;
 
     if (!ADMIN_USER || !ADMIN_PASS) {
       setErr('Sistem keamanan belum dikonfigurasi. Harap atur NEXT_PUBLIC_ADMIN_USER dan NEXT_PUBLIC_ADMIN_PASS di Vercel Settings (Environment Variables).');
