@@ -9,18 +9,11 @@ import {
 } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 
-// PENGGUNAAN PACKAGE BARU: clsx & tailwind-merge & react-webcam
-import { clsx, type ClassValue } from 'clsx';
-import { twMerge } from 'tailwind-merge';
-import { format } from 'date-fns'; 
-
 // ==========================================
 // UTILS & HELPER FUNCTIONS
 // ==========================================
 
-const cn = (...inputs: ClassValue[]) => {
-  return twMerge(clsx(inputs));
-};
+const cn = (...classes: (string | undefined | null | false)[]) => classes.filter(Boolean).join(' ');
 
 const calculateDistance = (lat1: number, lon1: number, lat2: number, lon2: number) => {
   const R = 6371e3; // Earth radius in meters
@@ -173,7 +166,7 @@ const TimeCheck: React.FC<{ onComplete: (data: { sessionName: string; status: 'H
       </div>
       <div className="text-center space-y-2">
         <h2 className="text-4xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-cyan-400 to-purple-400">
-          {format(currentTime, 'HH.mm.ss')}
+          {currentTime.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', second:'2-digit' })}
         </h2>
         <p className="text-slate-400">{currentTime.toLocaleDateString('id-ID', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</p>
       </div>
@@ -183,7 +176,7 @@ const TimeCheck: React.FC<{ onComplete: (data: { sessionName: string; status: 'H
           <div className="space-y-6">
             <div className="flex items-center justify-between p-4 bg-slate-900/50 border border-white/5 rounded-xl">
               <div>
-                <p className="text-white font-semibold">Sesi Aktif: {activeSession.session.name}</p>
+                <p className="text-white font-semibold">Sesi: {activeSession.session.name}</p>
                 <p className="text-sm text-slate-400">{activeSession.session.startTime} - {activeSession.session.endTime}</p>
                 <p className="text-xs text-slate-500 mt-1">
                   Batas Tepat Waktu: {activeSession.session.startTime.split(':')[0]}:{String(parseInt(activeSession.session.startTime.split(':')[1]) + activeSession.session.toleranceMinutes).padStart(2, '0')}
@@ -235,7 +228,7 @@ const LocationCheck: React.FC<{ onComplete: (loc: {lat: number, lng: number}) =>
           setErrorMsg(`Anda berada di luar radius area kampus.`);
         }
       },
-      (error) => { setStatus('error'); setErrorMsg('Gagal mendapatkan lokasi. Pastikan GPS aktif dan diizinkan.'); },
+      (error) => { setStatus('error'); setErrorMsg('Gagal mendapatkan lokasi. Pastikan GPS aktif.'); },
       { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
     );
   }, [onComplete, geofence]);
@@ -300,8 +293,9 @@ const QRScanner: React.FC<{ onComplete: (data: {nim: string, name: string, devic
   const [passInput, setPassInput] = useState('');
   const [error, setError] = useState('');
   const [isScanning, setIsScanning] = useState(false);
+  const qrScannerRef = useRef<any>(null);
   
-  const qrScannerInstanceRef = useRef<any>(null);
+  const qrLibraryLoaded = useHtml5QrCode();
 
   const handleVerify = (scannedNim?: string) => {
     setError('');
@@ -324,7 +318,7 @@ const QRScanner: React.FC<{ onComplete: (data: {nim: string, name: string, devic
       }
       studentName = foundStudent.name;
     } else {
-      studentName = 'Mahasiswa Mode Bypass'; 
+      studentName = 'Mahasiswa Mode Bypass'; // Legacy bypass if database empty
     }
 
     // Anti-Fraud: Device Fingerprinting check
@@ -336,7 +330,7 @@ const QRScanner: React.FC<{ onComplete: (data: {nim: string, name: string, devic
       localStorage.setItem('axaxyz_device_id', deviceId);
     }
     if (!deviceOwner) {
-      localStorage.setItem('axaxyz_device_owner', targetNim); 
+      localStorage.setItem('axaxyz_device_owner', targetNim); // Register device
     } else if (deviceOwner !== targetNim) {
       setError('⚠️ Fraud Alert: Perangkat ini sudah terdaftar untuk NIM lain. Gunakan perangkat Anda sendiri.');
       return;
@@ -346,47 +340,42 @@ const QRScanner: React.FC<{ onComplete: (data: {nim: string, name: string, devic
   };
 
   const startScanner = async () => {
+    if (!qrLibraryLoaded) { setError('Library Scanner belum siap, harap tunggu...'); return; }
     setIsScanning(true);
     setError('');
     
-    // Dynamic import library agar tidak error SSR di Next.js
-    try {
-      const { Html5Qrcode } = await import('html5-qrcode');
-      
-      setTimeout(() => {
-        try {
-          const html5QrCode = new Html5Qrcode("qr-reader-box");
-          qrScannerInstanceRef.current = html5QrCode;
-          
-          html5QrCode.start(
-            { facingMode: "environment" },
-            { fps: 10, qrbox: { width: 250, height: 250 } },
-            (decodedText: string) => {
-              setNimInput(decodedText);
-              html5QrCode.stop().then(() => {
-                setIsScanning(false);
-                handleVerify(decodedText);
-              });
-            },
-            () => {} 
-          ).catch((err: any) => {
-             setError('Gagal mengakses kamera. Gunakan input manual atau periksa izin browser.');
-             setIsScanning(false);
-          });
-        } catch (err) {
-          setError('Terjadi kesalahan saat memulai sistem kamera.');
-          setIsScanning(false);
-        }
-      }, 100);
-    } catch (error) {
-      setError('Library QR Code gagal dimuat. Pastikan koneksi internet stabil.');
-      setIsScanning(false);
-    }
+    setTimeout(() => {
+      try {
+        const Html5Qrcode = (window as any).Html5Qrcode;
+        const html5QrCode = new Html5Qrcode("qr-reader-box");
+        qrScannerRef.current = html5QrCode;
+        
+        html5QrCode.start(
+          { facingMode: "environment" },
+          { fps: 10, qrbox: { width: 250, height: 250 } },
+          (decodedText: string) => {
+            // Success Callback
+            setNimInput(decodedText);
+            html5QrCode.stop().then(() => {
+              setIsScanning(false);
+              handleVerify(decodedText); // Auto verify on successful scan
+            });
+          },
+          () => {} // Error Callback (ignored during scanning stream)
+        ).catch((err: any) => {
+           setError('Gagal mengakses kamera. Gunakan input manual atau periksa izin browser.');
+           setIsScanning(false);
+        });
+      } catch (err) {
+        setError('Terjadi kesalahan sistem kamera.');
+        setIsScanning(false);
+      }
+    }, 100);
   };
 
   const stopScanner = () => {
-    if (qrScannerInstanceRef.current) {
-      qrScannerInstanceRef.current.stop().catch(() => {});
+    if (qrScannerRef.current) {
+      qrScannerRef.current.stop().catch(() => {});
     }
     setIsScanning(false);
   };
@@ -620,19 +609,11 @@ const AdminLogin: React.FC<{ onLogin: () => void }> = ({ onLogin }) => {
   const [pass, setPass] = useState('');
   const [err, setErr] = useState('');
 
+  const ADMIN_USER = process.env.NEXT_PUBLIC_ADMIN_USER || 'admin';
+  const ADMIN_PASS = process.env.NEXT_PUBLIC_ADMIN_PASS || 'admin123';
+
   const handleLogin = (e: React.FormEvent) => {
     e.preventDefault();
-    
-    // STRICT SECURITY: Menghapus fallback 'admin123'. 
-    // Wajib ada konfigurasi dari Environment Variables Vercel.
-    const ADMIN_USER = process.env.NEXT_PUBLIC_ADMIN_USER;
-    const ADMIN_PASS = process.env.NEXT_PUBLIC_ADMIN_PASS;
-
-    if (!ADMIN_USER || !ADMIN_PASS) {
-      setErr('Sistem keamanan belum dikonfigurasi. Harap atur NEXT_PUBLIC_ADMIN_USER dan NEXT_PUBLIC_ADMIN_PASS di Vercel Dashboard.');
-      return;
-    }
-
     if (user === ADMIN_USER && pass === ADMIN_PASS) {
       localStorage.setItem('axaxyz_admin_auth', 'true');
       onLogin();
@@ -862,6 +843,7 @@ const AdminStudents: React.FC = () => {
             
             {/* ID Card Design to Print */}
             <div id="ktm-print-area" className="w-[340px] h-[540px] mx-auto bg-gradient-to-br from-cyan-600 to-purple-800 rounded-[2rem] p-6 relative overflow-hidden shadow-2xl flex flex-col items-center justify-between border-4 border-white/10">
+               {/* background pattern elements */}
                <div className="absolute top-[-50px] right-[-50px] w-48 h-48 bg-white/10 rounded-full blur-2xl"></div>
                <div className="absolute bottom-[-50px] left-[-50px] w-48 h-48 bg-black/20 rounded-full blur-2xl"></div>
                
@@ -874,6 +856,7 @@ const AdminStudents: React.FC = () => {
                </div>
 
                <div className="bg-white p-3.5 rounded-2xl relative z-10 shadow-[0_10px_30px_rgba(0,0,0,0.5)]">
+                  {/* API Generate Real QR Code from NIM */}
                   <img src={`https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${selectedStudentForKTM.nim}&margin=0`} alt="QR Code" className="w-40 h-40" />
                </div>
 
