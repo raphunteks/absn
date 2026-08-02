@@ -1,0 +1,9 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Memperbaiki tinggi agar full screen */
+html, body {
+  height: 100%;
+  margin: 0;
+}
