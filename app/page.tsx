@@ -14,7 +14,8 @@ import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 import { format } from 'date-fns';
 
-import { SpeedInsights } from "@vercel/speed-insights/next";
+// PENTING: Hapus tanda komentar (//) pada baris di bawah ini di VSCode Anda saat akan di-deploy ke Vercel
+// import { SpeedInsights } from "@vercel/speed-insights/next";
 
 // ==========================================
 // UPSTASH REDIS CLOUD CLIENT (REST API POST)
@@ -1438,8 +1439,8 @@ export default function App() {
         </AdminLayout>
       )}
 
-      {/* VERCEL SPEED INSIGHTS UPGRADE: Metrik Kecepatan akan langsung terkirim secara Real-Time */}
-      <SpeedInsights />
+      {/* PENTING: Hapus kurawal dan komentar pada baris di bawah ini di VSCode Anda */}
+      {/* <SpeedInsights /> */}
     </AppProvider>
   );
 }
