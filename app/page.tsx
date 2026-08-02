@@ -37,9 +37,17 @@ class Redis {
     if (!this.url || !this.token) return null;
     try {
       const res = await fetch(`${this.url}/get/${key}`, { headers: { Authorization: `Bearer ${this.token}` }, cache: 'no-store' });
+      if (!res.ok) throw new Error('Fetch failed');
       const data = await res.json();
-      return data.result ? (typeof data.result === 'string' ? JSON.parse(data.result) : data.result) : null;
+      if (data.error) throw new Error(data.error);
+      if (!data.result) return null;
+      try {
+        return typeof data.result === 'string' ? JSON.parse(data.result) : data.result;
+      } catch (e) {
+        return data.result; 
+      }
     } catch (e) { 
+      console.error(`Redis GET Error [${key}]:`, e);
       return null; 
     }
   }
@@ -48,8 +56,18 @@ class Redis {
     if (!this.url || !this.token) return;
     try {
       const strVal = typeof value === 'string' ? value : JSON.stringify(value);
-      await fetch(`${this.url}/set/${key}`, { method: 'POST', headers: { Authorization: `Bearer ${this.token}`, 'Content-Type': 'application/json' }, body: strVal });
-    } catch (e) {}
+      const res = await fetch(`${this.url}/set/${key}`, { 
+        method: 'POST', 
+        headers: { Authorization: `Bearer ${this.token}`, 'Content-Type': 'application/json' }, 
+        body: strVal 
+      });
+      const data = await res.json();
+      if (data.error) throw new Error(data.error);
+      return data;
+    } catch (e) {
+      console.error(`Redis SET Error [${key}]:`, e);
+      throw e;
+    }
   }
 }
 
@@ -90,22 +108,17 @@ const exportToCSV = (logs: Log[]) => {
 
 // ==========================================
 // UPSTASH REDIS / VERCEL KV SDK INTEGRATION
-// Super Big Upgrade: Using Official @upstash/redis SDK
 // ==========================================
 const initRedis = () => {
   try {
-    // Automatically reads from process.env if available directly
     if (typeof process !== 'undefined' && process.env && process.env.UPSTASH_REDIS_REST_URL) {
        return Redis.fromEnv();
     }
-    
-    // Comprehensive fallback for Next.js Client Components (NEXT_PUBLIC_ vars)
     return new Redis({
       url: (typeof process !== 'undefined' ? (process.env.NEXT_PUBLIC_KV_REST_API_URL || process.env.NEXT_PUBLIC_UPSTASH_REDIS_REST_URL) : '') || '',
       token: (typeof process !== 'undefined' ? (process.env.NEXT_PUBLIC_KV_REST_API_TOKEN || process.env.NEXT_PUBLIC_UPSTASH_REDIS_REST_TOKEN) : '') || '',
     });
   } catch (error) {
-    console.warn("Redis initialization warning:", error);
     return null;
   }
 };
@@ -120,20 +133,14 @@ const CloudStore = {
     if (!this.isAvailable()) return null;
     try {
       const data = await redis!.get(key);
-      // @upstash/redis automatically parses JSON objects, fallback for legacy string data
       return typeof data === 'string' ? JSON.parse(data) : data;
     } catch (e) {
-      console.error(`Upstash Redis fetch error [${key}]:`, e);
       return null;
     }
   },
   async set(key: string, value: any) {
-    if (!this.isAvailable()) return;
-    try {
-      await redis!.set(key, value);
-    } catch (e) {
-      console.error(`Upstash Redis save error [${key}]:`, e);
-    }
+    if (!this.isAvailable()) throw new Error("Cloud Store Unavailable");
+    await redis!.set(key, value);
   }
 };
 
@@ -142,12 +149,15 @@ interface Log { id: string; nim: string; name: string; timestamp: string; sessio
 interface Student { id: string; nim: string; name: string; password?: string; }
 interface Geofence { lat: number; lng: number; radius: number; }
 
+type SyncStatus = 'offline' | 'synced' | 'syncing' | 'error';
+
 interface AppContextType {
   sessions: Session[];
   logs: Log[];
   students: Student[];
   geofence: Geofence;
   isCloudSync: boolean;
+  syncStatus: SyncStatus;
   addLog: (log: Omit<Log, 'id' | 'timestamp'>) => void;
   updateSession: (id: string, updates: Partial<Session>) => void;
   addSession: (session: Omit<Session, 'id'>) => void;
@@ -171,6 +181,8 @@ const AppContext = createContext<AppContextType | null>(null);
 const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [isAppLoading, setIsAppLoading] = useState(true);
   const [isCloudSync, setIsCloudSync] = useState(false);
+  const [syncStatus, setSyncStatus] = useState<SyncStatus>('offline');
+  
   const [sessions, setSessions] = useState<Session[]>([]);
   const [logs, setLogs] = useState<Log[]>([]);
   const [students, setStudents] = useState<Student[]>([]);
@@ -178,7 +190,9 @@ const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
 
   useEffect(() => {
     const initData = async () => {
-      setIsCloudSync(CloudStore.isAvailable());
+      const cloudAvailable = CloudStore.isAvailable();
+      setIsCloudSync(cloudAvailable);
+      setSyncStatus(cloudAvailable ? 'synced' : 'offline');
 
       let s = await CloudStore.get('axaxyz_sessions');
       let l = await CloudStore.get('axaxyz_logs');
@@ -200,10 +214,42 @@ const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
     initData();
   }, []);
 
-  const saveSessions = (d: Session[]) => { setSessions(d); localStorage.setItem('axaxyz_sessions', JSON.stringify(d)); CloudStore.set('axaxyz_sessions', JSON.stringify(d)); };
-  const saveLogs = (d: Log[]) => { setLogs(d); localStorage.setItem('axaxyz_logs', JSON.stringify(d)); CloudStore.set('axaxyz_logs', JSON.stringify(d)); };
-  const saveStudents = (d: Student[]) => { setStudents(d); localStorage.setItem('axaxyz_students', JSON.stringify(d)); CloudStore.set('axaxyz_students', JSON.stringify(d)); };
-  const saveGeofence = (d: Geofence) => { setGeofence(d); localStorage.setItem('axaxyz_geofence', JSON.stringify(d)); CloudStore.set('axaxyz_geofence', JSON.stringify(d)); };
+  // Global Sync Wrapper
+  const syncToCloud = async (key: string, data: any) => {
+    if (!CloudStore.isAvailable()) return;
+    setSyncStatus('syncing');
+    try {
+      await CloudStore.set(key, JSON.stringify(data));
+      setSyncStatus('synced');
+    } catch (e) {
+      console.error(`Sync Engine Error [${key}]:`, e);
+      setSyncStatus('error');
+    }
+  };
+
+  const saveSessions = (d: Session[]) => { 
+    setSessions(d); 
+    localStorage.setItem('axaxyz_sessions', JSON.stringify(d)); 
+    syncToCloud('axaxyz_sessions', d); 
+  };
+  
+  const saveLogs = (d: Log[]) => { 
+    setLogs(d); 
+    localStorage.setItem('axaxyz_logs', JSON.stringify(d)); 
+    syncToCloud('axaxyz_logs', d); 
+  };
+  
+  const saveStudents = (d: Student[]) => { 
+    setStudents(d); 
+    localStorage.setItem('axaxyz_students', JSON.stringify(d)); 
+    syncToCloud('axaxyz_students', d); 
+  };
+  
+  const saveGeofence = (d: Geofence) => { 
+    setGeofence(d); 
+    localStorage.setItem('axaxyz_geofence', JSON.stringify(d)); 
+    syncToCloud('axaxyz_geofence', d); 
+  };
 
   const addLog = (logData: Omit<Log, 'id' | 'timestamp'>) => saveLogs([{ ...logData, id: Math.random().toString(36).substr(2, 9), timestamp: new Date().toISOString() }, ...logs]);
   const updateSession = (id: string, updates: Partial<Session>) => saveSessions(sessions.map(s => s.id === id ? { ...s, ...updates } : s));
@@ -235,7 +281,10 @@ const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   }
 
   return (
-    <AppContext.Provider value={{ isCloudSync, sessions, logs, students, geofence, addLog, updateSession, addSession, deleteSession, addStudent, bulkAddStudents, deleteStudent, updateGeofence }}>
+    <AppContext.Provider value={{ 
+      isCloudSync, syncStatus, sessions, logs, students, geofence, 
+      addLog, updateSession, addSession, deleteSession, addStudent, bulkAddStudents, deleteStudent, updateGeofence 
+    }}>
       {children}
     </AppContext.Provider>
   );
@@ -727,7 +776,6 @@ const AdminLogin: React.FC<{ onLogin: () => void }> = ({ onLogin }) => {
     setIsLoading(true); setErr('');
     await new Promise(resolve => setTimeout(resolve, 800));
 
-    // Dynamic ENV resolving (handles process safety securely)
     let ADMIN_USER = 'admin';
     let ADMIN_PASS = 'admin123';
 
@@ -1063,7 +1111,6 @@ const AdminGeofence: React.FC = () => {
   const handleSave = (e: React.FormEvent) => {
     e.preventDefault();
     updateGeofence({ lat: parseFloat(lat), lng: parseFloat(lng), radius: parseInt(radius) });
-    alert('Pengaturan lokasi berhasil disimpan dan disinkronisasikan ke Server.');
   };
 
   const getMyLocation = () => {
@@ -1224,6 +1271,7 @@ const AdminReports: React.FC = () => {
 };
 
 const AdminLayout: React.FC<{ children: React.ReactNode, activeRoute: string, setRoute: (r:string)=>void }> = ({ children, activeRoute, setRoute }) => {
+  const { syncStatus } = useAppContext();
   const handleLogout = () => { localStorage.removeItem('axaxyz_admin_auth'); setRoute('admin-login'); };
 
   const navItems = [
@@ -1252,10 +1300,20 @@ const AdminLayout: React.FC<{ children: React.ReactNode, activeRoute: string, se
           <button onClick={handleLogout} className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-rose-400 hover:bg-rose-500/10 transition-colors text-sm font-medium"><LogOut className="w-5 h-5" /> Keluar</button>
         </div>
       </aside>
+
       <main className="flex-1 relative overflow-y-auto w-full">
+        <header className="absolute top-0 right-0 p-6 flex justify-end z-50 w-full pointer-events-none">
+           <div className="pointer-events-auto flex items-center gap-2 px-4 py-2 bg-slate-900/80 backdrop-blur-md border border-white/10 rounded-full text-xs font-bold shadow-xl transition-all">
+               {syncStatus === 'syncing' && <><RefreshCcw className="w-3.5 h-3.5 animate-spin text-cyan-400"/> <span className="text-cyan-400">Syncing to Cloud...</span></>}
+               {syncStatus === 'synced' && <><CheckCircle2 className="w-3.5 h-3.5 text-emerald-400"/> <span className="text-emerald-400">Database Synced</span></>}
+               {syncStatus === 'error' && <><CloudOff className="w-3.5 h-3.5 text-rose-400"/> <span className="text-rose-400">Sync Error</span></>}
+               {syncStatus === 'offline' && <><CloudOff className="w-3.5 h-3.5 text-slate-500"/> <span className="text-slate-500">Local Mode</span></>}
+           </div>
+        </header>
+
         <div className="absolute top-[-20%] right-[-10%] w-[50%] h-[50%] bg-cyan-600/10 rounded-full blur-[150px] pointer-events-none"></div>
         <div className="absolute bottom-[-20%] left-[-10%] w-[50%] h-[50%] bg-purple-600/10 rounded-full blur-[150px] pointer-events-none"></div>
-        <div className="p-8 max-w-7xl mx-auto relative z-10 min-h-full">{children}</div>
+        <div className="p-8 max-w-7xl mx-auto relative z-10 min-h-full mt-10">{children}</div>
       </main>
     </div>
   );
