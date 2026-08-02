@@ -6,7 +6,7 @@ import {
   BarChart3, Settings, FileText, LogOut, Users, Download, Plus, Trash2,
   RefreshCcw, ChevronRight, Fingerprint, Map, Activity, Key, Upload, Database, Navigation,
   Printer, X, CreditCard, Eye, EyeOff, Lock, ShieldCheck, Loader2, User, Cloud, CloudOff,
-  Server
+  Server, ServerCrash, DatabaseZap
 } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 
@@ -14,6 +14,10 @@ import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 import { format } from 'date-fns';
 
+// ==========================================
+// UPSTASH REDIS CLOUD CLIENT (REST API POST)
+// Diperbarui untuk menggunakan Pipeline Method yang lebih aman untuk JSON
+// ==========================================
 class Redis {
   url: string;
   token: string;
@@ -21,14 +25,17 @@ class Redis {
   constructor(config: { url: string; token: string }) {
     this.url = config.url || '';
     this.token = config.token || '';
+    // Hapus trailing slash jika ada
+    if (this.url.endsWith('/')) this.url = this.url.slice(0, -1);
   }
   
   static fromEnv() {
     let url = '';
     let token = '';
+    // Pengecekan cerdas untuk environment variable Next.js Client Side
     if (typeof process !== 'undefined' && process.env) {
-      url = process.env.UPSTASH_REDIS_REST_URL || process.env.NEXT_PUBLIC_KV_REST_API_URL || process.env.NEXT_PUBLIC_UPSTASH_REDIS_REST_URL || '';
-      token = process.env.UPSTASH_REDIS_REST_TOKEN || process.env.NEXT_PUBLIC_KV_REST_API_TOKEN || process.env.NEXT_PUBLIC_UPSTASH_REDIS_REST_TOKEN || '';
+      url = process.env.NEXT_PUBLIC_UPSTASH_REDIS_REST_URL || process.env.NEXT_PUBLIC_KV_REST_API_URL || '';
+      token = process.env.NEXT_PUBLIC_UPSTASH_REDIS_REST_TOKEN || process.env.NEXT_PUBLIC_KV_REST_API_TOKEN || '';
     }
     return new Redis({ url, token });
   }
@@ -36,11 +43,16 @@ class Redis {
   async get(key: string) {
     if (!this.url || !this.token) return null;
     try {
-      const res = await fetch(`${this.url}/get/${key}`, { headers: { Authorization: `Bearer ${this.token}` }, cache: 'no-store' });
+      const res = await fetch(this.url, { 
+        method: 'POST',
+        headers: { Authorization: `Bearer ${this.token}`, 'Content-Type': 'application/json' }, 
+        body: JSON.stringify(["GET", key]), // Metode REST Array yang direkomendasikan Upstash
+        cache: 'no-store' 
+      });
       if (!res.ok) throw new Error('Fetch failed');
       const data = await res.json();
       if (data.error) throw new Error(data.error);
-      if (!data.result) return null;
+      if (data.result === null || data.result === undefined) return null;
       try {
         return typeof data.result === 'string' ? JSON.parse(data.result) : data.result;
       } catch (e) {
@@ -56,10 +68,10 @@ class Redis {
     if (!this.url || !this.token) return;
     try {
       const strVal = typeof value === 'string' ? value : JSON.stringify(value);
-      const res = await fetch(`${this.url}/set/${key}`, { 
+      const res = await fetch(this.url, { 
         method: 'POST', 
         headers: { Authorization: `Bearer ${this.token}`, 'Content-Type': 'application/json' }, 
-        body: strVal 
+        body: JSON.stringify(["SET", key, strVal]) // Metode REST Array yang direkomendasikan Upstash
       });
       const data = await res.json();
       if (data.error) throw new Error(data.error);
@@ -106,33 +118,19 @@ const exportToCSV = (logs: Log[]) => {
   document.body.removeChild(link);
 };
 
-// ==========================================
-// UPSTASH REDIS / VERCEL KV SDK INTEGRATION
-// ==========================================
-const initRedis = () => {
-  try {
-    if (typeof process !== 'undefined' && process.env && process.env.UPSTASH_REDIS_REST_URL) {
-       return Redis.fromEnv();
-    }
-    return new Redis({
-      url: (typeof process !== 'undefined' ? (process.env.NEXT_PUBLIC_KV_REST_API_URL || process.env.NEXT_PUBLIC_UPSTASH_REDIS_REST_URL) : '') || '',
-      token: (typeof process !== 'undefined' ? (process.env.NEXT_PUBLIC_KV_REST_API_TOKEN || process.env.NEXT_PUBLIC_UPSTASH_REDIS_REST_TOKEN) : '') || '',
-    });
-  } catch (error) {
-    return null;
-  }
-};
-
-const redis = initRedis();
+const redis = Redis.fromEnv();
 
 const CloudStore = {
   isAvailable: () => { 
     return redis !== null && redis.url !== '' && redis.token !== ''; 
   },
+  getCredentials: () => {
+    return { url: redis.url, token: redis.token };
+  },
   async get(key: string) {
     if (!this.isAvailable()) return null;
     try {
-      const data = await redis!.get(key);
+      const data = await redis.get(key);
       return typeof data === 'string' ? JSON.parse(data) : data;
     } catch (e) {
       return null;
@@ -140,7 +138,7 @@ const CloudStore = {
   },
   async set(key: string, value: any) {
     if (!this.isAvailable()) throw new Error("Cloud Store Unavailable");
-    await redis!.set(key, value);
+    await redis.set(key, value);
   }
 };
 
@@ -166,6 +164,7 @@ interface AppContextType {
   bulkAddStudents: (newStudents: Omit<Student, 'id'>[]) => void;
   deleteStudent: (id: string) => void;
   updateGeofence: (data: Geofence) => void;
+  forceManualSync: () => Promise<void>;
 }
 
 const defaultSessions: Session[] = [
@@ -194,10 +193,14 @@ const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
       setIsCloudSync(cloudAvailable);
       setSyncStatus(cloudAvailable ? 'synced' : 'offline');
 
-      let s = await CloudStore.get('axaxyz_sessions');
-      let l = await CloudStore.get('axaxyz_logs');
-      let st = await CloudStore.get('axaxyz_students');
-      let gf = await CloudStore.get('axaxyz_geofence');
+      let s = null, l = null, st = null, gf = null;
+
+      if (cloudAvailable) {
+        s = await CloudStore.get('axaxyz_sessions');
+        l = await CloudStore.get('axaxyz_logs');
+        st = await CloudStore.get('axaxyz_students');
+        gf = await CloudStore.get('axaxyz_geofence');
+      }
 
       if (!s) s = JSON.parse(localStorage.getItem('axaxyz_sessions') || 'null');
       if (!l) l = JSON.parse(localStorage.getItem('axaxyz_logs') || 'null');
@@ -214,7 +217,7 @@ const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
     initData();
   }, []);
 
-  // Global Sync Wrapper
+  // Global Sync Wrapper with real-time status update
   const syncToCloud = async (key: string, data: any) => {
     if (!CloudStore.isAvailable()) return;
     setSyncStatus('syncing');
@@ -224,6 +227,27 @@ const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
     } catch (e) {
       console.error(`Sync Engine Error [${key}]:`, e);
       setSyncStatus('error');
+    }
+  };
+
+  // Dedicated function for manual force sync (used in dashboard diagnostic)
+  const forceManualSync = async () => {
+    if (!CloudStore.isAvailable()) {
+      alert("❌ Sinkronisasi Gagal: Konfigurasi NEXT_PUBLIC_... Upstash tidak terbaca di Environment Variables.");
+      return;
+    }
+    setSyncStatus('syncing');
+    try {
+      await CloudStore.set('axaxyz_sessions', JSON.stringify(sessions));
+      await CloudStore.set('axaxyz_logs', JSON.stringify(logs));
+      await CloudStore.set('axaxyz_students', JSON.stringify(students));
+      await CloudStore.set('axaxyz_geofence', JSON.stringify(geofence));
+      setSyncStatus('synced');
+      alert("✅ Sinkronisasi Force Sync ke Upstash Redis berhasil!");
+    } catch (e: any) {
+      console.error(e);
+      setSyncStatus('error');
+      alert("❌ Error saat sinkronisasi: " + e.message);
     }
   };
 
@@ -274,8 +298,8 @@ const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
           </div>
         </div>
         <Loader2 className="w-8 h-8 text-cyan-400 animate-spin mb-4" />
-        <h2 className="text-xl font-bold text-white mb-2">Menyinkronkan Server...</h2>
-        <p className="text-slate-400 text-sm text-center max-w-xs">Mengambil konfigurasi waktu dan data mahasiswa terbaru.</p>
+        <h2 className="text-xl font-bold text-white mb-2">Menyinkronkan Database...</h2>
+        <p className="text-slate-400 text-sm text-center max-w-xs">Memverifikasi koneksi cloud Upstash Redis.</p>
       </div>
     );
   }
@@ -283,7 +307,7 @@ const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   return (
     <AppContext.Provider value={{ 
       isCloudSync, syncStatus, sessions, logs, students, geofence, 
-      addLog, updateSession, addSession, deleteSession, addStudent, bulkAddStudents, deleteStudent, updateGeofence 
+      addLog, updateSession, addSession, deleteSession, addStudent, bulkAddStudents, deleteStudent, updateGeofence, forceManualSync 
     }}>
       {children}
     </AppContext.Provider>
@@ -859,7 +883,9 @@ const AdminLogin: React.FC<{ onLogin: () => void }> = ({ onLogin }) => {
 };
 
 const AdminDashboardHome: React.FC = () => {
-  const { logs, isCloudSync } = useAppContext();
+  const { logs, isCloudSync, forceManualSync } = useAppContext();
+  const dbCreds = CloudStore.getCredentials();
+  
   const today = new Date().toISOString().split('T')[0];
   const todayLogs = logs.filter(l => l.timestamp.startsWith(today));
   const total = todayLogs.length;
@@ -890,23 +916,47 @@ const AdminDashboardHome: React.FC = () => {
           </div>
         ))}
         
-        <div className="bg-white/5 border border-white/10 p-5 rounded-2xl flex flex-col items-center justify-center text-center relative overflow-hidden group">
+        <div className="bg-slate-900 border border-white/10 p-5 rounded-2xl flex flex-col items-center justify-center text-center relative overflow-hidden">
            {isCloudSync ? (
              <>
-               <div className="w-10 h-10 rounded-full bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center mb-2 group-hover:scale-110 transition-transform"><Cloud className="w-5 h-5 text-emerald-400" /></div>
-               <h3 className="text-white font-bold text-sm">Upstash Redis Aktif</h3>
-               <p className="text-emerald-400/80 text-[10px] mt-1 leading-tight">Terhubung ke Database Cloud.</p>
+               <div className="w-10 h-10 rounded-full bg-emerald-500/20 border border-emerald-500/30 flex items-center justify-center mb-2"><Cloud className="w-5 h-5 text-emerald-400" /></div>
+               <h3 className="text-white font-bold text-sm">Upstash Redis AKTIF</h3>
+               <p className="text-emerald-400/80 text-[10px] mt-1 leading-tight">Database terhubung sempurna.</p>
              </>
            ) : (
              <>
-               <div className="w-10 h-10 rounded-full bg-rose-500/10 border border-rose-500/20 flex items-center justify-center mb-2"><CloudOff className="w-5 h-5 text-rose-400" /></div>
-               <h3 className="text-white font-bold text-sm">Mode Lokal Saja</h3>
-               <p className="text-rose-400/80 text-[10px] mt-1 leading-tight">Environment Variables tidak ditemukan.</p>
+               <div className="w-10 h-10 rounded-full bg-rose-500/20 border border-rose-500/30 flex items-center justify-center mb-2"><ServerCrash className="w-5 h-5 text-rose-400" /></div>
+               <h3 className="text-white font-bold text-sm">Mode LOKAL Saja</h3>
+               <p className="text-rose-400/80 text-[10px] mt-1 leading-tight">Gagal mendeteksi NEXT_PUBLIC ENV.</p>
              </>
            )}
         </div>
       </div>
       
+      {/* DIAGNOSTIC PANEL FOR TROUBLESHOOTING UPSTASH */}
+      <div className="bg-slate-900 border border-indigo-500/30 p-6 rounded-2xl">
+         <div className="flex items-center gap-3 mb-4">
+            <DatabaseZap className="w-6 h-6 text-indigo-400" />
+            <h3 className="text-lg font-bold text-white">Cloud Database Diagnostic</h3>
+         </div>
+         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+            <div className="bg-black/50 border border-white/5 p-4 rounded-xl">
+               <p className="text-xs text-slate-500 font-bold uppercase mb-1">Detected REST URL (NEXT_PUBLIC_...)</p>
+               <p className="text-sm font-mono text-cyan-400 break-all">{dbCreds.url ? dbCreds.url : <span className="text-rose-500">❌ URL Tidak Terdeteksi di .env</span>}</p>
+            </div>
+            <div className="bg-black/50 border border-white/5 p-4 rounded-xl">
+               <p className="text-xs text-slate-500 font-bold uppercase mb-1">Detected REST TOKEN</p>
+               <p className="text-sm font-mono text-purple-400 break-all">{dbCreds.token ? `${dbCreds.token.substring(0, 10)}••••••••••••••••` : <span className="text-rose-500">❌ Token Tidak Terdeteksi di .env</span>}</p>
+            </div>
+         </div>
+         <div className="flex items-center justify-between bg-indigo-500/10 p-4 rounded-xl border border-indigo-500/20">
+            <p className="text-sm text-indigo-200">Jika Data di Upstash kosong namun URL terdeteksi, tekan tombol Force Sync untuk mengunggah semua data lokal Anda.</p>
+            <button onClick={forceManualSync} className="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white font-bold rounded-lg transition-colors flex gap-2 items-center">
+              <Upload className="w-4 h-4" /> Force Sync
+            </button>
+         </div>
+      </div>
+
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 h-[400px]">
         <div className="bg-white/5 border border-white/10 p-6 rounded-2xl flex flex-col">
           <h3 className="text-lg font-semibold text-white mb-6">Kehadiran per Sesi</h3>
@@ -1111,6 +1161,7 @@ const AdminGeofence: React.FC = () => {
   const handleSave = (e: React.FormEvent) => {
     e.preventDefault();
     updateGeofence({ lat: parseFloat(lat), lng: parseFloat(lng), radius: parseInt(radius) });
+    alert('Pengaturan lokasi berhasil disimpan dan disinkronisasikan ke Server.');
   };
 
   const getMyLocation = () => {
@@ -1303,11 +1354,12 @@ const AdminLayout: React.FC<{ children: React.ReactNode, activeRoute: string, se
 
       <main className="flex-1 relative overflow-y-auto w-full">
         <header className="absolute top-0 right-0 p-6 flex justify-end z-50 w-full pointer-events-none">
+           {/* UI Indikator Status Auto Save Database di Pojok Kanan Atas */}
            <div className="pointer-events-auto flex items-center gap-2 px-4 py-2 bg-slate-900/80 backdrop-blur-md border border-white/10 rounded-full text-xs font-bold shadow-xl transition-all">
                {syncStatus === 'syncing' && <><RefreshCcw className="w-3.5 h-3.5 animate-spin text-cyan-400"/> <span className="text-cyan-400">Syncing to Cloud...</span></>}
                {syncStatus === 'synced' && <><CheckCircle2 className="w-3.5 h-3.5 text-emerald-400"/> <span className="text-emerald-400">Database Synced</span></>}
                {syncStatus === 'error' && <><CloudOff className="w-3.5 h-3.5 text-rose-400"/> <span className="text-rose-400">Sync Error</span></>}
-               {syncStatus === 'offline' && <><CloudOff className="w-3.5 h-3.5 text-slate-500"/> <span className="text-slate-500">Local Mode</span></>}
+               {syncStatus === 'offline' && <><CloudOff className="w-3.5 h-3.5 text-slate-500"/> <span className="text-slate-500">Local Mode Only</span></>}
            </div>
         </header>
 
