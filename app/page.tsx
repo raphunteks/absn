@@ -14,6 +14,8 @@ import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 import { format } from 'date-fns';
 
+import { SpeedInsights } from "@vercel/speed-insights/next";
+
 // ==========================================
 // UPSTASH REDIS CLOUD CLIENT (REST API POST)
 // ==========================================
@@ -1435,6 +1437,9 @@ export default function App() {
           {route === 'admin-reports' && <AdminReports />}
         </AdminLayout>
       )}
+
+      {/* VERCEL SPEED INSIGHTS UPGRADE: Metrik Kecepatan akan langsung terkirim secara Real-Time */}
+      <SpeedInsights />
     </AppProvider>
   );
 }
