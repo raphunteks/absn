@@ -1,3 +1,5 @@
+"use client";
+
 import React, { useState, useEffect, createContext, useContext, useRef, useCallback, useMemo } from 'react';
 import { 
   Camera, MapPin, Clock, QrCode, CheckCircle2, AlertCircle, 
