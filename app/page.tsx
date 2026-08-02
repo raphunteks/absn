@@ -14,7 +14,8 @@ import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 import { format } from 'date-fns';
 
-import { SpeedInsights } from "@vercel/speed-insights/next";
+// HAPUS TANDA KOMENTAR (//) PADA BARIS DI BAWAH INI SAAT DI-DEPLOY KE VERCEL
+// import { SpeedInsights } from "@vercel/speed-insights/next";
 
 // ==========================================
 // UPSTASH REDIS CLOUD CLIENT (REST API POST)
@@ -633,8 +634,8 @@ const SelfieCapture: React.FC<{ onComplete: (base64: string) => void }> = ({ onC
       canvas.height = videoRef.current.videoHeight;
       const ctx = canvas.getContext('2d');
       if (ctx) {
-        // UPGRADE NO-MIRRORING FIX: 
-        // Menyimpan gambar di canvas SECARA NATURAL (apa adanya dari kamera).
+        // UPGRADE NO-MIRRORING: 
+        // Menghapus fungsi flip (ctx.scale & translate) agar foto disimpan natural apa adanya.
         ctx.drawImage(videoRef.current, 0, 0, canvas.width, canvas.height);
         setImage(canvas.toDataURL('image/jpeg', 0.8));
       }
@@ -659,8 +660,7 @@ const SelfieCapture: React.FC<{ onComplete: (base64: string) => void }> = ({ onC
             className="w-full h-full object-cover transform scale-x-[-1]"
           />
         ) : (
-          // FULL FIX: MENGHAPUS 'transform scale-x-[-1]' DARI SINI
-          // Sehingga hasil foto yang ditampilkan (dan diunggah) tidak lagi terbalik / mirrored!
+          // FOTO TERSIMPAN: Tidak lagi menggunakan scale-x-[-1] agar sesuai dengan asli
           <img src={image} alt="Selfie" className="w-full h-full object-cover" />
         )}
         
@@ -1260,7 +1260,6 @@ const AdminReports: React.FC = () => {
   const [search, setSearch] = useState('');
   const [filterSession, setFilterSession] = useState('All');
   
-  // UPGRADE: State untuk modal fullscreen gambar
   const [previewImage, setPreviewImage] = useState<string | null>(null);
 
   const filteredLogs = logs.filter(log => {
@@ -1300,7 +1299,6 @@ const AdminReports: React.FC = () => {
               {filteredLogs.map(log => (
                 <tr key={log.id} className="hover:bg-white/5 transition-colors">
                   <td className="p-4">
-                    {/* UPGRADE FULLSCREEN GAMBAR */}
                     <div onClick={() => setPreviewImage(log.photoBase64)} className="w-12 h-12 rounded-lg overflow-hidden border border-white/10 bg-black relative group cursor-pointer shadow-lg hover:border-cyan-400 transition-colors">
                       <img src={log.photoBase64} alt="Selfie" className="w-full h-full object-cover" />
                       <div className="absolute inset-0 bg-black/60 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
@@ -1315,7 +1313,6 @@ const AdminReports: React.FC = () => {
                      <span className={cn("px-2.5 py-0.5 text-[10px] font-bold rounded-full", log.status === 'Hadir' ? "bg-emerald-500/20 text-emerald-400" : "bg-amber-500/20 text-amber-400")}>{log.status}</span>
                   </td>
                   <td className="p-4">
-                    {/* UPGRADE MAPS LINK & COORDINATES */}
                     <a href={`https://www.google.com/maps?q=${log.location.lat},${log.location.lng}`} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-cyan-500/10 hover:bg-cyan-500/20 text-cyan-400 text-xs font-semibold rounded-lg border border-cyan-500/20 transition-colors shadow-sm">
                       <MapPin className="w-3 h-3" /> Buka G-Maps
                     </a>
@@ -1329,7 +1326,6 @@ const AdminReports: React.FC = () => {
         </div>
       </div>
       
-      {/* MODAL FULLSCREEN PREVIEW IMAGE */}
       {previewImage && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/90 backdrop-blur-sm p-4 animate-in fade-in zoom-in-95 duration-300" onClick={() => setPreviewImage(null)}>
           <div className="relative max-w-2xl max-h-[90vh] w-full flex flex-col items-center justify-center">
@@ -1439,8 +1435,8 @@ export default function App() {
         </AdminLayout>
       )}
 
-      {/* VERCEL SPEED INSIGHTS */}
-      <SpeedInsights />
+      {/* HAPUS TANDA KOMENTAR PADA BARIS DI BAWAH INI SAAT DI-DEPLOY KE VERCEL */}
+      {/* <SpeedInsights /> */}
     </AppProvider>
   );
 }
