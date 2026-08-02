@@ -6,7 +6,7 @@ import {
   BarChart3, Settings, FileText, LogOut, Users, Download, Plus, Trash2,
   RefreshCcw, ChevronRight, Fingerprint, Map, Activity, Key, Upload, Database, Navigation,
   Printer, X, CreditCard, Eye, EyeOff, Lock, ShieldCheck, Loader2, User, Cloud, CloudOff,
-  Server, ServerCrash, DatabaseZap, Maximize
+  Server, ServerCrash, DatabaseZap, Maximize, Menu
 } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 
@@ -14,7 +14,7 @@ import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 import { format } from 'date-fns';
 
-// HAPUS TANDA KOMENTAR (//) PADA BARIS DI BAWAH INI SAAT DI-DEPLOY KE VERCEL
+// PENTING: Hapus tanda komentar di bawah ini saat di-deploy ke Vercel agar Speed Insights berjalan.
 // import { SpeedInsights } from "@vercel/speed-insights/next";
 
 // ==========================================
@@ -146,7 +146,6 @@ const CloudStore = {
 interface Session { id: string; name: string; startTime: string; endTime: string; toleranceMinutes: number; isActive: boolean; }
 interface Log { id: string; nim: string; name: string; timestamp: string; sessionName: string; status: 'Hadir' | 'Terlambat'; location: { lat: number; lng: number }; photoBase64: string; deviceId: string; }
 interface Student { id: string; nim: string; name: string; password?: string; deviceId?: string | null; }
-// UPDATED: Geofence now supports Location Name
 interface Geofence { lat: number; lng: number; radius: number; name?: string; }
 
 type SyncStatus = 'offline' | 'synced' | 'syncing' | 'error';
@@ -278,7 +277,7 @@ const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
       <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center p-4">
         <div className="relative mb-6">
           <div className="absolute inset-0 bg-cyan-500/20 blur-3xl rounded-full"></div>
-          <div className="w-20 h-20 bg-gradient-to-br from-cyan-400 to-purple-600 rounded-3xl flex items-center justify-center shadow-lg animate-pulse relative z-10 overflow-hidden p-3">
+          <div className="w-20 h-20 bg-gradient-to-br from-cyan-400 to-purple-600 rounded-3xl flex items-center justify-center shadow-lg animate-[pulse_2s_ease-in-out_infinite] relative z-10 overflow-hidden p-3">
              <img src="/axalogo.png" alt="AXAXYZ Logo" className="w-full h-full object-contain drop-shadow-md" onError={(e) => { e.currentTarget.style.display = 'none'; e.currentTarget.nextElementSibling?.classList.remove('hidden'); }} />
              <span className="font-bold text-white text-3xl hidden">A.</span>
           </div>
@@ -332,43 +331,45 @@ const TimeCheck: React.FC<{ onComplete: (data: { sessionName: string; status: 'H
   }, [currentTime, sessions]);
 
   return (
-    <div className="flex flex-col items-center justify-center p-8 space-y-8 animate-in fade-in zoom-in duration-500 w-full">
-      <div className="relative">
+    <div className="flex flex-col items-center justify-center p-4 md:p-8 space-y-6 md:space-y-8 animate-in fade-in zoom-in duration-500 w-full">
+      <div className="relative animate-[bounce_3s_ease-in-out_infinite]">
         <div className="absolute inset-0 bg-cyan-500/20 blur-3xl rounded-full"></div>
-        <Clock className="w-24 h-24 text-cyan-400 relative z-10" />
+        <Clock className="w-20 h-20 md:w-24 md:h-24 text-cyan-400 relative z-10 drop-shadow-[0_0_15px_rgba(6,182,212,0.5)]" />
       </div>
       <div className="text-center space-y-2">
-        <h2 className="text-4xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-cyan-400 to-purple-400">
+        <h2 className="text-4xl md:text-5xl font-black bg-clip-text text-transparent bg-gradient-to-r from-cyan-400 to-purple-400 tracking-tight">
           {format(currentTime, 'HH.mm.ss')}
         </h2>
-        <p className="text-slate-400">{currentTime.toLocaleDateString('id-ID', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</p>
+        <p className="text-sm md:text-base text-slate-400 font-medium">{currentTime.toLocaleDateString('id-ID', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</p>
       </div>
 
-      <div className="w-full max-w-md bg-white/5 backdrop-blur-xl border border-white/10 p-6 rounded-2xl shadow-2xl">
+      <div className="w-full max-w-md bg-white/5 backdrop-blur-xl border border-white/10 p-5 md:p-6 rounded-3xl shadow-2xl transition-all duration-300 hover:shadow-cyan-500/10 hover:border-white/20">
         {activeSession ? (
           <div className="space-y-6">
-            <div className="flex items-center justify-between p-4 bg-slate-900/50 border border-white/5 rounded-xl">
+            <div className="flex items-center justify-between p-4 bg-slate-900/60 border border-white/5 rounded-2xl">
               <div>
-                <p className="text-white font-semibold">Sesi Aktif: {activeSession.session.name}</p>
-                <p className="text-sm text-slate-400">{activeSession.session.startTime} - {activeSession.session.endTime}</p>
-                <p className="text-xs text-slate-500 mt-1">
-                  Batas Tepat Waktu: {activeSession.session.startTime.split(':')[0]}:{String(parseInt(activeSession.session.startTime.split(':')[1]) + activeSession.session.toleranceMinutes).padStart(2, '0')}
+                <p className="text-white font-bold text-lg md:text-xl">Sesi: {activeSession.session.name}</p>
+                <p className="text-xs md:text-sm text-slate-400 font-medium mt-0.5">{activeSession.session.startTime} - {activeSession.session.endTime}</p>
+                <p className="text-[10px] md:text-xs text-slate-500 mt-1.5 font-mono">
+                  Batas Waktu: {activeSession.session.startTime.split(':')[0]}:{String(parseInt(activeSession.session.startTime.split(':')[1]) + activeSession.session.toleranceMinutes).padStart(2, '0')}
                 </p>
               </div>
-              <span className={cn("px-3 py-1 text-xs font-bold rounded-full", activeSession.status === 'Hadir' ? "bg-emerald-500/20 text-emerald-400" : "bg-orange-500/20 text-orange-400")}>
+              <span className={cn("px-3 py-1.5 text-xs font-black rounded-full shadow-lg", activeSession.status === 'Hadir' ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/30" : "bg-orange-500/20 text-orange-400 border border-orange-500/30")}>
                 {activeSession.status}
               </span>
             </div>
-            <button onClick={() => onComplete({ sessionName: activeSession.session.name, status: activeSession.status as 'Hadir' | 'Terlambat' })} className="w-full py-4 bg-gradient-to-r from-cyan-500 to-purple-600 hover:from-cyan-400 hover:to-purple-500 text-white font-bold rounded-xl transition-all shadow-[0_0_20px_rgba(6,182,212,0.3)] hover:shadow-[0_0_30px_rgba(168,85,247,0.5)] flex items-center justify-center gap-2">
+            <button onClick={() => onComplete({ sessionName: activeSession.session.name, status: activeSession.status as 'Hadir' | 'Terlambat' })} className="w-full py-4 bg-gradient-to-r from-cyan-500 to-purple-600 hover:from-cyan-400 hover:to-purple-500 text-white font-bold rounded-2xl transition-all duration-300 shadow-[0_0_20px_rgba(6,182,212,0.3)] hover:shadow-[0_0_30px_rgba(168,85,247,0.5)] flex items-center justify-center gap-2 active:scale-[0.98]">
               Mulai Absensi <ChevronRight className="w-5 h-5" />
             </button>
           </div>
         ) : (
           <div className="space-y-4 text-center">
-            <div className="p-4 bg-rose-500/10 border border-rose-500/20 rounded-xl text-rose-400 flex flex-col items-center gap-2">
-              <AlertCircle className="w-8 h-8" />
-              <p className="font-semibold">Absensi Ditutup</p>
-              <p className="text-sm">Tidak ada sesi absensi yang aktif saat ini.</p>
+            <div className="p-6 bg-rose-500/10 border border-rose-500/20 rounded-2xl text-rose-400 flex flex-col items-center gap-3">
+              <AlertCircle className="w-10 h-10 animate-pulse" />
+              <div>
+                 <p className="font-bold text-lg">Absensi Ditutup</p>
+                 <p className="text-sm mt-1 opacity-80">Tidak ada sesi absensi yang aktif saat ini.</p>
+              </div>
             </div>
           </div>
         )}
@@ -398,7 +399,6 @@ const LocationCheck: React.FC<{ onComplete: (loc: {lat: number, lng: number}) =>
           setTimeout(() => onComplete({ lat: latitude, lng: longitude }), 1500);
         } else {
           setStatus('error');
-          // DYNAMIC NAME UPGRADE: Message now uses Geofence Location Name
           setErrorMsg(`Anda berada di luar radius area ${geofence.name || 'kampus'}.`);
         }
       },
@@ -410,31 +410,35 @@ const LocationCheck: React.FC<{ onComplete: (loc: {lat: number, lng: number}) =>
   useEffect(() => { checkLocation(); }, [checkLocation]);
 
   return (
-    <div className="flex flex-col items-center justify-center p-8 space-y-6 max-w-md mx-auto animate-in slide-in-from-right duration-500 w-full">
-      <div className="w-20 h-20 bg-white/5 rounded-full flex items-center justify-center border border-white/10 relative overflow-hidden">
+    <div className="flex flex-col items-center justify-center p-4 md:p-8 space-y-6 max-w-md mx-auto animate-in slide-in-from-right duration-500 w-full">
+      <div className="w-24 h-24 bg-white/5 rounded-full flex items-center justify-center border border-white/10 relative overflow-hidden shadow-2xl shadow-cyan-500/10">
         {status === 'loading' && <div className="absolute inset-0 border-4 border-cyan-500/30 border-t-cyan-500 rounded-full animate-spin"></div>}
-        <MapPin className={cn("w-10 h-10", status === 'error' ? 'text-rose-400' : 'text-cyan-400')} />
+        {status === 'loading' && <div className="absolute inset-0 bg-cyan-500/10 rounded-full animate-ping opacity-50"></div>}
+        <MapPin className={cn("w-10 h-10 relative z-10 transition-colors duration-500", status === 'error' ? 'text-rose-400' : 'text-cyan-400')} />
       </div>
 
-      <div className="text-center space-y-2 w-full bg-white/5 backdrop-blur-xl border border-white/10 p-6 rounded-2xl shadow-xl">
-        <h3 className="text-xl font-bold text-white">Validasi Lokasi</h3>
-        {status === 'loading' && <p className="text-slate-400">Mengambil koordinat GPS Anda...</p>}
+      <div className="text-center space-y-2 w-full bg-white/5 backdrop-blur-xl border border-white/10 p-6 md:p-8 rounded-3xl shadow-2xl transition-all duration-300">
+        <h3 className="text-2xl font-bold text-white tracking-tight">Validasi Lokasi</h3>
+        {status === 'loading' && <p className="text-slate-400 text-sm">Mendeteksi koordinat satelit GPS...</p>}
+        
         {status === 'success' && (
-          <div className="text-emerald-400 space-y-2 animate-in fade-in zoom-in">
-            <CheckCircle2 className="w-12 h-12 mx-auto" />
-            <p className="font-semibold">Lokasi Valid!</p>
-            <p className="text-sm text-emerald-500/80">Jarak: {Math.round(distance || 0)}m dari pusat.</p>
+          <div className="text-emerald-400 space-y-3 animate-in fade-in zoom-in mt-4">
+            <CheckCircle2 className="w-14 h-14 mx-auto drop-shadow-[0_0_15px_rgba(16,185,129,0.5)]" />
+            <div>
+               <p className="font-bold text-xl">Lokasi Valid!</p>
+               <p className="text-sm text-emerald-500/80 font-medium">Jarak: {Math.round(distance || 0)}m dari pusat.</p>
+            </div>
           </div>
         )}
+        
         {status === 'error' && (
-          <div className="space-y-4 animate-in fade-in zoom-in">
-            <div className="p-4 bg-rose-500/10 border border-rose-500/20 rounded-xl text-center">
-              <p className="text-sm font-semibold text-rose-400 leading-relaxed">{errorMsg}</p>
-              {distance && <p className="text-xs text-rose-500/70 mt-2">Jarak saat ini: {Math.round(distance)}m (Maks: {geofence.radius}m)</p>}
+          <div className="space-y-5 animate-in fade-in zoom-in mt-2">
+            <div className="p-5 bg-rose-500/10 border border-rose-500/20 rounded-2xl text-center">
+              <p className="text-sm font-bold text-rose-400 leading-relaxed">{errorMsg}</p>
+              {distance && <p className="text-xs text-rose-500/70 mt-2 font-mono bg-rose-500/10 inline-block px-3 py-1 rounded-full">Jarak saat ini: {Math.round(distance)}m (Maks: {geofence.radius}m)</p>}
             </div>
-            {/* UPGRADE ANTI-BYPASS: Bypass button entirely removed. User is forced to be in location. */}
-            <button onClick={checkLocation} className="w-full py-4 bg-white/10 hover:bg-white/20 text-white rounded-xl text-sm font-bold flex items-center justify-center gap-2 transition-all">
-              <RefreshCcw className="w-5 h-5" /> Coba Lagi
+            <button onClick={checkLocation} className="w-full py-4 bg-white/5 hover:bg-white/10 text-white rounded-2xl text-sm font-bold flex items-center justify-center gap-2 transition-all duration-300 border border-white/10 active:scale-[0.98]">
+              <RefreshCcw className="w-5 h-5" /> Coba Sinkron Ulang
             </button>
           </div>
         )}
@@ -477,19 +481,16 @@ const QRScanner: React.FC<{ onComplete: (data: {nim: string, name: string, devic
       }
       studentName = foundStudent.name;
 
-      // VERIFIKASI DEVICE KE DATABASE (ANTI-FRAUD SUPER)
       if (foundStudent.deviceId && foundStudent.deviceId !== finalDeviceId) {
         setError('⚠️ Fraud Alert: Akun (NIM) ini sudah tertaut pada perangkat/HP lain. Hubungi Admin untuk melakukan Reset Device.');
         return;
       }
       
-      // BIND DEVICE OTOMATIS JIKA BELUM TERTAUT
       if (!foundStudent.deviceId) {
         updateStudent(foundStudent.id, { deviceId: finalDeviceId });
       }
     } else {
       studentName = 'Mahasiswa Mode Bypass'; 
-      // LOKAL BINDING JIKA DATABASE KOSONG
       let deviceOwner = localStorage.getItem('axaxyz_device_owner');
       if (!deviceOwner) {
         localStorage.setItem('axaxyz_device_owner', targetNim); 
@@ -548,67 +549,72 @@ const QRScanner: React.FC<{ onComplete: (data: {nim: string, name: string, devic
   };
 
   return (
-    <div className="flex flex-col items-center justify-center p-8 space-y-6 max-w-md mx-auto animate-in slide-in-from-right duration-500 w-full">
-      <div className="w-full bg-white/5 backdrop-blur-xl border border-white/10 p-8 rounded-3xl shadow-xl">
+    <div className="flex flex-col items-center justify-center p-4 md:p-8 space-y-6 max-w-md mx-auto animate-in slide-in-from-right duration-500 w-full">
+      <div className="w-full bg-white/5 backdrop-blur-xl border border-white/10 p-6 md:p-8 rounded-[2rem] shadow-2xl transition-all duration-300">
         <div className="text-center mb-8">
-          <div className="w-16 h-16 bg-gradient-to-tr from-cyan-500 to-purple-500 rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-lg">
+          <div className="w-16 h-16 bg-gradient-to-tr from-cyan-500 to-purple-600 rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-[0_10px_20px_rgba(6,182,212,0.3)]">
             {isScanning ? <Camera className="w-8 h-8 text-white animate-pulse" /> : <QrCode className="w-8 h-8 text-white" />}
           </div>
-          <h3 className="text-2xl font-bold text-white mb-2">Identitas Mahasiswa</h3>
+          <h3 className="text-2xl font-bold text-white mb-2 tracking-tight">Identitas Mahasiswa</h3>
           <p className="text-slate-400 text-sm">Validasi akses absensi dengan KTM Anda.</p>
         </div>
 
         {isScanning ? (
           <div className="space-y-4 animate-in fade-in zoom-in">
-             <div id="qr-reader-box" className="w-full rounded-2xl overflow-hidden border-2 border-dashed border-cyan-500 bg-black aspect-square"></div>
-             <p className="text-xs text-center text-cyan-400">Arahkan kamera ke QR Code di KTM Anda...</p>
-             <button onClick={stopScanner} className="w-full py-3 bg-white/10 text-white rounded-xl text-sm font-bold">Batalkan Scan</button>
+             <div className="relative w-full rounded-2xl overflow-hidden border-2 border-dashed border-cyan-500 bg-black aspect-square shadow-[0_0_30px_rgba(6,182,212,0.2)]">
+                <div id="qr-reader-box" className="w-full h-full"></div>
+                <div className="absolute inset-0 pointer-events-none">
+                   <div className="w-full h-1/2 bg-gradient-to-b from-transparent to-cyan-500/40 animate-pulse border-b-2 border-cyan-400 transform origin-top translate-y-[-100%]"></div>
+                </div>
+             </div>
+             <p className="text-xs text-center text-cyan-400 font-medium">Arahkan kamera ke QR Code di KTM Anda...</p>
+             <button onClick={stopScanner} className="w-full py-3.5 bg-white/10 hover:bg-rose-500/20 hover:text-rose-400 text-white rounded-xl text-sm font-bold transition-colors duration-300 active:scale-[0.98]">Batalkan Scan</button>
           </div>
         ) : (
           <div className="space-y-5">
-            <button onClick={startScanner} className="w-full py-4 bg-cyan-500/20 hover:bg-cyan-500/30 border border-cyan-500/50 text-cyan-400 font-bold rounded-xl flex justify-center items-center gap-2 transition-all">
+            <button onClick={startScanner} className="w-full py-4 bg-cyan-500/10 hover:bg-cyan-500/20 border border-cyan-500/30 text-cyan-400 font-bold rounded-2xl flex justify-center items-center gap-2 transition-all duration-300 active:scale-[0.98]">
               <Camera className="w-5 h-5" /> Buka Kamera Scanner KTM
             </button>
             
-            <div className="relative flex items-center py-2">
+            <div className="relative flex items-center py-2 opacity-60">
                <div className="flex-grow border-t border-white/10"></div>
-               <span className="flex-shrink-0 mx-4 text-slate-500 text-xs">ATAU INPUT MANUAL</span>
+               <span className="flex-shrink-0 mx-4 text-slate-400 text-[10px] font-bold tracking-widest uppercase">Atau Input Manual</span>
                <div className="flex-grow border-t border-white/10"></div>
             </div>
 
-            <div className="space-y-2">
-              <label className="text-xs text-slate-400 font-semibold uppercase tracking-wider">NIM / Nomor Induk</label>
-              <div className="flex items-center bg-slate-900/50 border border-white/10 rounded-xl overflow-hidden focus-within:border-cyan-500 transition-colors">
+            <div className="space-y-1.5">
+              <label className="text-[11px] text-slate-400 font-bold uppercase tracking-widest ml-1">NIM / Nomor Induk</label>
+              <div className="flex items-center bg-slate-900/50 border border-white/10 rounded-2xl overflow-hidden focus-within:border-cyan-500 focus-within:ring-1 focus-within:ring-cyan-500 transition-all duration-300">
                 <div className="pl-4 pr-2 text-slate-500"><Fingerprint className="w-5 h-5"/></div>
-                <input type="text" placeholder="Masukkan NIM..." className="w-full bg-transparent py-3 pr-4 text-white outline-none placeholder-slate-600" value={nimInput} onChange={(e) => setNimInput(e.target.value)} />
+                <input type="text" placeholder="Masukkan NIM..." className="w-full bg-transparent py-3.5 pr-4 text-white outline-none placeholder-slate-600" value={nimInput} onChange={(e) => setNimInput(e.target.value)} />
               </div>
             </div>
             
             {students.length > 0 && (
-              <div className="space-y-2">
-                <label className="text-xs text-slate-400 font-semibold uppercase tracking-wider">Password</label>
-                <div className="flex items-center bg-slate-900/50 border border-white/10 rounded-xl overflow-hidden focus-within:border-cyan-500 transition-colors">
+              <div className="space-y-1.5">
+                <label className="text-[11px] text-slate-400 font-bold uppercase tracking-widest ml-1">Password</label>
+                <div className="flex items-center bg-slate-900/50 border border-white/10 rounded-2xl overflow-hidden focus-within:border-cyan-500 focus-within:ring-1 focus-within:ring-cyan-500 transition-all duration-300">
                   <div className="pl-4 pr-2 text-slate-500"><Key className="w-5 h-5"/></div>
-                  <input type="password" placeholder="Masukkan Password..." className="w-full bg-transparent py-3 pr-4 text-white outline-none placeholder-slate-600" value={passInput} onChange={(e) => setPassInput(e.target.value)} />
+                  <input type="password" placeholder="Masukkan Password..." className="w-full bg-transparent py-3.5 pr-4 text-white outline-none placeholder-slate-600" value={passInput} onChange={(e) => setPassInput(e.target.value)} />
                 </div>
               </div>
             )}
             
             {error && (
-              <div className="p-3 bg-rose-500/10 border border-rose-500/20 rounded-lg flex items-start gap-3 animate-in shake">
+              <div className="p-4 bg-rose-500/10 border border-rose-500/20 rounded-2xl flex items-start gap-3 animate-in shake">
                 <AlertCircle className="w-5 h-5 text-rose-400 shrink-0 mt-0.5" />
-                <p className="text-sm text-rose-400 leading-tight">{error}</p>
+                <p className="text-sm font-medium text-rose-400 leading-relaxed">{error}</p>
               </div>
             )}
 
-            <button onClick={() => handleVerify()} className="w-full py-3.5 bg-gradient-to-r from-cyan-500 to-purple-600 hover:from-cyan-400 hover:to-purple-500 text-white font-bold rounded-xl transition-all shadow-[0_0_15px_rgba(6,182,212,0.2)]">
-              Lanjutkan
+            <button onClick={() => handleVerify()} className="w-full py-4 mt-2 bg-gradient-to-r from-cyan-500 to-purple-600 hover:from-cyan-400 hover:to-purple-500 text-white font-bold rounded-2xl transition-all duration-300 shadow-[0_0_15px_rgba(6,182,212,0.2)] active:scale-[0.98]">
+              Lanjutkan Verifikasi
             </button>
           </div>
         )}
       </div>
-      <p className="text-xs text-slate-500 text-center max-w-xs">
-        Sistem dilengkapi Device Fingerprinting. Satu perangkat hanya dapat digunakan untuk satu identitas NIM.
+      <p className="text-[10px] text-slate-500 text-center max-w-xs uppercase tracking-widest font-bold opacity-70">
+        Sistem dilengkapi Security Device Fingerprinting
       </p>
     </div>
   );
@@ -649,8 +655,7 @@ const SelfieCapture: React.FC<{ onComplete: (base64: string) => void }> = ({ onC
       canvas.height = videoRef.current.videoHeight;
       const ctx = canvas.getContext('2d');
       if (ctx) {
-        // UPGRADE NO-MIRRORING: 
-        // Menghapus fungsi flip (ctx.scale & translate) agar foto disimpan natural apa adanya.
+        // PERBAIKAN MIRRORING: Hanya draw image tanpa scale(-1, 1) agar foto asli
         ctx.drawImage(videoRef.current, 0, 0, canvas.width, canvas.height);
         setImage(canvas.toDataURL('image/jpeg', 0.8));
       }
@@ -658,47 +663,53 @@ const SelfieCapture: React.FC<{ onComplete: (base64: string) => void }> = ({ onC
   }, []);
 
   return (
-    <div className="flex flex-col items-center justify-center p-6 space-y-6 w-full max-w-md mx-auto animate-in slide-in-from-right duration-500">
+    <div className="flex flex-col items-center justify-center p-4 md:p-6 space-y-6 w-full max-w-md mx-auto animate-in slide-in-from-right duration-500">
       <div className="text-center">
-        <h3 className="text-2xl font-bold text-white">Verifikasi Wajah</h3>
-        <p className="text-slate-400 text-sm mt-1">Posisikan wajah Anda di tengah layar.</p>
+        <h3 className="text-2xl md:text-3xl font-black text-white tracking-tight">Verifikasi Wajah</h3>
+        <p className="text-slate-400 text-sm mt-1.5">Posisikan wajah Anda di area pandang kamera.</p>
       </div>
 
-      <div className="w-full bg-slate-900 rounded-3xl overflow-hidden border-4 border-white/10 relative shadow-2xl aspect-[3/4] md:aspect-video flex items-center justify-center bg-black">
+      <div className="w-full bg-slate-900 rounded-[2rem] overflow-hidden border-4 border-white/10 relative shadow-2xl aspect-[3/4] md:aspect-video flex items-center justify-center bg-black transition-all duration-500 hover:border-cyan-500/30 group">
         {!image ? (
           <video
             ref={videoRef}
             autoPlay
             playsInline
             muted
-            // UX Standard: Viewfinder tetap ter-mirror sebagai cermin untuk memudahkan posisi muka
+            // UX Viewfinder tetap ter-mirror sebagai cermin
             className="w-full h-full object-cover transform scale-x-[-1]"
           />
         ) : (
-          // FOTO TERSIMPAN: Tidak lagi menggunakan scale-x-[-1] agar sesuai dengan asli
+          // Hasil Foto TIDAK TER-MIRROR lagi (scale-x dihapus)
           <img src={image} alt="Selfie" className="w-full h-full object-cover" />
         )}
         
         {!image && (
-          <div className="absolute inset-0 pointer-events-none border-[40px] border-black/30 flex items-center justify-center">
-             <div className="w-48 h-64 border-2 border-dashed border-white/50 rounded-[4rem]"></div>
+          <div className="absolute inset-0 pointer-events-none flex items-center justify-center">
+             <div className="absolute inset-0 bg-black/30"></div>
+             <div className="relative w-56 h-72 border-2 border-cyan-400/50 rounded-[4rem] shadow-[inset_0_0_20px_rgba(6,182,212,0.3)]">
+                <div className="absolute top-[-2px] left-[-2px] w-6 h-6 border-t-4 border-l-4 border-cyan-400 rounded-tl-[4rem]"></div>
+                <div className="absolute top-[-2px] right-[-2px] w-6 h-6 border-t-4 border-r-4 border-cyan-400 rounded-tr-[4rem]"></div>
+                <div className="absolute bottom-[-2px] left-[-2px] w-6 h-6 border-b-4 border-l-4 border-cyan-400 rounded-bl-[4rem]"></div>
+                <div className="absolute bottom-[-2px] right-[-2px] w-6 h-6 border-b-4 border-r-4 border-cyan-400 rounded-br-[4rem]"></div>
+             </div>
           </div>
         )}
       </div>
 
       <div className="w-full">
         {!image ? (
-          <button onClick={capture} className="w-full py-4 bg-white/10 hover:bg-white/20 border border-white/20 text-white font-bold rounded-2xl transition-all flex items-center justify-center gap-2 group">
-            <div className="w-6 h-6 rounded-full border-2 border-white flex items-center justify-center group-hover:bg-white transition-colors">
-              <div className="w-2 h-2 rounded-full bg-white group-hover:bg-slate-900"></div>
+          <button onClick={capture} className="w-full py-4 bg-white/10 hover:bg-white/20 border border-white/20 text-white font-bold rounded-2xl transition-all duration-300 flex items-center justify-center gap-3 active:scale-[0.98]">
+            <div className="w-7 h-7 rounded-full border-[3px] border-white flex items-center justify-center transition-colors">
+              <div className="w-2.5 h-2.5 rounded-full bg-white"></div>
             </div>
-            Ambil Foto
+            Ambil Foto Sekarang
           </button>
         ) : (
           <div className="flex gap-4">
-            <button onClick={() => { setImage(null); startCamera(); }} className="flex-1 py-4 bg-white/5 hover:bg-white/10 border border-white/10 text-white font-semibold rounded-2xl transition-all">Ulangi</button>
-            <button onClick={() => onComplete(image)} className="flex-1 py-4 bg-gradient-to-r from-cyan-500 to-purple-600 hover:from-cyan-400 hover:to-purple-500 text-white font-bold rounded-2xl transition-all shadow-lg flex items-center justify-center gap-2">
-              <CheckCircle2 className="w-5 h-5" /> Konfirmasi
+            <button onClick={() => { setImage(null); startCamera(); }} className="flex-1 py-4 bg-white/5 hover:bg-white/10 border border-white/10 text-white font-semibold rounded-2xl transition-all duration-300 active:scale-[0.95]">Ulangi</button>
+            <button onClick={() => onComplete(image)} className="flex-[2] py-4 bg-gradient-to-r from-cyan-500 to-purple-600 hover:from-cyan-400 hover:to-purple-500 text-white font-bold rounded-2xl transition-all duration-300 shadow-[0_10px_20px_rgba(6,182,212,0.3)] flex items-center justify-center gap-2 active:scale-[0.95]">
+              <CheckCircle2 className="w-5 h-5" /> Konfirmasi Foto
             </button>
           </div>
         )}
@@ -711,13 +722,15 @@ const SuccessScreen: React.FC<{ reset: () => void }> = ({ reset }) => (
   <div className="flex flex-col items-center justify-center p-8 space-y-8 text-center animate-in zoom-in duration-500 w-full">
     <div className="relative">
       <div className="absolute inset-0 bg-emerald-500/20 blur-3xl rounded-full"></div>
-      <CheckCircle2 className="w-32 h-32 text-emerald-400 relative z-10 animate-bounce" style={{ animationDuration: '2s' }} />
+      <div className="w-32 h-32 bg-emerald-500/10 rounded-full flex items-center justify-center relative z-10 animate-bounce shadow-[0_0_30px_rgba(16,185,129,0.2)]">
+         <CheckCircle2 className="w-20 h-20 text-emerald-400" />
+      </div>
     </div>
     <div className="space-y-3">
-      <h2 className="text-3xl font-bold text-white">Absensi Berhasil!</h2>
-      <p className="text-slate-400 max-w-xs mx-auto">Data kehadiran Anda telah tercatat dengan aman di dalam sistem.</p>
+      <h2 className="text-3xl md:text-4xl font-black text-white tracking-tight">Absensi Berhasil!</h2>
+      <p className="text-slate-400 max-w-sm mx-auto leading-relaxed">Data kehadiran dan identitas wajah Anda telah tercatat dengan aman dengan sistem enkripsi.</p>
     </div>
-    <button onClick={reset} className="px-8 py-3 bg-white/10 hover:bg-white/20 border border-white/10 text-white rounded-xl transition-all font-medium mt-8">Kembali ke Beranda</button>
+    <button onClick={reset} className="px-10 py-4 bg-white/5 hover:bg-white/10 border border-white/10 text-white rounded-2xl transition-all duration-300 font-bold mt-8 shadow-xl active:scale-95">Kembali ke Beranda</button>
   </div>
 );
 
@@ -731,39 +744,41 @@ const AttendanceWizard: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-slate-950 flex flex-col font-sans text-slate-100 overflow-hidden relative">
-      <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] bg-purple-600/20 rounded-full blur-[120px] pointer-events-none"></div>
-      <div className="absolute bottom-[-10%] right-[-10%] w-[40%] h-[40%] bg-cyan-600/20 rounded-full blur-[120px] pointer-events-none"></div>
-      <header className="w-full p-6 flex justify-between items-center relative z-10 border-b border-white/5 bg-slate-950/50 backdrop-blur-md">
+      <div className="absolute top-[-10%] left-[-10%] w-[50%] h-[50%] bg-purple-600/10 rounded-full blur-[120px] pointer-events-none"></div>
+      <div className="absolute bottom-[-10%] right-[-10%] w-[50%] h-[50%] bg-cyan-600/10 rounded-full blur-[120px] pointer-events-none"></div>
+      
+      <header className="w-full p-4 md:p-6 flex justify-between items-center relative z-10 border-b border-white/5 bg-slate-950/80 backdrop-blur-xl">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 bg-gradient-to-br from-cyan-400 to-purple-600 rounded-xl flex items-center justify-center shadow-lg overflow-hidden p-1.5">
-             <img src="/axalogo.png" alt="AXAXYZ Logo" className="w-full h-full object-contain drop-shadow-sm" onError={(e) => { e.currentTarget.style.display = 'none'; e.currentTarget.nextElementSibling?.classList.remove('hidden'); }} />
-             <span className="font-bold text-white text-xl tracking-tighter hidden">A.</span>
+          <div className="w-10 h-10 md:w-12 md:h-12 bg-gradient-to-br from-cyan-400 to-purple-600 rounded-xl flex items-center justify-center shadow-lg overflow-hidden p-1.5 md:p-2 transition-transform duration-300 hover:scale-105 cursor-pointer">
+             <img src="/axalogo.png" alt="AXAXYZ Logo" className="w-full h-full object-contain drop-shadow-md" onError={(e) => { e.currentTarget.style.display = 'none'; e.currentTarget.nextElementSibling?.classList.remove('hidden'); }} />
+             <span className="font-bold text-white text-xl hidden">A.</span>
           </div>
-          <span className="font-bold text-xl tracking-widest text-transparent bg-clip-text bg-gradient-to-r from-white to-slate-400">AXAXYZ</span>
+          <span className="font-black text-lg md:text-2xl tracking-[0.15em] text-transparent bg-clip-text bg-gradient-to-r from-white to-slate-400">AXAXYZ</span>
         </div>
-        <div className="text-xs font-medium px-4 py-1.5 bg-white/5 border border-white/10 rounded-full text-slate-300">Portal Mahasiswa</div>
+        <div className="text-[10px] md:text-xs font-bold px-4 py-2 bg-white/5 border border-white/10 rounded-full text-cyan-300 tracking-widest shadow-sm">PORTAL MHS</div>
       </header>
-      <main className="flex-1 flex flex-col relative z-10 w-full max-w-4xl mx-auto px-4 py-8">
+
+      <main className="flex-1 flex flex-col relative z-10 w-full max-w-5xl mx-auto px-4 py-6 md:py-12 overflow-y-auto">
         {step < 5 && (
-          <div className="mb-12">
+          <div className="mb-8 md:mb-16 max-w-2xl mx-auto w-full px-2">
             <div className="flex justify-between relative">
-              <div className="absolute top-1/2 -translate-y-1/2 left-0 w-full h-1 bg-white/10 rounded-full"></div>
-              <div className="absolute top-1/2 -translate-y-1/2 left-0 h-1 bg-gradient-to-r from-cyan-500 to-purple-500 rounded-full transition-all duration-500" style={{ width: `${((step - 1) / (steps.length - 1)) * 100}%` }}></div>
+              <div className="absolute top-1/2 -translate-y-1/2 left-0 w-full h-1 md:h-1.5 bg-slate-800 rounded-full"></div>
+              <div className="absolute top-1/2 -translate-y-1/2 left-0 h-1 md:h-1.5 bg-gradient-to-r from-cyan-500 to-purple-500 rounded-full transition-all duration-700 ease-in-out shadow-[0_0_10px_rgba(6,182,212,0.5)]" style={{ width: `${((step - 1) / (steps.length - 1)) * 100}%` }}></div>
               {steps.map((label, idx) => {
                 const isActive = step === idx + 1; const isPassed = step > idx + 1;
                 return (
-                  <div key={label} className="relative z-10 flex flex-col items-center gap-2">
-                    <div className={cn("w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold border-2 transition-colors duration-300", isActive ? "bg-slate-900 border-cyan-400 text-cyan-400 shadow-[0_0_15px_rgba(6,182,212,0.5)]" : isPassed ? "bg-cyan-500 border-cyan-500 text-white" : "bg-slate-900 border-white/20 text-white/30")}>
-                      {isPassed ? <CheckCircle2 className="w-4 h-4" /> : idx + 1}
+                  <div key={label} className="relative z-10 flex flex-col items-center gap-2 md:gap-3">
+                    <div className={cn("w-8 h-8 md:w-10 md:h-10 rounded-full flex items-center justify-center text-xs md:text-sm font-black border-[3px] transition-all duration-500", isActive ? "bg-slate-900 border-cyan-400 text-cyan-400 shadow-[0_0_20px_rgba(6,182,212,0.4)] scale-110" : isPassed ? "bg-cyan-500 border-cyan-500 text-white" : "bg-slate-900 border-slate-700 text-slate-600")}>
+                      {isPassed ? <CheckCircle2 className="w-4 h-4 md:w-5 md:h-5" /> : idx + 1}
                     </div>
-                    <span className={cn("text-xs font-medium absolute -bottom-6 w-max", isActive ? "text-cyan-400" : isPassed ? "text-slate-300" : "text-slate-600")}>{label}</span>
+                    <span className={cn("text-[10px] md:text-xs font-bold absolute -bottom-6 md:-bottom-7 w-max tracking-wide", isActive ? "text-cyan-400" : isPassed ? "text-slate-300" : "text-slate-600")}>{label}</span>
                   </div>
                 );
               })}
             </div>
           </div>
         )}
-        <div className="flex-1 flex items-center justify-center">
+        <div className="flex-1 flex items-center justify-center w-full">
           {step === 1 && <TimeCheck onComplete={(d) => { setData(prev => ({...prev, ...d})); setStep(2); }} />}
           {step === 2 && <LocationCheck onComplete={(d) => { setData(prev => ({...prev, location: d})); setStep(3); }} />}
           {step === 3 && <QRScanner onComplete={(d) => { setData(prev => ({...prev, ...d})); setStep(4); }} />}
@@ -827,51 +842,51 @@ const AdminLogin: React.FC<{ onLogin: () => void }> = ({ onLogin }) => {
   return (
     <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center p-4 relative overflow-hidden w-full">
       <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,_var(--tw-gradient-stops))] from-slate-900 via-slate-950 to-slate-950"></div>
-      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] bg-cyan-500/5 rounded-full blur-[100px] pointer-events-none"></div>
+      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[300px] h-[300px] md:w-[600px] md:h-[600px] bg-cyan-500/10 rounded-full blur-[100px] pointer-events-none"></div>
 
-      <div className="w-full max-w-md bg-white/5 backdrop-blur-2xl border border-white/10 p-8 rounded-[2rem] shadow-2xl relative z-10 animate-in slide-in-from-bottom-8 fade-in duration-700">
+      <div className="w-full max-w-md bg-white/5 backdrop-blur-3xl border border-white/10 p-6 md:p-10 rounded-[2rem] shadow-2xl relative z-10 animate-in slide-in-from-bottom-8 fade-in duration-700">
         <div className="flex flex-col items-center mb-8">
           <div className="relative mb-5">
-            <div className="w-20 h-20 bg-gradient-to-br from-cyan-400 to-purple-600 rounded-3xl flex items-center justify-center shadow-[0_0_30px_rgba(6,182,212,0.3)] p-3 overflow-hidden">
+            <div className="w-20 h-20 md:w-24 md:h-24 bg-gradient-to-br from-cyan-400 to-purple-600 rounded-[1.5rem] flex items-center justify-center shadow-[0_0_30px_rgba(6,182,212,0.3)] p-3 overflow-hidden">
               <img src="/axalogo.png" alt="AXAXYZ Logo" className="w-full h-full object-contain drop-shadow-md" onError={(e) => { e.currentTarget.style.display = 'none'; e.currentTarget.nextElementSibling?.classList.remove('hidden'); }} />
-              <ShieldCheck className="w-10 h-10 text-white hidden" />
+              <ShieldCheck className="w-10 h-10 md:w-12 md:h-12 text-white hidden" />
             </div>
-            <div className="absolute -bottom-2 -right-2 w-9 h-9 bg-slate-900 rounded-full border-2 border-slate-800 flex items-center justify-center">
+            <div className="absolute -bottom-2 -right-2 w-10 h-10 bg-slate-900 rounded-full border-[3px] border-slate-800 flex items-center justify-center shadow-lg">
               <Lock className="w-4 h-4 text-cyan-400" />
             </div>
           </div>
-          <h2 className="text-2xl font-bold text-white tracking-wide">AXAXYZ Admin</h2>
-          <p className="text-slate-400 text-sm mt-1">Enterprise Security Portal</p>
+          <h2 className="text-2xl md:text-3xl font-black text-white tracking-wide">AXAXYZ Admin</h2>
+          <p className="text-slate-400 text-xs md:text-sm mt-1.5 uppercase tracking-widest font-bold opacity-80">Enterprise Security Portal</p>
         </div>
 
         <form onSubmit={handleLogin} className="space-y-5">
           {err && (
-            <div className="p-4 bg-rose-500/10 border border-rose-500/20 text-rose-400 text-sm rounded-2xl flex items-start gap-3 animate-in shake duration-300">
+            <div className="p-4 bg-rose-500/10 border border-rose-500/20 text-rose-400 text-sm font-medium rounded-2xl flex items-start gap-3 animate-in shake duration-300">
               <AlertCircle className="w-5 h-5 shrink-0 mt-0.5" />
               <p className="leading-tight">{err}</p>
             </div>
           )}
 
-          <div className="space-y-1.5">
-            <label className="text-xs text-slate-400 font-semibold uppercase tracking-wider ml-1">Username</label>
-            <div className="relative flex items-center bg-slate-900/50 border border-white/10 rounded-2xl overflow-hidden focus-within:border-cyan-500 focus-within:ring-1 focus-within:ring-cyan-500 transition-all">
+          <div className="space-y-2">
+            <label className="text-[11px] text-slate-400 font-bold uppercase tracking-widest ml-1">Username</label>
+            <div className="relative flex items-center bg-slate-900/60 border border-white/10 rounded-2xl overflow-hidden focus-within:border-cyan-500 focus-within:ring-1 focus-within:ring-cyan-500 transition-all duration-300 shadow-inner">
               <div className="pl-4 pr-3 text-slate-500"><User className="w-5 h-5"/></div>
-              <input type="text" value={user} onChange={e=>setUser(e.target.value)} disabled={lockoutTimer > 0 || isLoading} className="w-full bg-transparent py-3.5 pr-4 text-white outline-none placeholder-slate-600 disabled:opacity-50" placeholder="Masukkan username admin" required />
+              <input type="text" value={user} onChange={e=>setUser(e.target.value)} disabled={lockoutTimer > 0 || isLoading} className="w-full bg-transparent py-4 pr-4 text-white outline-none placeholder-slate-600 disabled:opacity-50 text-sm" placeholder="Masukkan username admin" required />
             </div>
           </div>
 
-          <div className="space-y-1.5">
-            <label className="text-xs text-slate-400 font-semibold uppercase tracking-wider ml-1">Password</label>
-            <div className="relative flex items-center bg-slate-900/50 border border-white/10 rounded-2xl overflow-hidden focus-within:border-cyan-500 focus-within:ring-1 focus-within:ring-cyan-500 transition-all">
+          <div className="space-y-2">
+            <label className="text-[11px] text-slate-400 font-bold uppercase tracking-widest ml-1">Password</label>
+            <div className="relative flex items-center bg-slate-900/60 border border-white/10 rounded-2xl overflow-hidden focus-within:border-cyan-500 focus-within:ring-1 focus-within:ring-cyan-500 transition-all duration-300 shadow-inner">
               <div className="pl-4 pr-3 text-slate-500"><Key className="w-5 h-5"/></div>
-              <input type={showPass ? 'text' : 'password'} value={pass} onChange={e=>setPass(e.target.value)} disabled={lockoutTimer > 0 || isLoading} className="w-full bg-transparent py-3.5 pr-12 text-white outline-none placeholder-slate-600 disabled:opacity-50" placeholder="••••••••" required />
+              <input type={showPass ? 'text' : 'password'} value={pass} onChange={e=>setPass(e.target.value)} disabled={lockoutTimer > 0 || isLoading} className="w-full bg-transparent py-4 pr-12 text-white outline-none placeholder-slate-600 disabled:opacity-50 text-sm" placeholder="••••••••" required />
               <button type="button" onClick={() => setShowPass(!showPass)} className="absolute right-4 text-slate-400 hover:text-cyan-400 transition-colors">
                 {showPass ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
               </button>
             </div>
           </div>
 
-          <button type="submit" disabled={lockoutTimer > 0 || isLoading} className="w-full py-4 mt-4 bg-gradient-to-r from-cyan-500 to-purple-600 hover:from-cyan-400 hover:to-purple-500 disabled:from-slate-700 disabled:to-slate-800 disabled:text-slate-500 disabled:cursor-not-allowed text-white font-bold rounded-2xl transition-all shadow-[0_0_20px_rgba(6,182,212,0.2)] flex justify-center items-center gap-2 group">
+          <button type="submit" disabled={lockoutTimer > 0 || isLoading} className="w-full py-4 mt-6 bg-gradient-to-r from-cyan-500 to-purple-600 hover:from-cyan-400 hover:to-purple-500 disabled:from-slate-700 disabled:to-slate-800 disabled:text-slate-500 disabled:cursor-not-allowed text-white font-bold rounded-2xl transition-all duration-300 shadow-[0_10px_20px_rgba(6,182,212,0.2)] hover:shadow-[0_15px_30px_rgba(6,182,212,0.4)] flex justify-center items-center gap-2 group active:scale-95">
             {isLoading ? <Loader2 className="w-5 h-5 animate-spin" /> : (
                <>Masuk Sistem <ChevronRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" /></>
             )}
@@ -897,95 +912,95 @@ const AdminDashboardHome: React.FC = () => {
 
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
-      <div className="flex justify-between items-end">
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-2">
         <div>
-          <h2 className="text-2xl font-bold text-white">Ringkasan Hari Ini</h2>
-          <p className="text-slate-400 text-sm">{new Date().toLocaleDateString('id-ID', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</p>
+          <h2 className="text-2xl md:text-3xl font-black text-white tracking-tight">Ringkasan Hari Ini</h2>
+          <p className="text-slate-400 text-sm md:text-base font-medium">{new Date().toLocaleDateString('id-ID', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</p>
         </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6">
         {[
           { title: 'Total Kehadiran', val: total, icon: Users, color: 'text-cyan-400', bg: 'bg-cyan-500/10' },
           { title: 'Tepat Waktu', val: onTime, icon: CheckCircle2, color: 'text-emerald-400', bg: 'bg-emerald-500/10' },
           { title: 'Terlambat', val: late, icon: Clock, color: 'text-amber-400', bg: 'bg-amber-500/10' }
         ].map((stat, i) => (
-          <div key={i} className="bg-white/5 border border-white/10 p-6 rounded-2xl flex items-center justify-between">
-            <div><p className="text-slate-400 text-sm font-medium mb-1">{stat.title}</p><h3 className="text-3xl font-bold text-white">{stat.val}</h3></div>
-            <div className={cn("w-12 h-12 rounded-full flex items-center justify-center", stat.bg)}><stat.icon className={cn("w-6 h-6", stat.color)} /></div>
+          <div key={i} className="bg-white/5 border border-white/10 p-6 rounded-[1.5rem] flex items-center justify-between transition-all duration-300 hover:bg-white/10 hover:-translate-y-1 hover:shadow-xl">
+            <div><p className="text-slate-400 text-xs font-bold uppercase tracking-widest mb-1.5">{stat.title}</p><h3 className="text-3xl md:text-4xl font-black text-white">{stat.val}</h3></div>
+            <div className={cn("w-14 h-14 rounded-2xl flex items-center justify-center shadow-inner", stat.bg)}><stat.icon className={cn("w-7 h-7", stat.color)} /></div>
           </div>
         ))}
         
-        <div className="bg-slate-900 border border-white/10 p-5 rounded-2xl flex flex-col items-center justify-center text-center relative overflow-hidden">
+        <div className="bg-slate-900 border border-white/10 p-5 rounded-[1.5rem] flex flex-col items-center justify-center text-center relative overflow-hidden transition-all duration-300 hover:bg-slate-800">
            {isCloudSync ? (
              <>
-               <div className="w-10 h-10 rounded-full bg-emerald-500/20 border border-emerald-500/30 flex items-center justify-center mb-2"><Cloud className="w-5 h-5 text-emerald-400" /></div>
+               <div className="w-12 h-12 rounded-full bg-emerald-500/20 border border-emerald-500/30 flex items-center justify-center mb-2.5 animate-pulse"><Cloud className="w-6 h-6 text-emerald-400" /></div>
                <h3 className="text-white font-bold text-sm">Upstash Redis AKTIF</h3>
-               <p className="text-emerald-400/80 text-[10px] mt-1 leading-tight">Database terhubung sempurna.</p>
+               <p className="text-emerald-400/80 text-[10px] font-medium mt-1 leading-tight tracking-wide uppercase">Database Terhubung</p>
              </>
            ) : (
              <>
-               <div className="w-10 h-10 rounded-full bg-rose-500/20 border border-rose-500/30 flex items-center justify-center mb-2"><ServerCrash className="w-5 h-5 text-rose-400" /></div>
+               <div className="w-12 h-12 rounded-full bg-rose-500/20 border border-rose-500/30 flex items-center justify-center mb-2.5"><ServerCrash className="w-6 h-6 text-rose-400" /></div>
                <h3 className="text-white font-bold text-sm">Mode LOKAL Saja</h3>
-               <p className="text-rose-400/80 text-[10px] mt-1 leading-tight">Gagal mendeteksi NEXT_PUBLIC ENV.</p>
+               <p className="text-rose-400/80 text-[10px] font-medium mt-1 leading-tight tracking-wide uppercase">Cek NEXT_PUBLIC ENV</p>
              </>
            )}
         </div>
       </div>
       
-      <div className="bg-slate-900 border border-indigo-500/30 p-6 rounded-2xl">
-         <div className="flex items-center gap-3 mb-4">
+      <div className="bg-slate-900 border border-indigo-500/30 p-6 rounded-[1.5rem] shadow-lg">
+         <div className="flex items-center gap-3 mb-4 md:mb-5">
             <DatabaseZap className="w-6 h-6 text-indigo-400" />
-            <h3 className="text-lg font-bold text-white">Cloud Database Diagnostic</h3>
+            <h3 className="text-lg md:text-xl font-bold text-white tracking-tight">Cloud Database Diagnostic</h3>
          </div>
-         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
-            <div className="bg-black/50 border border-white/5 p-4 rounded-xl">
-               <p className="text-xs text-slate-500 font-bold uppercase mb-1">Detected REST URL (NEXT_PUBLIC_...)</p>
-               <p className="text-sm font-mono text-cyan-400 break-all">{dbCreds.url ? dbCreds.url : <span className="text-rose-500">❌ URL Tidak Terdeteksi di .env</span>}</p>
+         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-4 md:mb-5">
+            <div className="bg-black/50 border border-white/5 p-4 md:p-5 rounded-2xl">
+               <p className="text-[10px] md:text-xs text-slate-500 font-bold uppercase tracking-widest mb-1.5">Detected REST URL</p>
+               <p className="text-xs md:text-sm font-mono text-cyan-400 break-all">{dbCreds.url ? dbCreds.url : <span className="text-rose-500">❌ URL Tidak Terdeteksi di .env</span>}</p>
             </div>
-            <div className="bg-black/50 border border-white/5 p-4 rounded-xl">
-               <p className="text-xs text-slate-500 font-bold uppercase mb-1">Detected REST TOKEN</p>
-               <p className="text-sm font-mono text-purple-400 break-all">{dbCreds.token ? `${dbCreds.token.substring(0, 10)}••••••••••••••••` : <span className="text-rose-500">❌ Token Tidak Terdeteksi di .env</span>}</p>
+            <div className="bg-black/50 border border-white/5 p-4 md:p-5 rounded-2xl">
+               <p className="text-[10px] md:text-xs text-slate-500 font-bold uppercase tracking-widest mb-1.5">Detected REST TOKEN</p>
+               <p className="text-xs md:text-sm font-mono text-purple-400 break-all">{dbCreds.token ? `${dbCreds.token.substring(0, 10)}••••••••••••••••` : <span className="text-rose-500">❌ Token Tidak Terdeteksi di .env</span>}</p>
             </div>
          </div>
-         <div className="flex items-center justify-between bg-indigo-500/10 p-4 rounded-xl border border-indigo-500/20">
-            <p className="text-sm text-indigo-200">Jika Data di Upstash kosong namun URL terdeteksi, tekan tombol Force Sync untuk mengunggah semua data lokal Anda.</p>
-            <button onClick={forceManualSync} className="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white font-bold rounded-lg transition-colors flex gap-2 items-center">
-              <Upload className="w-4 h-4" /> Force Sync
+         <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 bg-indigo-500/10 p-4 md:p-5 rounded-2xl border border-indigo-500/20">
+            <p className="text-xs md:text-sm text-indigo-200 leading-relaxed max-w-2xl">Jika Data di Upstash kosong namun URL terdeteksi, tekan tombol Force Sync untuk mengunggah semua data lokal Anda secara paksa ke Cloud.</p>
+            <button onClick={forceManualSync} className="w-full md:w-auto px-6 py-3 bg-indigo-600 hover:bg-indigo-500 text-white font-bold rounded-xl transition-all duration-300 shadow-lg flex gap-2 items-center justify-center active:scale-95 whitespace-nowrap">
+              <Upload className="w-4 h-4" /> Force Sync Cloud
             </button>
          </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 h-[400px]">
-        <div className="bg-white/5 border border-white/10 p-6 rounded-2xl flex flex-col">
-          <h3 className="text-lg font-semibold text-white mb-6">Kehadiran per Sesi</h3>
-          <div className="flex-1">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 min-h-[350px] md:min-h-[400px]">
+        <div className="bg-white/5 border border-white/10 p-6 rounded-[1.5rem] flex flex-col shadow-lg">
+          <h3 className="text-lg font-bold text-white mb-6 tracking-tight">Kehadiran per Sesi</h3>
+          <div className="flex-1 w-full min-h-[250px]">
             {barData.length > 0 ? (
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={barData} margin={{ top: 0, right: 0, left: -20, bottom: 0 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#334155" vertical={false} />
                   <XAxis dataKey="name" stroke="#94a3b8" fontSize={12} tickLine={false} axisLine={false} />
                   <YAxis stroke="#94a3b8" fontSize={12} tickLine={false} axisLine={false} />
-                  <Tooltip cursor={{fill: '#334155', opacity: 0.4}} contentStyle={{backgroundColor: '#0f172a', borderColor: '#334155', color: '#f8fafc'}} />
-                  <Bar dataKey="Kehadiran" fill="#06b6d4" radius={[4, 4, 0, 0]} />
+                  <Tooltip cursor={{fill: '#334155', opacity: 0.4}} contentStyle={{backgroundColor: '#0f172a', borderColor: '#334155', color: '#f8fafc', borderRadius: '0.75rem'}} />
+                  <Bar dataKey="Kehadiran" fill="#06b6d4" radius={[6, 6, 0, 0]} />
                 </BarChart>
               </ResponsiveContainer>
-            ) : <div className="h-full flex items-center justify-center text-slate-500">Belum ada data hari ini</div>}
+            ) : <div className="h-full flex items-center justify-center text-slate-500 font-medium text-sm">Belum ada data hari ini</div>}
           </div>
         </div>
-        <div className="bg-white/5 border border-white/10 p-6 rounded-2xl flex flex-col">
-          <h3 className="text-lg font-semibold text-white mb-6">Rasio Keterlambatan</h3>
-          <div className="flex-1">
+        <div className="bg-white/5 border border-white/10 p-6 rounded-[1.5rem] flex flex-col shadow-lg">
+          <h3 className="text-lg font-bold text-white mb-6 tracking-tight">Rasio Keterlambatan</h3>
+          <div className="flex-1 w-full min-h-[250px]">
              {pieData.length > 0 ? (
                 <ResponsiveContainer width="100%" height="100%">
                   <PieChart>
-                    <Pie data={pieData} cx="50%" cy="50%" innerRadius={80} outerRadius={120} paddingAngle={5} dataKey="value">
+                    <Pie data={pieData} cx="50%" cy="50%" innerRadius="60%" outerRadius="80%" paddingAngle={5} dataKey="value">
                       {pieData.map((entry, index) => <Cell key={`cell-${index}`} fill={entry.color} />)}
                     </Pie>
-                    <Tooltip contentStyle={{backgroundColor: '#0f172a', borderColor: '#334155', color: '#f8fafc'}} />
+                    <Tooltip contentStyle={{backgroundColor: '#0f172a', borderColor: '#334155', color: '#f8fafc', borderRadius: '0.75rem'}} />
                   </PieChart>
                 </ResponsiveContainer>
-             ) : <div className="h-full flex items-center justify-center text-slate-500">Belum ada data hari ini</div>}
+             ) : <div className="h-full flex items-center justify-center text-slate-500 font-medium text-sm">Belum ada data hari ini</div>}
           </div>
         </div>
       </div>
@@ -1053,109 +1068,114 @@ const AdminStudents: React.FC = () => {
     <div className="space-y-6 animate-in fade-in duration-500 h-full flex flex-col w-full relative">
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div>
-          <h2 className="text-2xl font-bold text-white">Data Mahasiswa</h2>
-          <p className="text-slate-400 text-sm">Kelola daftar dan cetak Kartu QR Mahasiswa (KTM)</p>
+          <h2 className="text-2xl md:text-3xl font-black text-white tracking-tight">Data Mahasiswa</h2>
+          <p className="text-slate-400 text-sm md:text-base mt-1">Kelola daftar akun dan cetak Kartu QR (KTM)</p>
         </div>
-        <div className="flex gap-2">
-           <label className="flex items-center gap-2 px-4 py-2 bg-purple-500/20 text-purple-400 hover:bg-purple-500/30 border border-purple-500/50 rounded-xl transition-colors font-medium cursor-pointer">
+        <div className="flex flex-col sm:flex-row gap-2 md:gap-3 w-full md:w-auto">
+           <label className="flex flex-1 md:flex-none justify-center items-center gap-2 px-5 py-3 bg-purple-500/10 text-purple-400 hover:bg-purple-500/20 border border-purple-500/30 rounded-xl transition-all duration-300 font-bold cursor-pointer active:scale-95 shadow-sm">
               <Upload className="w-4 h-4" /> Bulk Upload (CSV)
               <input type="file" accept=".csv, .txt" className="hidden" onChange={handleBulkUpload} />
            </label>
-           <button onClick={() => setIsAdding(!isAdding)} className="flex items-center gap-2 px-4 py-2 bg-cyan-500/20 text-cyan-400 hover:bg-cyan-500/30 border border-cyan-500/50 rounded-xl transition-colors font-medium">
+           <button onClick={() => setIsAdding(!isAdding)} className="flex flex-1 md:flex-none justify-center items-center gap-2 px-5 py-3 bg-cyan-500/10 text-cyan-400 hover:bg-cyan-500/20 border border-cyan-500/30 rounded-xl transition-all duration-300 font-bold active:scale-95 shadow-sm">
              <Plus className="w-4 h-4" /> Tambah Manual
            </button>
         </div>
       </div>
 
       {isAdding && (
-        <form onSubmit={handleAdd} className="bg-white/5 border border-cyan-500/30 p-6 rounded-2xl grid grid-cols-1 md:grid-cols-4 gap-4 items-end animate-in slide-in-from-top-4">
-          <div className="space-y-1">
-            <label className="text-xs text-slate-400">Nama Lengkap</label>
-            <input required type="text" value={newS.name} onChange={e=>setNewS({...newS, name: e.target.value})} className="w-full bg-slate-900/50 border border-white/10 rounded-xl px-4 py-2.5 text-white outline-none focus:border-cyan-500" placeholder="Contoh: Budi Santoso" />
+        <form onSubmit={handleAdd} className="bg-white/5 backdrop-blur-md border border-cyan-500/30 p-5 md:p-6 rounded-[1.5rem] grid grid-cols-1 md:grid-cols-4 gap-4 items-end animate-in slide-in-from-top-4 shadow-xl">
+          <div className="space-y-1.5">
+            <label className="text-[10px] md:text-xs text-slate-400 font-bold uppercase tracking-widest ml-1">Nama Lengkap</label>
+            <input required type="text" value={newS.name} onChange={e=>setNewS({...newS, name: e.target.value})} className="w-full bg-slate-900/50 border border-white/10 rounded-xl px-4 py-3 text-white outline-none focus:border-cyan-500 transition-colors text-sm" placeholder="Contoh: Budi Santoso" />
           </div>
-          <div className="space-y-1">
-            <label className="text-xs text-slate-400">NIM</label>
-            <input required type="text" value={newS.nim} onChange={e=>setNewS({...newS, nim: e.target.value})} className="w-full bg-slate-900/50 border border-white/10 rounded-xl px-4 py-2.5 text-white outline-none focus:border-cyan-500" placeholder="Nomor Induk..." />
+          <div className="space-y-1.5">
+            <label className="text-[10px] md:text-xs text-slate-400 font-bold uppercase tracking-widest ml-1">NIM</label>
+            <input required type="text" value={newS.nim} onChange={e=>setNewS({...newS, nim: e.target.value})} className="w-full bg-slate-900/50 border border-white/10 rounded-xl px-4 py-3 text-white outline-none focus:border-cyan-500 transition-colors text-sm" placeholder="Nomor Induk..." />
           </div>
-          <div className="space-y-1">
-            <label className="text-xs text-slate-400">Password (Opsional)</label>
-            <input type="text" value={newS.password} onChange={e=>setNewS({...newS, password: e.target.value})} className="w-full bg-slate-900/50 border border-white/10 rounded-xl px-4 py-2.5 text-white outline-none focus:border-cyan-500" placeholder="Default: [NIM]123" />
+          <div className="space-y-1.5">
+            <label className="text-[10px] md:text-xs text-slate-400 font-bold uppercase tracking-widest ml-1">Password (Opsional)</label>
+            <input type="text" value={newS.password} onChange={e=>setNewS({...newS, password: e.target.value})} className="w-full bg-slate-900/50 border border-white/10 rounded-xl px-4 py-3 text-white outline-none focus:border-cyan-500 transition-colors text-sm" placeholder="Default: [NIM]123" />
           </div>
-          <button type="submit" className="w-full py-2.5 bg-cyan-600 hover:bg-cyan-500 text-white font-bold rounded-xl transition-all">Simpan Mhs</button>
+          <button type="submit" className="w-full py-3 bg-cyan-600 hover:bg-cyan-500 text-white font-bold rounded-xl transition-all duration-300 shadow-lg active:scale-95">Simpan Data</button>
         </form>
       )}
 
-      <input type="text" placeholder="Cari Nama / NIM..." value={search} onChange={e=>setSearch(e.target.value)} className="w-full max-w-md bg-slate-900/50 border border-white/10 rounded-xl px-4 py-2.5 text-white outline-none focus:border-cyan-500" />
+      <div className="relative w-full max-w-md">
+         <SearchIcon className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
+         <input type="text" placeholder="Cari Nama / NIM..." value={search} onChange={e=>setSearch(e.target.value)} className="w-full bg-slate-900/50 border border-white/10 rounded-xl pl-10 pr-4 py-3.5 text-white outline-none focus:border-cyan-500 transition-colors shadow-inner text-sm" />
+      </div>
 
-      <div className="flex-1 bg-white/5 border border-white/10 rounded-2xl overflow-hidden flex flex-col">
+      <div className="flex-1 bg-white/5 backdrop-blur-md border border-white/10 rounded-[1.5rem] overflow-hidden flex flex-col shadow-xl relative">
         <div className="overflow-x-auto">
-          <table className="w-full text-left border-collapse">
+          <table className="w-full text-left border-collapse min-w-[700px]">
             <thead>
-              <tr className="bg-white/5 border-b border-white/10 text-slate-400 text-sm">
-                <th className="p-4 font-medium">NIM</th>
-                <th className="p-4 font-medium">Nama Lengkap</th>
-                <th className="p-4 font-medium">Password Aktif</th>
-                <th className="p-4 font-medium text-center">Status Device</th>
-                <th className="p-4 font-medium text-right">Aksi</th>
+              <tr className="bg-slate-900/80 border-b border-white/10 text-slate-400 text-xs md:text-sm tracking-wide uppercase font-bold">
+                <th className="p-4 md:p-5 whitespace-nowrap">NIM</th>
+                <th className="p-4 md:p-5 whitespace-nowrap">Nama Lengkap</th>
+                <th className="p-4 md:p-5 whitespace-nowrap">Password Aktif</th>
+                <th className="p-4 md:p-5 text-center whitespace-nowrap">Status Device</th>
+                <th className="p-4 md:p-5 text-right whitespace-nowrap">Aksi</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-white/5">
               {filtered.map(st => (
-                <tr key={st.id} className="hover:bg-white/5 transition-colors text-slate-200">
-                  <td className="p-4 font-mono">{st.nim}</td>
-                  <td className="p-4 font-medium">{st.name}</td>
-                  <td className="p-4"><span className="text-xs bg-slate-800 px-2 py-1 rounded border border-white/10 font-mono text-slate-400">{st.password}</span></td>
-                  <td className="p-4 text-center">
+                <tr key={st.id} className="hover:bg-white/5 transition-colors duration-200 text-slate-200 group">
+                  <td className="p-4 md:p-5 font-mono text-sm">{st.nim}</td>
+                  <td className="p-4 md:p-5 font-bold text-sm md:text-base">{st.name}</td>
+                  <td className="p-4 md:p-5"><span className="text-[10px] md:text-xs bg-slate-800/80 px-2.5 py-1.5 rounded-md border border-white/10 font-mono text-slate-300">{st.password}</span></td>
+                  <td className="p-4 md:p-5 text-center">
                     {st.deviceId ? (
-                      <span className="inline-flex items-center gap-1.5 px-2 py-1 rounded bg-emerald-500/10 text-emerald-400 text-[10px] font-bold border border-emerald-500/20"><CheckCircle2 className="w-3 h-3"/> Tertaut</span>
+                      <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-emerald-500/10 text-emerald-400 text-[10px] md:text-xs font-bold border border-emerald-500/20 shadow-sm"><CheckCircle2 className="w-3.5 h-3.5"/> Tertaut</span>
                     ) : (
-                      <span className="inline-flex items-center gap-1.5 px-2 py-1 rounded bg-slate-800 text-slate-400 text-[10px] font-bold border border-white/10">Belum Tertaut</span>
+                      <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-slate-800/80 text-slate-400 text-[10px] md:text-xs font-bold border border-white/10 shadow-sm">Belum Tertaut</span>
                     )}
                   </td>
-                  <td className="p-4 text-right flex justify-end gap-2">
+                  <td className="p-4 md:p-5 text-right flex justify-end gap-2 md:gap-3">
                     {st.deviceId && (
-                      <button onClick={() => handleUnlinkDevice(st.id, st.name)} title="Reset/Logout Perangkat Tertaut" className="p-1.5 text-amber-400 hover:bg-amber-400/10 rounded-lg transition-colors border border-amber-400/20 bg-amber-400/5">
+                      <button onClick={() => handleUnlinkDevice(st.id, st.name)} title="Reset/Logout Perangkat Tertaut" className="p-2 md:p-2.5 text-amber-400 hover:text-white rounded-xl transition-all duration-300 border border-amber-400/20 bg-amber-400/5 hover:bg-amber-500 shadow-sm hover:shadow-lg hover:-translate-y-0.5 active:scale-95">
                          <RefreshCcw className="w-4 h-4" />
                       </button>
                     )}
-                    <button onClick={() => setEditingStudent(st)} title="Edit Data Akun" className="p-1.5 text-blue-400 hover:bg-blue-400/10 rounded-lg transition-colors border border-blue-400/20 bg-blue-400/5">
+                    <button onClick={() => setEditingStudent(st)} title="Edit Data Akun" className="p-2 md:p-2.5 text-blue-400 hover:text-white rounded-xl transition-all duration-300 border border-blue-400/20 bg-blue-400/5 hover:bg-blue-500 shadow-sm hover:shadow-lg hover:-translate-y-0.5 active:scale-95">
                        <Settings className="w-4 h-4" />
                     </button>
-                    <button onClick={() => setSelectedStudentForKTM(st)} title="Cetak KTM" className="px-3 py-1.5 text-xs text-cyan-400 bg-cyan-400/10 border border-cyan-400/20 hover:bg-cyan-400/20 rounded-lg transition-colors flex items-center gap-1">
-                      <CreditCard className="w-3 h-3"/> KTM
+                    <button onClick={() => setSelectedStudentForKTM(st)} title="Cetak KTM" className="px-3 md:px-4 py-2 md:py-2.5 text-xs font-bold text-cyan-400 bg-cyan-400/10 border border-cyan-400/20 hover:bg-cyan-500 hover:text-white rounded-xl transition-all duration-300 flex items-center gap-2 shadow-sm hover:shadow-lg hover:-translate-y-0.5 active:scale-95">
+                      <CreditCard className="w-4 h-4"/> <span className="hidden md:inline">KTM</span>
                     </button>
-                    <button onClick={() => deleteStudent(st.id)} title="Hapus Data" className="p-1.5 text-slate-400 hover:text-rose-400 hover:bg-rose-400/10 rounded-lg transition-colors border border-transparent hover:border-rose-400/20"><Trash2 className="w-4 h-4" /></button>
+                    <button onClick={() => deleteStudent(st.id)} title="Hapus Data" className="p-2 md:p-2.5 text-slate-500 hover:text-white hover:bg-rose-500 rounded-xl transition-all duration-300 border border-transparent hover:border-rose-500/50 hover:shadow-lg hover:-translate-y-0.5 active:scale-95">
+                      <Trash2 className="w-4 h-4" />
+                    </button>
                   </td>
                 </tr>
               ))}
-              {filtered.length === 0 && <tr><td colSpan={5} className="p-8 text-center text-slate-500">Belum ada data mahasiswa terdaftar.</td></tr>}
+              {filtered.length === 0 && <tr><td colSpan={5} className="p-10 text-center text-slate-500 font-medium">Belum ada data mahasiswa yang terdaftar.</td></tr>}
             </tbody>
           </table>
         </div>
       </div>
 
       {editingStudent && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-in fade-in zoom-in-95 duration-200">
-           <form onSubmit={handleUpdate} className="bg-slate-900 border border-white/10 p-6 rounded-3xl w-full max-w-md shadow-2xl relative">
-              <div className="flex justify-between items-center mb-6">
-                 <h3 className="text-xl font-bold text-white">Edit Akun Mahasiswa</h3>
-                 <button type="button" onClick={() => setEditingStudent(null)} className="p-1 text-slate-400 hover:text-white transition-colors"><X className="w-5 h-5"/></button>
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-md p-4 animate-in fade-in zoom-in-95 duration-200">
+           <form onSubmit={handleUpdate} className="bg-slate-900 border border-white/10 p-6 md:p-8 rounded-[2rem] w-full max-w-md shadow-2xl relative">
+              <div className="flex justify-between items-center mb-6 md:mb-8">
+                 <h3 className="text-xl md:text-2xl font-black text-white tracking-tight">Edit Akun Mahasiswa</h3>
+                 <button type="button" onClick={() => setEditingStudent(null)} className="p-2 bg-white/5 hover:bg-rose-500/20 hover:text-rose-400 rounded-full transition-colors text-slate-400"><X className="w-5 h-5"/></button>
               </div>
-              <div className="space-y-4">
-                 <div className="space-y-1">
-                    <label className="text-xs text-slate-400">Nama Lengkap</label>
-                    <input required type="text" value={editingStudent.name} onChange={e=>setEditingStudent({...editingStudent, name: e.target.value})} className="w-full bg-slate-950 border border-white/10 rounded-xl px-4 py-3 text-white outline-none focus:border-blue-500" />
+              <div className="space-y-4 md:space-y-5">
+                 <div className="space-y-1.5">
+                    <label className="text-[10px] md:text-xs text-slate-400 font-bold uppercase tracking-widest ml-1">Nama Lengkap</label>
+                    <input required type="text" value={editingStudent.name} onChange={e=>setEditingStudent({...editingStudent, name: e.target.value})} className="w-full bg-slate-950/50 border border-white/10 rounded-xl px-4 py-3.5 text-white outline-none focus:border-blue-500 transition-colors shadow-inner text-sm" />
                  </div>
-                 <div className="space-y-1">
-                    <label className="text-xs text-slate-400">NIM</label>
-                    <input required type="text" value={editingStudent.nim} onChange={e=>setEditingStudent({...editingStudent, nim: e.target.value})} className="w-full bg-slate-950 border border-white/10 rounded-xl px-4 py-3 text-white outline-none focus:border-blue-500" />
+                 <div className="space-y-1.5">
+                    <label className="text-[10px] md:text-xs text-slate-400 font-bold uppercase tracking-widest ml-1">NIM</label>
+                    <input required type="text" value={editingStudent.nim} onChange={e=>setEditingStudent({...editingStudent, nim: e.target.value})} className="w-full bg-slate-950/50 border border-white/10 rounded-xl px-4 py-3.5 text-white outline-none focus:border-blue-500 transition-colors shadow-inner text-sm" />
                  </div>
-                 <div className="space-y-1">
-                    <label className="text-xs text-slate-400">Password</label>
-                    <input required type="text" value={editingStudent.password || ''} onChange={e=>setEditingStudent({...editingStudent, password: e.target.value})} className="w-full bg-slate-950 border border-white/10 rounded-xl px-4 py-3 text-white outline-none focus:border-blue-500" />
+                 <div className="space-y-1.5">
+                    <label className="text-[10px] md:text-xs text-slate-400 font-bold uppercase tracking-widest ml-1">Password</label>
+                    <input required type="text" value={editingStudent.password || ''} onChange={e=>setEditingStudent({...editingStudent, password: e.target.value})} className="w-full bg-slate-950/50 border border-white/10 rounded-xl px-4 py-3.5 text-white outline-none focus:border-blue-500 transition-colors shadow-inner text-sm" />
                  </div>
-                 <button type="submit" className="w-full py-3.5 mt-2 bg-blue-600 hover:bg-blue-500 text-white font-bold rounded-xl transition-all shadow-[0_0_15px_rgba(59,130,246,0.3)]">
-                    Simpan Perubahan
+                 <button type="submit" className="w-full py-4 mt-4 bg-blue-600 hover:bg-blue-500 text-white font-bold rounded-2xl transition-all duration-300 shadow-[0_10px_20px_rgba(37,99,235,0.3)] active:scale-95">
+                    Simpan Perubahan Database
                  </button>
               </div>
            </form>
@@ -1163,7 +1183,7 @@ const AdminStudents: React.FC = () => {
       )}
 
       {selectedStudentForKTM && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/90 backdrop-blur-md p-4 animate-in fade-in zoom-in-95 duration-200">
           <style>{`
             @media print {
               body * { visibility: hidden; }
@@ -1171,38 +1191,38 @@ const AdminStudents: React.FC = () => {
               #ktm-print-area { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); margin: 0; }
             }
           `}</style>
-          <div className="bg-slate-900 border border-white/10 p-6 rounded-3xl w-[400px] shadow-2xl relative z-50">
+          <div className="bg-slate-900 border border-white/10 p-6 md:p-8 rounded-[2rem] w-full max-w-[450px] shadow-2xl relative z-50">
             <div className="flex justify-between items-center mb-6">
-              <h3 className="text-lg font-bold text-white">Preview Kartu KTM</h3>
-              <button onClick={() => setSelectedStudentForKTM(null)} className="p-1 bg-white/10 hover:bg-white/20 rounded-full transition-colors text-white"><X className="w-5 h-5"/></button>
+              <h3 className="text-xl md:text-2xl font-black text-white tracking-tight">Preview KTM Cetak</h3>
+              <button onClick={() => setSelectedStudentForKTM(null)} className="p-2 bg-white/10 hover:bg-rose-500/20 hover:text-rose-400 rounded-full transition-colors text-white"><X className="w-5 h-5"/></button>
             </div>
             
-            <div id="ktm-print-area" className="w-[340px] h-[540px] mx-auto bg-gradient-to-br from-cyan-600 to-purple-800 rounded-[2rem] p-6 relative overflow-hidden shadow-2xl flex flex-col items-center justify-between border-4 border-white/10">
-               <div className="absolute top-[-50px] right-[-50px] w-48 h-48 bg-white/10 rounded-full blur-2xl"></div>
-               <div className="absolute bottom-[-50px] left-[-50px] w-48 h-48 bg-black/20 rounded-full blur-2xl"></div>
+            <div id="ktm-print-area" className="w-[320px] md:w-[340px] h-[500px] md:h-[540px] mx-auto bg-gradient-to-br from-cyan-600 to-purple-800 rounded-[2rem] p-6 relative overflow-hidden shadow-2xl flex flex-col items-center justify-between border-[5px] border-white/10">
+               <div className="absolute top-[-50px] right-[-50px] w-48 h-48 bg-white/20 rounded-full blur-3xl"></div>
+               <div className="absolute bottom-[-50px] left-[-50px] w-48 h-48 bg-black/40 rounded-full blur-3xl"></div>
                
-               <div className="text-center relative z-10 w-full mt-4">
-                 <div className="w-16 h-16 bg-white rounded-2xl flex items-center justify-center mx-auto mb-3 shadow-[0_10px_20px_rgba(0,0,0,0.3)] p-2 overflow-hidden">
+               <div className="text-center relative z-10 w-full mt-2 md:mt-4">
+                 <div className="w-14 h-14 md:w-16 md:h-16 bg-white rounded-2xl flex items-center justify-center mx-auto mb-3 shadow-[0_10px_30px_rgba(0,0,0,0.4)] p-2 md:p-2.5 overflow-hidden">
                    <img src="/axalogo.png" alt="AXAXYZ Logo" className="w-full h-full object-contain" onError={(e) => { e.currentTarget.style.display = 'none'; e.currentTarget.nextElementSibling?.classList.remove('hidden'); }} />
-                   <span className="font-bold text-slate-900 text-3xl hidden">A.</span>
+                   <span className="font-black text-slate-900 text-3xl hidden">A.</span>
                  </div>
-                 <h2 className="text-white font-black tracking-widest text-lg drop-shadow-md">AXAXYZ UNIVERSITY</h2>
-                 <p className="text-cyan-200 text-[10px] tracking-[0.2em] font-bold uppercase mt-1 opacity-90">Kartu Tanda Mahasiswa</p>
+                 <h2 className="text-white font-black tracking-widest text-base md:text-lg drop-shadow-md">AXAXYZ UNIVERSITY</h2>
+                 <p className="text-cyan-200 text-[9px] md:text-[10px] tracking-[0.2em] font-bold uppercase mt-1 md:mt-1.5 opacity-90">Kartu Tanda Mahasiswa</p>
                </div>
 
-               <div className="bg-white p-3.5 rounded-2xl relative z-10 shadow-[0_10px_30px_rgba(0,0,0,0.5)]">
-                  <img src={`https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${selectedStudentForKTM.nim}&margin=0`} alt="QR Code" className="w-40 h-40" />
+               <div className="bg-white p-3 md:p-4 rounded-2xl relative z-10 shadow-[0_15px_40px_rgba(0,0,0,0.6)] hover:scale-105 transition-transform duration-500">
+                  <img src={`https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${selectedStudentForKTM.nim}&margin=0`} alt="QR Code" className="w-36 h-36 md:w-40 md:h-40" />
                </div>
 
-               <div className="text-center relative z-10 w-full bg-black/40 p-5 rounded-2xl backdrop-blur-md border border-white/10 mb-2">
-                 <h1 className="text-xl font-bold text-white uppercase leading-tight mb-1">{selectedStudentForKTM.name}</h1>
-                 <div className="h-px w-12 bg-cyan-500 mx-auto my-2"></div>
-                 <p className="text-cyan-300 font-mono text-xl tracking-[0.1em] font-bold">{selectedStudentForKTM.nim}</p>
+               <div className="text-center relative z-10 w-full bg-black/40 p-4 md:p-5 rounded-[1.5rem] backdrop-blur-md border border-white/10 mb-2">
+                 <h1 className="text-lg md:text-xl font-black text-white uppercase leading-tight mb-1 truncate px-2">{selectedStudentForKTM.name}</h1>
+                 <div className="h-1 w-12 bg-cyan-500 mx-auto my-2.5 rounded-full"></div>
+                 <p className="text-cyan-300 font-mono text-lg md:text-xl tracking-[0.1em] font-bold">{selectedStudentForKTM.nim}</p>
                </div>
             </div>
 
-            <button onClick={() => window.print()} className="w-full mt-8 py-3.5 bg-white hover:bg-slate-200 text-slate-900 font-bold rounded-xl flex items-center justify-center gap-2 transition-colors">
-              <Printer className="w-5 h-5" /> Cetak (Print) Sekarang
+            <button onClick={() => window.print()} className="w-full mt-8 py-4 bg-white hover:bg-slate-200 text-slate-900 font-black rounded-2xl flex items-center justify-center gap-3 transition-all duration-300 shadow-xl active:scale-95 text-base uppercase tracking-wider">
+              <Printer className="w-5 h-5" /> Cetak KTM Sekarang
             </button>
           </div>
         </div>
@@ -1216,7 +1236,6 @@ const AdminGeofence: React.FC = () => {
   const [lat, setLat] = useState(geofence.lat.toString());
   const [lng, setLng] = useState(geofence.lng.toString());
   const [radius, setRadius] = useState(geofence.radius.toString());
-  // UPGRADE: Location Name State
   const [locationName, setLocationName] = useState(geofence.name || 'Kampus Utama');
 
   const handleSave = (e: React.FormEvent) => {
@@ -1235,46 +1254,46 @@ const AdminGeofence: React.FC = () => {
   };
 
   return (
-    <div className="space-y-6 animate-in fade-in duration-500 max-w-2xl">
+    <div className="space-y-6 animate-in fade-in duration-500 max-w-3xl">
       <div>
-        <h2 className="text-2xl font-bold text-white">Pengaturan Lokasi Kampus</h2>
-        <p className="text-slate-400 text-sm">Tentukan pusat koordinat absensi dan batas radius (Geofencing).</p>
+        <h2 className="text-2xl md:text-3xl font-black text-white tracking-tight">Pengaturan Geofencing Kampus</h2>
+        <p className="text-slate-400 text-sm md:text-base mt-1">Tentukan pusat titik koordinat dan batas radius maksimal absensi.</p>
       </div>
 
-      <form onSubmit={handleSave} className="bg-white/5 border border-white/10 p-6 rounded-2xl space-y-6">
-        <div className="p-4 bg-cyan-500/10 border border-cyan-500/20 rounded-xl flex items-start gap-3">
-          <Navigation className="w-5 h-5 text-cyan-400 mt-0.5" />
-          <p className="text-sm text-cyan-200">Mahasiswa hanya dapat melakukan absensi jika jarak GPS mereka berada di dalam <b>Radius Absensi</b> yang dihitung dari titik Latitude & Longitude di bawah ini.</p>
+      <form onSubmit={handleSave} className="bg-white/5 backdrop-blur-md border border-white/10 p-6 md:p-8 rounded-[2rem] space-y-6 md:space-y-8 shadow-xl">
+        <div className="p-4 md:p-5 bg-cyan-500/10 border border-cyan-500/20 rounded-2xl flex items-start gap-3 md:gap-4 shadow-inner">
+          <Navigation className="w-6 h-6 text-cyan-400 mt-0.5 shrink-0" />
+          <p className="text-sm text-cyan-100/90 leading-relaxed font-medium">Mahasiswa hanya dapat melakukan absensi jika jarak GPS mereka secara *real-time* berada di dalam <b>Radius Absensi</b> yang dihitung dari titik Latitude & Longitude di bawah ini.</p>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div className="space-y-1 md:col-span-2">
-             <label className="text-xs text-slate-400 font-semibold uppercase">Nama Area Absensi</label>
-             <input required type="text" value={locationName} onChange={e=>setLocationName(e.target.value)} className="w-full bg-slate-900/50 border border-white/10 rounded-xl px-4 py-3 text-white outline-none focus:border-cyan-500" placeholder="Contoh: Gedung A Kampus" />
-             <p className="text-xs text-slate-500 mt-1">Nama ini akan muncul pada notifikasi error saat Mahasiswa berada di luar batas.</p>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-5 md:gap-6">
+          <div className="space-y-1.5 md:col-span-2">
+             <label className="text-[10px] md:text-xs text-slate-400 font-bold uppercase tracking-widest ml-1">Nama Area Absensi (Pesan Error)</label>
+             <input required type="text" value={locationName} onChange={e=>setLocationName(e.target.value)} className="w-full bg-slate-900/50 border border-white/10 rounded-xl px-4 py-3.5 text-white outline-none focus:border-cyan-500 transition-colors shadow-inner text-sm" placeholder="Contoh: Gedung A Kampus" />
+             <p className="text-[10px] md:text-xs text-slate-500 mt-1.5 ml-1">Nama ini akan muncul pada notifikasi error saat Mahasiswa berada di luar batas.</p>
           </div>
-          <div className="space-y-1">
-            <label className="text-xs text-slate-400 font-semibold uppercase">Latitude (Garis Lintang)</label>
-            <input required type="number" step="any" value={lat} onChange={e=>setLat(e.target.value)} className="w-full bg-slate-900/50 border border-white/10 rounded-xl px-4 py-3 text-white outline-none focus:border-cyan-500 font-mono" />
+          <div className="space-y-1.5">
+            <label className="text-[10px] md:text-xs text-slate-400 font-bold uppercase tracking-widest ml-1">Latitude (Lintang)</label>
+            <input required type="number" step="any" value={lat} onChange={e=>setLat(e.target.value)} className="w-full bg-slate-900/50 border border-white/10 rounded-xl px-4 py-3.5 text-white outline-none focus:border-cyan-500 transition-colors shadow-inner font-mono text-sm" />
           </div>
-          <div className="space-y-1">
-            <label className="text-xs text-slate-400 font-semibold uppercase">Longitude (Garis Bujur)</label>
-            <input required type="number" step="any" value={lng} onChange={e=>setLng(e.target.value)} className="w-full bg-slate-900/50 border border-white/10 rounded-xl px-4 py-3 text-white outline-none focus:border-cyan-500 font-mono" />
+          <div className="space-y-1.5">
+            <label className="text-[10px] md:text-xs text-slate-400 font-bold uppercase tracking-widest ml-1">Longitude (Bujur)</label>
+            <input required type="number" step="any" value={lng} onChange={e=>setLng(e.target.value)} className="w-full bg-slate-900/50 border border-white/10 rounded-xl px-4 py-3.5 text-white outline-none focus:border-cyan-500 transition-colors shadow-inner font-mono text-sm" />
           </div>
         </div>
 
-        <div className="space-y-1">
-           <label className="text-xs text-slate-400 font-semibold uppercase">Radius Absensi (Dalam Meter)</label>
-           <input required type="number" min="10" value={radius} onChange={e=>setRadius(e.target.value)} className="w-full bg-slate-900/50 border border-white/10 rounded-xl px-4 py-3 text-white outline-none focus:border-cyan-500 font-mono" />
-           <p className="text-xs text-slate-500 mt-1">Rekomendasi: 500 - 1000 meter untuk area kampus.</p>
+        <div className="space-y-1.5">
+           <label className="text-[10px] md:text-xs text-slate-400 font-bold uppercase tracking-widest ml-1">Radius Maksimal Absensi (Meter)</label>
+           <input required type="number" min="10" value={radius} onChange={e=>setRadius(e.target.value)} className="w-full bg-slate-900/50 border border-white/10 rounded-xl px-4 py-3.5 text-white outline-none focus:border-cyan-500 transition-colors shadow-inner font-mono text-sm md:text-base" />
+           <p className="text-[10px] md:text-xs text-slate-500 mt-1.5 ml-1">Rekomendasi keamanan: 500 - 1000 meter dari titik pusat gedung.</p>
         </div>
 
-        <div className="flex gap-4 pt-4 border-t border-white/5">
-          <button type="button" onClick={getMyLocation} className="px-6 py-3 bg-white/5 hover:bg-white/10 border border-white/10 text-white font-medium rounded-xl transition-all flex items-center gap-2">
-            <MapPin className="w-4 h-4" /> Gunakan Lokasi Saya Saat Ini
+        <div className="flex flex-col md:flex-row gap-3 md:gap-4 pt-6 border-t border-white/5">
+          <button type="button" onClick={getMyLocation} className="w-full md:w-auto px-6 py-4 bg-white/5 hover:bg-white/10 border border-white/10 text-white font-bold rounded-xl transition-all duration-300 flex items-center justify-center gap-2 active:scale-95 shadow-sm">
+            <MapPin className="w-5 h-5" /> Gunakan Lokasi Saat Ini
           </button>
-          <button type="submit" className="flex-1 py-3 bg-gradient-to-r from-cyan-500 to-purple-600 hover:from-cyan-400 hover:to-purple-500 text-white font-bold rounded-xl transition-all shadow-[0_0_15px_rgba(6,182,212,0.2)]">
-            Simpan & Sync Konfigurasi
+          <button type="submit" className="w-full md:flex-1 py-4 bg-gradient-to-r from-cyan-500 to-purple-600 hover:from-cyan-400 hover:to-purple-500 text-white font-bold rounded-xl transition-all duration-300 shadow-[0_10px_20px_rgba(6,182,212,0.2)] active:scale-95">
+            Simpan & Sinkronisasi Cloud
           </button>
         </div>
       </form>
@@ -1293,34 +1312,34 @@ const AdminSettings: React.FC = () => {
 
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
-      <div className="flex justify-between items-center">
-        <div><h2 className="text-2xl font-bold text-white">Manajemen Sesi</h2><p className="text-slate-400 text-sm">Atur jadwal shift absensi.</p></div>
-        <button onClick={() => setIsAdding(!isAdding)} className="flex items-center gap-2 px-4 py-2 bg-cyan-500/20 text-cyan-400 hover:bg-cyan-500/30 border border-cyan-500/50 rounded-xl transition-colors font-medium"><Plus className="w-4 h-4" /> Tambah Sesi</button>
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+        <div><h2 className="text-2xl md:text-3xl font-black text-white tracking-tight">Manajemen Sesi Waktu</h2><p className="text-slate-400 text-sm md:text-base mt-1">Atur jadwal *shift* dan toleransi keterlambatan sistem.</p></div>
+        <button onClick={() => setIsAdding(!isAdding)} className="flex items-center gap-2 px-5 py-3 bg-cyan-500/10 text-cyan-400 hover:bg-cyan-500/20 hover:text-cyan-300 border border-cyan-500/30 rounded-xl transition-all duration-300 font-bold active:scale-95 shadow-sm w-full md:w-auto justify-center"><Plus className="w-5 h-5" /> Tambah Sesi Shift</button>
       </div>
 
       {isAdding && (
-        <form onSubmit={handleAdd} className="bg-white/5 border border-cyan-500/30 p-6 rounded-2xl grid grid-cols-1 md:grid-cols-5 gap-4 items-end animate-in slide-in-from-top-4">
-          <div className="space-y-1"><label className="text-xs text-slate-400">Nama Sesi</label><input required type="text" value={newSess.name} onChange={e=>setNewSess({...newSess, name: e.target.value})} className="w-full bg-slate-900/50 border border-white/10 rounded-xl px-4 py-2.5 text-white outline-none focus:border-cyan-500" placeholder="e.g. Kuliah Malam" /></div>
-          <div className="space-y-1"><label className="text-xs text-slate-400">Jam Mulai</label><input required type="time" value={newSess.startTime} onChange={e=>setNewSess({...newSess, startTime: e.target.value})} className="w-full bg-slate-900/50 border border-white/10 rounded-xl px-4 py-2.5 text-white outline-none focus:border-cyan-500" /></div>
-          <div className="space-y-1"><label className="text-xs text-slate-400">Jam Selesai</label><input required type="time" value={newSess.endTime} onChange={e=>setNewSess({...newSess, endTime: e.target.value})} className="w-full bg-slate-900/50 border border-white/10 rounded-xl px-4 py-2.5 text-white outline-none focus:border-cyan-500" /></div>
-          <div className="space-y-1"><label className="text-xs text-slate-400">Toleransi (Menit)</label><input required type="number" min="0" value={newSess.toleranceMinutes} onChange={e=>setNewSess({...newSess, toleranceMinutes: parseInt(e.target.value)})} className="w-full bg-slate-900/50 border border-white/10 rounded-xl px-4 py-2.5 text-white outline-none focus:border-cyan-500" /></div>
-          <button type="submit" className="w-full py-2.5 bg-cyan-600 hover:bg-cyan-500 text-white font-bold rounded-xl transition-all">Simpan & Sync</button>
+        <form onSubmit={handleAdd} className="bg-white/5 backdrop-blur-md border border-cyan-500/30 p-5 md:p-6 rounded-[1.5rem] grid grid-cols-1 md:grid-cols-5 gap-4 md:gap-5 items-end animate-in slide-in-from-top-4 shadow-xl">
+          <div className="space-y-1.5"><label className="text-[10px] md:text-xs text-slate-400 font-bold uppercase tracking-widest ml-1">Nama Sesi</label><input required type="text" value={newSess.name} onChange={e=>setNewSess({...newSess, name: e.target.value})} className="w-full bg-slate-900/50 border border-white/10 rounded-xl px-4 py-3 text-white outline-none focus:border-cyan-500 transition-colors shadow-inner text-sm" placeholder="e.g. Kuliah Pagi" /></div>
+          <div className="space-y-1.5"><label className="text-[10px] md:text-xs text-slate-400 font-bold uppercase tracking-widest ml-1">Jam Buka</label><input required type="time" value={newSess.startTime} onChange={e=>setNewSess({...newSess, startTime: e.target.value})} className="w-full bg-slate-900/50 border border-white/10 rounded-xl px-4 py-3 text-white outline-none focus:border-cyan-500 transition-colors shadow-inner text-sm font-mono" /></div>
+          <div className="space-y-1.5"><label className="text-[10px] md:text-xs text-slate-400 font-bold uppercase tracking-widest ml-1">Jam Tutup</label><input required type="time" value={newSess.endTime} onChange={e=>setNewSess({...newSess, endTime: e.target.value})} className="w-full bg-slate-900/50 border border-white/10 rounded-xl px-4 py-3 text-white outline-none focus:border-cyan-500 transition-colors shadow-inner text-sm font-mono" /></div>
+          <div className="space-y-1.5"><label className="text-[10px] md:text-xs text-slate-400 font-bold uppercase tracking-widest ml-1">Toleransi (Menit)</label><input required type="number" min="0" value={newSess.toleranceMinutes} onChange={e=>setNewSess({...newSess, toleranceMinutes: parseInt(e.target.value)})} className="w-full bg-slate-900/50 border border-white/10 rounded-xl px-4 py-3 text-white outline-none focus:border-cyan-500 transition-colors shadow-inner text-sm font-mono" /></div>
+          <button type="submit" className="w-full py-3 bg-cyan-600 hover:bg-cyan-500 text-white font-bold rounded-xl transition-all duration-300 shadow-lg active:scale-95">Simpan & Sync</button>
         </form>
       )}
 
-      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-5">
         {sessions.map(session => (
-          <div key={session.id} className={cn("p-5 rounded-2xl border transition-colors", session.isActive ? "bg-white/5 border-white/10" : "bg-white/5 opacity-50 border-white/5")}>
-            <div className="flex justify-between items-start mb-4">
-              <h3 className="text-lg font-bold text-white">{session.name}</h3>
+          <div key={session.id} className={cn("p-5 md:p-6 rounded-[1.5rem] border transition-all duration-300 hover:shadow-lg hover:-translate-y-1 group", session.isActive ? "bg-white/5 border-white/10 hover:border-cyan-500/30 backdrop-blur-md" : "bg-black/30 opacity-60 border-white/5 hover:opacity-100")}>
+            <div className="flex justify-between items-start mb-5">
+              <h3 className="text-xl font-black text-white">{session.name}</h3>
               <div className="flex gap-2">
-                <button onClick={() => updateSession(session.id, { isActive: !session.isActive })} className={cn("px-3 py-1 text-xs font-semibold rounded-full border", session.isActive ? "bg-emerald-500/20 text-emerald-400 border-emerald-500/30" : "bg-slate-500/20 text-slate-400 border-slate-500/30")}>{session.isActive ? 'Aktif' : 'Nonaktif'}</button>
-                <button onClick={() => deleteSession(session.id)} className="p-1 text-slate-400 hover:text-rose-400 transition-colors"><Trash2 className="w-4 h-4" /></button>
+                <button onClick={() => updateSession(session.id, { isActive: !session.isActive })} className={cn("px-3 py-1.5 text-[10px] md:text-xs font-black uppercase tracking-wider rounded-lg border transition-all duration-300 shadow-sm active:scale-95", session.isActive ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/30 hover:bg-emerald-500/20" : "bg-slate-500/10 text-slate-400 border-slate-500/30 hover:bg-slate-500/20")}>{session.isActive ? 'Status: Aktif' : 'Nonaktif'}</button>
+                <button onClick={() => deleteSession(session.id)} className="p-1.5 text-slate-500 hover:text-rose-400 hover:bg-rose-500/10 rounded-lg transition-all duration-300 active:scale-95"><Trash2 className="w-4 h-4" /></button>
               </div>
             </div>
-            <div className="space-y-2 text-sm text-slate-400">
-              <div className="flex items-center gap-2"><Clock className="w-4 h-4"/> Waktu: <span className="text-slate-200">{session.startTime} - {session.endTime}</span></div>
-              <div className="flex items-center gap-2"><Activity className="w-4 h-4"/> Toleransi: <span className="text-slate-200">{session.toleranceMinutes} menit</span></div>
+            <div className="space-y-3 text-sm text-slate-400 bg-slate-900/40 p-4 rounded-xl border border-white/5">
+              <div className="flex items-center gap-3 font-medium"><Clock className="w-4 h-4 text-cyan-400"/> Waktu Shift: <span className="text-slate-200 font-mono font-bold bg-black/30 px-2 py-0.5 rounded">{session.startTime} - {session.endTime}</span></div>
+              <div className="flex items-center gap-3 font-medium"><Activity className="w-4 h-4 text-purple-400"/> Max Terlambat: <span className="text-slate-200 font-bold">{session.toleranceMinutes} menit</span></div>
             </div>
           </div>
         ))}
@@ -1343,77 +1362,83 @@ const AdminReports: React.FC = () => {
   });
 
   return (
-    <div className="space-y-6 animate-in fade-in duration-500 h-full flex flex-col relative">
+    <div className="space-y-6 animate-in fade-in duration-500 h-full flex flex-col relative w-full">
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-        <div><h2 className="text-2xl font-bold text-white">Laporan Kehadiran</h2><p className="text-slate-400 text-sm">Data histori absensi mahasiswa.</p></div>
-        <button onClick={() => exportToCSV(filteredLogs)} className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-400 hover:to-emerald-500 text-white rounded-xl transition-all font-medium shadow-lg"><Download className="w-4 h-4" /> Export CSV</button>
+        <div><h2 className="text-2xl md:text-3xl font-black text-white tracking-tight">Laporan Kehadiran</h2><p className="text-slate-400 text-sm md:text-base mt-1">Data histori absensi mahasiswa, bukti foto, dan geolokasi.</p></div>
+        <button onClick={() => exportToCSV(filteredLogs)} className="w-full md:w-auto flex items-center justify-center gap-2 px-6 py-3 bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-400 hover:to-emerald-500 text-white rounded-xl transition-all duration-300 font-bold shadow-lg active:scale-95 whitespace-nowrap"><Download className="w-5 h-5" /> Export Data CSV</button>
       </div>
 
-      <div className="flex flex-col md:flex-row gap-4">
-        <input type="text" placeholder="Cari Nama / NIM..." value={search} onChange={e=>setSearch(e.target.value)} className="flex-1 bg-slate-900/50 border border-white/10 rounded-xl px-4 py-2.5 text-white outline-none focus:border-cyan-500" />
-        <select value={filterSession} onChange={e=>setFilterSession(e.target.value)} className="bg-slate-900/50 border border-white/10 rounded-xl px-4 py-2.5 text-white outline-none focus:border-cyan-500 w-full md:w-48 appearance-none">
-          <option value="All">Semua Sesi</option>
-          {sessions.map(s => <option key={s.id} value={s.name}>{s.name}</option>)}
+      <div className="flex flex-col md:flex-row gap-3 md:gap-4">
+        <div className="relative flex-1">
+           <SearchIcon className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
+           <input type="text" placeholder="Cari Nama / NIM / Status..." value={search} onChange={e=>setSearch(e.target.value)} className="w-full bg-slate-900/50 border border-white/10 rounded-xl pl-10 pr-4 py-3.5 text-white outline-none focus:border-cyan-500 transition-colors shadow-inner text-sm" />
+        </div>
+        <select value={filterSession} onChange={e=>setFilterSession(e.target.value)} className="bg-slate-900/50 border border-white/10 rounded-xl px-5 py-3.5 text-white outline-none focus:border-cyan-500 transition-colors shadow-inner w-full md:w-56 font-bold cursor-pointer appearance-none">
+          <option value="All">Semua Shift Sesi</option>
+          {sessions.map(s => <option key={s.id} value={s.name}>Sesi: {s.name}</option>)}
         </select>
       </div>
 
-      <div className="flex-1 bg-white/5 border border-white/10 rounded-2xl overflow-hidden flex flex-col">
+      <div className="flex-1 bg-white/5 backdrop-blur-md border border-white/10 rounded-[1.5rem] overflow-hidden flex flex-col shadow-xl">
         <div className="overflow-x-auto">
-          <table className="w-full text-left border-collapse">
+          <table className="w-full text-left border-collapse min-w-[900px]">
             <thead>
-              <tr className="bg-white/5 border-b border-white/10 text-slate-400 text-sm">
-                <th className="p-4 font-medium">Profil</th>
-                <th className="p-4 font-medium">NIM / Nama</th>
-                <th className="p-4 font-medium">Waktu Absen</th>
-                <th className="p-4 font-medium">Sesi & Status</th>
-                <th className="p-4 font-medium">Lokasi Absen</th>
-                <th className="p-4 font-medium text-right">Aksi</th>
+              <tr className="bg-slate-900/80 border-b border-white/10 text-slate-400 text-xs tracking-widest uppercase font-black">
+                <th className="p-4 md:p-5">Foto Bukti</th>
+                <th className="p-4 md:p-5">Identitas Mahasiswa</th>
+                <th className="p-4 md:p-5">Waktu Pencatatan</th>
+                <th className="p-4 md:p-5">Sesi & Status</th>
+                <th className="p-4 md:p-5">Koordinat Geofence</th>
+                <th className="p-4 md:p-5 text-right">Manajemen Data</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-white/5">
               {filteredLogs.map(log => (
-                <tr key={log.id} className="hover:bg-white/5 transition-colors">
-                  <td className="p-4">
-                    <div onClick={() => setPreviewImage(log.photoBase64)} className="w-12 h-12 rounded-lg overflow-hidden border border-white/10 bg-black relative group cursor-pointer shadow-lg hover:border-cyan-400 transition-colors">
+                <tr key={log.id} className="hover:bg-white/5 transition-colors duration-200">
+                  <td className="p-4 md:p-5">
+                    <div onClick={() => setPreviewImage(log.photoBase64)} className="w-14 h-14 md:w-16 md:h-16 rounded-xl overflow-hidden border-2 border-white/10 bg-black relative group cursor-pointer shadow-md hover:shadow-cyan-500/30 hover:border-cyan-400 transition-all duration-300">
                       <img src={log.photoBase64} alt="Selfie" className="w-full h-full object-cover" />
-                      <div className="absolute inset-0 bg-black/60 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-                        <Maximize className="w-4 h-4 text-white" />
+                      <div className="absolute inset-0 bg-black/60 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity backdrop-blur-sm">
+                        <Maximize className="w-5 h-5 text-white" />
                       </div>
                     </div>
                   </td>
-                  <td className="p-4"><p className="font-semibold text-white">{log.name}</p><p className="text-xs text-slate-400 font-mono">{log.nim}</p></td>
-                  <td className="p-4"><p className="text-slate-200">{new Date(log.timestamp).toLocaleTimeString('id-ID')}</p><p className="text-xs text-slate-400">{new Date(log.timestamp).toLocaleDateString('id-ID')}</p></td>
-                  <td className="p-4">
-                     <p className="text-slate-300 text-sm mb-1">{log.sessionName}</p>
-                     <span className={cn("px-2.5 py-0.5 text-[10px] font-bold rounded-full", log.status === 'Hadir' ? "bg-emerald-500/20 text-emerald-400" : "bg-amber-500/20 text-amber-400")}>{log.status}</span>
+                  <td className="p-4 md:p-5"><p className="font-bold text-white text-base truncate max-w-[200px]">{log.name}</p><p className="text-xs text-slate-400 font-mono mt-0.5">{log.nim}</p></td>
+                  <td className="p-4 md:p-5"><p className="text-slate-200 font-bold font-mono text-base">{new Date(log.timestamp).toLocaleTimeString('id-ID')}</p><p className="text-[10px] md:text-xs text-slate-400 font-medium mt-0.5">{new Date(log.timestamp).toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'short' })}</p></td>
+                  <td className="p-4 md:p-5">
+                     <p className="text-slate-300 text-sm font-bold mb-1.5">{log.sessionName}</p>
+                     <span className={cn("px-3 py-1 text-[10px] md:text-xs font-black uppercase tracking-wider rounded-md border shadow-sm", log.status === 'Hadir' ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20" : "bg-amber-500/10 text-amber-400 border-amber-500/20")}>{log.status}</span>
                   </td>
-                  <td className="p-4">
-                    <a href={`https://www.google.com/maps?q=${log.location.lat},${log.location.lng}`} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-cyan-500/10 hover:bg-cyan-500/20 text-cyan-400 text-xs font-semibold rounded-lg border border-cyan-500/20 transition-colors shadow-sm">
-                      <MapPin className="w-3 h-3" /> Buka G-Maps
+                  <td className="p-4 md:p-5">
+                    <a href={`https://www.google.com/maps?q=${log.location.lat},${log.location.lng}`} target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 px-3 py-2 bg-cyan-500/10 hover:bg-cyan-500 hover:text-white text-cyan-400 text-[10px] md:text-xs font-bold uppercase tracking-wider rounded-lg border border-cyan-500/30 transition-all duration-300 shadow-sm active:scale-95">
+                      <MapPin className="w-3.5 h-3.5" /> Lihat G-Maps
                     </a>
-                    <p className="text-[10px] text-slate-500 mt-1.5 font-mono">{log.location.lat.toFixed(5)}, {log.location.lng.toFixed(5)}</p>
+                    <p className="text-[9px] md:text-[10px] text-slate-500 mt-2 font-mono bg-black/30 inline-block px-2 py-0.5 rounded opacity-80">{log.location.lat.toFixed(5)}, {log.location.lng.toFixed(5)}</p>
                   </td>
-                  <td className="p-4 text-right">
-                    <button onClick={() => { if(confirm(`Yakin ingin menghapus data absensi untuk ${log.name}?`)) deleteLog(log.id); }} title="Hapus Log Absensi" className="p-1.5 text-slate-400 hover:text-rose-400 hover:bg-rose-400/10 rounded-lg transition-colors border border-transparent hover:border-rose-400/20">
-                      <Trash2 className="w-4 h-4" />
+                  <td className="p-4 md:p-5 text-right">
+                    <button onClick={() => { if(confirm(`Yakin ingin menghapus data absensi permanen untuk ${log.name}?`)) deleteLog(log.id); }} title="Hapus Data Log" className="p-2.5 text-slate-500 hover:text-white hover:bg-rose-500 rounded-xl transition-all duration-300 border border-transparent hover:border-rose-500/50 hover:shadow-lg active:scale-95">
+                      <Trash2 className="w-5 h-5" />
                     </button>
                   </td>
                 </tr>
               ))}
-              {filteredLogs.length === 0 && <tr><td colSpan={6} className="p-8 text-center text-slate-500">Tidak ada data ditemukan.</td></tr>}
+              {filteredLogs.length === 0 && <tr><td colSpan={6} className="p-12 text-center text-slate-500 font-medium text-lg">Tidak ada data histori ditemukan.</td></tr>}
             </tbody>
           </table>
         </div>
       </div>
       
+      {/* MODAL FULLSCREEN PREVIEW IMAGE RESPONSIVE */}
       {previewImage && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/90 backdrop-blur-sm p-4 animate-in fade-in zoom-in-95 duration-300" onClick={() => setPreviewImage(null)}>
-          <div className="relative max-w-2xl max-h-[90vh] w-full flex flex-col items-center justify-center">
-            <button onClick={() => setPreviewImage(null)} className="absolute -top-12 right-0 p-2 bg-white/10 hover:bg-rose-500/80 hover:text-white rounded-full transition-colors text-slate-300">
-              <X className="w-6 h-6"/>
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/95 backdrop-blur-xl p-4 animate-in fade-in zoom-in-95 duration-300" onClick={() => setPreviewImage(null)}>
+          <div className="relative max-w-3xl w-full flex flex-col items-center justify-center">
+            <button onClick={() => setPreviewImage(null)} className="absolute -top-14 md:-top-16 right-0 md:-right-8 p-3 bg-white/10 hover:bg-rose-500 hover:text-white rounded-full transition-all duration-300 text-slate-300 shadow-lg active:scale-90 border border-white/10">
+              <X className="w-6 h-6 md:w-8 md:h-8"/>
             </button>
-            <img src={previewImage} alt="Preview Selfie Fullscreen" className="max-w-full max-h-[85vh] object-contain rounded-2xl border-4 border-white/10 shadow-2xl" onClick={e => e.stopPropagation()} />
-            <p className="mt-4 text-slate-400 text-sm">Klik di luar area gambar untuk menutup</p>
+            <div className="relative w-full overflow-hidden rounded-[2rem] border-[4px] md:border-[8px] border-white/10 shadow-[0_0_50px_rgba(6,182,212,0.3)] bg-black">
+                <img src={previewImage} alt="Preview Selfie Fullscreen" className="max-w-full max-h-[75vh] md:max-h-[85vh] w-full object-contain mx-auto" onClick={e => e.stopPropagation()} />
+            </div>
+            <p className="mt-5 text-slate-400 text-xs md:text-sm font-medium tracking-wide bg-black/50 px-4 py-2 rounded-full border border-white/5">Ketuk area mana saja untuk menutup pratinjau</p>
           </div>
         </div>
       )}
@@ -1421,54 +1446,89 @@ const AdminReports: React.FC = () => {
   );
 };
 
+const SearchIcon = ({ className }: { className?: string }) => (
+  <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+);
+
 const AdminLayout: React.FC<{ children: React.ReactNode, activeRoute: string, setRoute: (r:string)=>void }> = ({ children, activeRoute, setRoute }) => {
   const { syncStatus } = useAppContext();
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const handleLogout = () => { localStorage.removeItem('axaxyz_admin_auth'); setRoute('admin-login'); };
 
   const navItems = [
-    { id: 'admin-dashboard', icon: BarChart3, label: 'Dashboard' },
+    { id: 'admin-dashboard', icon: BarChart3, label: 'Insight Dashboard' },
     { id: 'admin-students', icon: Database, label: 'Data Mahasiswa' },
-    { id: 'admin-reports', icon: FileText, label: 'Laporan Absensi' },
-    { id: 'admin-geofence', icon: Map, label: 'Pengaturan Lokasi' },
-    { id: 'admin-settings', icon: Settings, label: 'Pengaturan Sesi' },
+    { id: 'admin-reports', icon: FileText, label: 'Laporan Riwayat' },
+    { id: 'admin-geofence', icon: Map, label: 'Titik Geofencing' },
+    { id: 'admin-settings', icon: Settings, label: 'Manajemen Sesi' },
   ];
 
   return (
-    <div className="min-h-screen bg-slate-950 flex text-slate-200 font-sans w-full">
-      <aside className="w-72 bg-slate-900/50 border-r border-white/10 flex flex-col backdrop-blur-xl shrink-0">
-        <div className="p-6 border-b border-white/10 flex items-center gap-3">
-          <div className="w-10 h-10 bg-gradient-to-br from-cyan-400 to-purple-600 rounded-xl flex items-center justify-center shadow-lg overflow-hidden p-1.5">
-             <img src="/axalogo.png" alt="AXAXYZ Logo" className="w-full h-full object-contain drop-shadow-sm" onError={(e) => { e.currentTarget.style.display = 'none'; e.currentTarget.nextElementSibling?.classList.remove('hidden'); }} />
-             <span className="font-bold text-white text-xl tracking-tighter hidden">A.</span>
+    <div className="min-h-screen bg-slate-950 flex text-slate-200 font-sans w-full overflow-hidden relative">
+      
+      {/* MOBILE MENU OVERLAY */}
+      {isMobileMenuOpen && (
+         <div className="fixed inset-0 bg-black/80 z-40 md:hidden backdrop-blur-sm animate-in fade-in duration-300" onClick={() => setIsMobileMenuOpen(false)}></div>
+      )}
+
+      {/* RESPONSIVE SIDEBAR */}
+      <aside className={cn(
+         "fixed inset-y-0 left-0 z-50 w-[280px] md:w-72 bg-slate-900/95 md:bg-slate-900/50 border-r border-white/10 flex flex-col backdrop-blur-2xl transition-transform duration-500 ease-[cubic-bezier(0.16,1,0.3,1)] md:relative md:translate-x-0 shadow-[20px_0_50px_rgba(0,0,0,0.5)] md:shadow-none",
+         isMobileMenuOpen ? "translate-x-0" : "-translate-x-full"
+      )}>
+        <div className="p-6 md:p-8 border-b border-white/10 flex items-center justify-between">
+          <div className="flex items-center gap-3 md:gap-4">
+             <div className="w-10 h-10 md:w-12 md:h-12 bg-gradient-to-br from-cyan-400 to-purple-600 rounded-xl md:rounded-2xl flex items-center justify-center shadow-lg overflow-hidden p-1.5 md:p-2 border border-white/10">
+                <img src="/axalogo.png" alt="AXAXYZ Logo" className="w-full h-full object-contain drop-shadow-md" onError={(e) => { e.currentTarget.style.display = 'none'; e.currentTarget.nextElementSibling?.classList.remove('hidden'); }} />
+                <span className="font-black text-white text-xl hidden">A.</span>
+             </div>
+             <div><h1 className="font-black text-xl md:text-2xl tracking-[0.15em] text-transparent bg-clip-text bg-gradient-to-r from-white to-slate-400">AXAXYZ</h1><p className="text-[9px] md:text-[10px] uppercase tracking-widest text-cyan-400 font-bold mt-0.5">Admin Security</p></div>
           </div>
-          <div><h1 className="font-bold text-xl tracking-widest text-transparent bg-clip-text bg-gradient-to-r from-white to-slate-400">AXAXYZ</h1><p className="text-[10px] uppercase tracking-widest text-cyan-500 font-bold">Admin Portal</p></div>
+          <button className="md:hidden p-2 bg-white/5 hover:bg-white/10 rounded-xl text-slate-400 transition-colors" onClick={() => setIsMobileMenuOpen(false)}>
+             <X className="w-5 h-5"/>
+          </button>
         </div>
-        <nav className="flex-1 p-4 space-y-2 mt-4 overflow-y-auto">
+        
+        <nav className="flex-1 p-4 md:p-5 space-y-2 overflow-y-auto custom-scrollbar">
           {navItems.map(item => (
-            <button key={item.id} onClick={() => setRoute(item.id)} className={cn("w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all text-sm font-medium", activeRoute === item.id ? "bg-gradient-to-r from-cyan-500/20 to-purple-500/20 text-cyan-400 border border-cyan-500/30 shadow-[inset_0_0_20px_rgba(6,182,212,0.1)]" : "text-slate-400 hover:bg-white/5 hover:text-slate-200")}>
-              <item.icon className="w-5 h-5" /> {item.label}
+            <button key={item.id} onClick={() => { setRoute(item.id); setIsMobileMenuOpen(false); }} className={cn("w-full flex items-center gap-4 px-5 py-4 rounded-2xl transition-all duration-300 text-sm font-bold active:scale-[0.98]", activeRoute === item.id ? "bg-gradient-to-r from-cyan-500/20 to-purple-500/20 text-cyan-400 border border-cyan-500/30 shadow-[inset_0_0_20px_rgba(6,182,212,0.15)]" : "text-slate-400 hover:bg-white/5 hover:text-slate-200 hover:border hover:border-white/5 border border-transparent")}>
+              <item.icon className={cn("w-5 h-5 transition-transform duration-300", activeRoute === item.id && "scale-110")} /> {item.label}
             </button>
           ))}
         </nav>
-        <div className="p-4 border-t border-white/10">
-          <button onClick={handleLogout} className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-rose-400 hover:bg-rose-500/10 transition-colors text-sm font-medium"><LogOut className="w-5 h-5" /> Keluar</button>
+        
+        <div className="p-4 md:p-5 border-t border-white/10">
+          <button onClick={handleLogout} className="w-full flex items-center justify-center gap-3 px-5 py-4 rounded-2xl text-rose-400 bg-rose-500/5 hover:bg-rose-500 hover:text-white transition-all duration-300 text-sm font-bold border border-rose-500/20 active:scale-95 shadow-sm hover:shadow-rose-500/20"><LogOut className="w-5 h-5" /> Keluar Sistem</button>
         </div>
       </aside>
 
-      <main className="flex-1 relative overflow-y-auto w-full">
-        <header className="absolute top-0 right-0 p-6 flex justify-end z-50 w-full pointer-events-none">
-           <div className="pointer-events-auto flex items-center gap-2 px-4 py-2 bg-slate-900/80 backdrop-blur-md border border-white/10 rounded-full text-xs font-bold shadow-xl transition-all">
-               {syncStatus === 'syncing' && <><RefreshCcw className="w-3.5 h-3.5 animate-spin text-cyan-400"/> <span className="text-cyan-400">Syncing to Cloud...</span></>}
-               {syncStatus === 'synced' && <><CheckCircle2 className="w-3.5 h-3.5 text-emerald-400"/> <span className="text-emerald-400">Database Synced</span></>}
-               {syncStatus === 'error' && <><CloudOff className="w-3.5 h-3.5 text-rose-400"/> <span className="text-rose-400">Sync Error</span></>}
-               {syncStatus === 'offline' && <><CloudOff className="w-3.5 h-3.5 text-slate-500"/> <span className="text-slate-500">Local Mode Only</span></>}
+      <main className="flex-1 relative overflow-y-auto w-full h-screen custom-scrollbar">
+        {/* RESPONSIVE HEADER & STATUS BADGE */}
+        <header className="sticky top-0 p-4 md:p-6 flex justify-between md:justify-end items-center z-30 w-full bg-slate-950/80 backdrop-blur-xl border-b border-white/5 shadow-sm">
+           <button className="md:hidden p-2.5 bg-white/5 border border-white/10 hover:bg-white/10 rounded-xl text-white transition-colors active:scale-95 shadow-sm" onClick={() => setIsMobileMenuOpen(true)}>
+              <Menu className="w-5 h-5" />
+           </button>
+           
+           <div className="flex items-center gap-2.5 px-4 md:px-5 py-2 md:py-2.5 bg-slate-900 border border-white/10 rounded-full text-[10px] md:text-xs font-bold shadow-[0_0_20px_rgba(0,0,0,0.5)] transition-all">
+               {syncStatus === 'syncing' && <><RefreshCcw className="w-3.5 h-3.5 md:w-4 md:h-4 animate-spin text-cyan-400"/> <span className="text-cyan-400 tracking-wider uppercase">Syncing Cloud...</span></>}
+               {syncStatus === 'synced' && <><CheckCircle2 className="w-3.5 h-3.5 md:w-4 md:h-4 text-emerald-400"/> <span className="text-emerald-400 tracking-wider uppercase">Database Synced</span></>}
+               {syncStatus === 'error' && <><CloudOff className="w-3.5 h-3.5 md:w-4 md:h-4 text-rose-400"/> <span className="text-rose-400 tracking-wider uppercase">Sync Error</span></>}
+               {syncStatus === 'offline' && <><CloudOff className="w-3.5 h-3.5 md:w-4 md:h-4 text-slate-500"/> <span className="text-slate-500 tracking-wider uppercase">Local Mode</span></>}
            </div>
         </header>
 
-        <div className="absolute top-[-20%] right-[-10%] w-[50%] h-[50%] bg-cyan-600/10 rounded-full blur-[150px] pointer-events-none"></div>
-        <div className="absolute bottom-[-20%] left-[-10%] w-[50%] h-[50%] bg-purple-600/10 rounded-full blur-[150px] pointer-events-none"></div>
-        <div className="p-8 max-w-7xl mx-auto relative z-10 min-h-full mt-10">{children}</div>
+        <div className="absolute top-[-20%] right-[-10%] w-[60%] h-[60%] bg-cyan-600/10 rounded-full blur-[150px] pointer-events-none"></div>
+        <div className="absolute bottom-[-20%] left-[-10%] w-[60%] h-[60%] bg-purple-600/10 rounded-full blur-[150px] pointer-events-none"></div>
+        <div className="p-4 md:p-8 max-w-7xl mx-auto relative z-10 min-h-full pb-20">{children}</div>
       </main>
+      
+      {/* GLOBAL SCROLLBAR STYLING */}
+      <style>{`
+        .custom-scrollbar::-webkit-scrollbar { width: 6px; height: 6px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.1); border-radius: 10px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: rgba(255, 255, 255, 0.2); }
+      `}</style>
     </div>
   );
 };
@@ -1497,9 +1557,9 @@ export default function App() {
 
   return (
     <AppProvider>
-      <div className="fixed bottom-4 right-4 z-[999] flex gap-2 bg-slate-900/80 backdrop-blur-md p-2 rounded-xl border border-white/10 shadow-2xl">
-        <button onClick={() => setRoute('student')} className={cn("px-4 py-2 rounded-lg text-xs font-bold transition-colors", route === 'student' ? "bg-cyan-500 text-white" : "bg-white/10 text-slate-300 hover:bg-white/20")}>Mode Mahasiswa</button>
-        <button onClick={() => setRoute(typeof window !== 'undefined' && localStorage.getItem('axaxyz_admin_auth') === 'true' ? 'admin-dashboard' : 'admin-login')} className={cn("px-4 py-2 rounded-lg text-xs font-bold transition-colors", route.startsWith('admin') ? "bg-purple-500 text-white" : "bg-white/10 text-slate-300 hover:bg-white/20")}>Mode Admin</button>
+      <div className="fixed bottom-4 md:bottom-6 right-4 md:right-6 z-[999] flex gap-2 md:gap-3 bg-slate-900/90 backdrop-blur-xl p-2.5 rounded-[1.5rem] border border-white/10 shadow-[0_20px_50px_rgba(0,0,0,0.5)]">
+        <button onClick={() => setRoute('student')} className={cn("px-4 md:px-5 py-2.5 md:py-3 rounded-xl text-[10px] md:text-xs font-black uppercase tracking-widest transition-all duration-300 active:scale-95 shadow-sm", route === 'student' ? "bg-cyan-500 text-white shadow-cyan-500/30" : "bg-white/5 text-slate-300 hover:bg-white/10 hover:text-white border border-transparent hover:border-white/5")}>Portal MHS</button>
+        <button onClick={() => setRoute(typeof window !== 'undefined' && localStorage.getItem('axaxyz_admin_auth') === 'true' ? 'admin-dashboard' : 'admin-login')} className={cn("px-4 md:px-5 py-2.5 md:py-3 rounded-xl text-[10px] md:text-xs font-black uppercase tracking-widest transition-all duration-300 active:scale-95 shadow-sm", route.startsWith('admin') ? "bg-purple-600 text-white shadow-purple-500/30" : "bg-white/5 text-slate-300 hover:bg-white/10 hover:text-white border border-transparent hover:border-white/5")}>Admin Area</button>
       </div>
 
       {route === 'student' && <AttendanceWizard />}
@@ -1515,8 +1575,8 @@ export default function App() {
         </AdminLayout>
       )}
 
-      {/* HAPUS TANDA KOMENTAR PADA BARIS DI BAWAH INI SAAT DI-DEPLOY KE VERCEL */}
-    <SpeedInsights />
+      {/* PENTING: Hapus tanda komentar di bawah ini saat kode dijalankan di lokal/Vercel */}
+      <SpeedInsights />
     </AppProvider>
   );
 }
