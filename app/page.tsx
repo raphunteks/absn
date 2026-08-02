@@ -11,7 +11,6 @@ import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContaine
 
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
-import Webcam from 'react-webcam';
 import { format } from 'date-fns';
 
 const cn = (...inputs: ClassValue[]) => {
@@ -433,13 +432,54 @@ const QRScanner: React.FC<{ onComplete: (data: {nim: string, name: string, devic
 };
 
 const SelfieCapture: React.FC<{ onComplete: (base64: string) => void }> = ({ onComplete }) => {
-  const webcamRef = useRef<Webcam>(null);
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const streamRef = useRef<MediaStream | null>(null);
   const [image, setImage] = useState<string | null>(null);
 
+  const startCamera = async () => {
+    try {
+      const mediaStream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: 'user', aspectRatio: 16/9 }
+      });
+      streamRef.current = mediaStream;
+      if (videoRef.current) {
+        videoRef.current.srcObject = mediaStream;
+      }
+    } catch (err) {
+      console.error("Error accessing camera:", err);
+    }
+  };
+
+  useEffect(() => {
+    startCamera();
+    return () => {
+      if (streamRef.current) {
+        streamRef.current.getTracks().forEach(track => track.stop());
+      }
+    };
+  }, []);
+
   const capture = useCallback(() => {
-    const imageSrc = webcamRef.current?.getScreenshot();
-    if (imageSrc) setImage(imageSrc);
-  }, [webcamRef]);
+    if (videoRef.current) {
+      const canvas = document.createElement('canvas');
+      canvas.width = videoRef.current.videoWidth || 640;
+      canvas.height = videoRef.current.videoHeight || 480;
+      const ctx = canvas.getContext('2d');
+      if (ctx) {
+        ctx.drawImage(videoRef.current, 0, 0, canvas.width, canvas.height);
+        const imageSrc = canvas.toDataURL('image/jpeg');
+        setImage(imageSrc);
+        if (streamRef.current) {
+           streamRef.current.getTracks().forEach(track => track.stop());
+        }
+      }
+    }
+  }, [videoRef]);
+
+  const handleRetake = () => {
+     setImage(null);
+     startCamera();
+  };
 
   return (
     <div className="flex flex-col items-center justify-center p-6 space-y-6 w-full max-w-md mx-auto animate-in slide-in-from-right duration-500">
@@ -450,11 +490,11 @@ const SelfieCapture: React.FC<{ onComplete: (base64: string) => void }> = ({ onC
 
       <div className="w-full bg-slate-900 rounded-3xl overflow-hidden border-4 border-white/10 relative shadow-2xl aspect-[3/4] md:aspect-video flex items-center justify-center bg-black">
         {!image ? (
-          <Webcam
-            audio={false}
-            ref={webcamRef}
-            screenshotFormat="image/jpeg"
-            videoConstraints={{ facingMode: "user", aspectRatio: 16/9 }}
+          <video
+            ref={videoRef}
+            autoPlay
+            playsInline
+            muted
             className="w-full h-full object-cover transform scale-x-[-1]"
           />
         ) : (
@@ -478,7 +518,7 @@ const SelfieCapture: React.FC<{ onComplete: (base64: string) => void }> = ({ onC
           </button>
         ) : (
           <div className="flex gap-4">
-            <button onClick={() => setImage(null)} className="flex-1 py-4 bg-white/5 hover:bg-white/10 border border-white/10 text-white font-semibold rounded-2xl transition-all">Ulangi</button>
+            <button onClick={handleRetake} className="flex-1 py-4 bg-white/5 hover:bg-white/10 border border-white/10 text-white font-semibold rounded-2xl transition-all">Ulangi</button>
             <button onClick={() => onComplete(image)} className="flex-1 py-4 bg-gradient-to-r from-cyan-500 to-purple-600 hover:from-cyan-400 hover:to-purple-500 text-white font-bold rounded-2xl transition-all shadow-lg flex items-center justify-center gap-2">
               <CheckCircle2 className="w-5 h-5" /> Konfirmasi
             </button>
@@ -553,10 +593,6 @@ const AttendanceWizard: React.FC = () => {
     </div>
   );
 };
-
-// ==========================================
-// ADMIN COMPONENTS (UPGRADED)
-// ==========================================
 
 const AdminLogin: React.FC<{ onLogin: () => void }> = ({ onLogin }) => {
   const [user, setUser] = useState('');
