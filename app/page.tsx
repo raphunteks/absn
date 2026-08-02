@@ -14,7 +14,44 @@ import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 import { format } from 'date-fns';
 
-import { Redis } from '@upstash/redis';
+class Redis {
+  url: string;
+  token: string;
+  
+  constructor(config: { url: string; token: string }) {
+    this.url = config.url || '';
+    this.token = config.token || '';
+  }
+  
+  static fromEnv() {
+    let url = '';
+    let token = '';
+    if (typeof process !== 'undefined' && process.env) {
+      url = process.env.UPSTASH_REDIS_REST_URL || process.env.NEXT_PUBLIC_KV_REST_API_URL || process.env.NEXT_PUBLIC_UPSTASH_REDIS_REST_URL || '';
+      token = process.env.UPSTASH_REDIS_REST_TOKEN || process.env.NEXT_PUBLIC_KV_REST_API_TOKEN || process.env.NEXT_PUBLIC_UPSTASH_REDIS_REST_TOKEN || '';
+    }
+    return new Redis({ url, token });
+  }
+
+  async get(key: string) {
+    if (!this.url || !this.token) return null;
+    try {
+      const res = await fetch(`${this.url}/get/${key}`, { headers: { Authorization: `Bearer ${this.token}` }, cache: 'no-store' });
+      const data = await res.json();
+      return data.result ? (typeof data.result === 'string' ? JSON.parse(data.result) : data.result) : null;
+    } catch (e) { 
+      return null; 
+    }
+  }
+
+  async set(key: string, value: any) {
+    if (!this.url || !this.token) return;
+    try {
+      const strVal = typeof value === 'string' ? value : JSON.stringify(value);
+      await fetch(`${this.url}/set/${key}`, { method: 'POST', headers: { Authorization: `Bearer ${this.token}`, 'Content-Type': 'application/json' }, body: strVal });
+    } catch (e) {}
+  }
+}
 
 const cn = (...inputs: ClassValue[]) => {
   return twMerge(clsx(inputs));
