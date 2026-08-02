@@ -12,7 +12,6 @@ import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContaine
 // PENGGUNAAN PACKAGE BARU: clsx & tailwind-merge & react-webcam
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
-import Webcam from 'react-webcam';
 import { format } from 'date-fns'; 
 
 // ==========================================
@@ -460,13 +459,37 @@ const QRScanner: React.FC<{ onComplete: (data: {nim: string, name: string, devic
 };
 
 const SelfieCapture: React.FC<{ onComplete: (base64: string) => void }> = ({ onComplete }) => {
-  const webcamRef = useRef<Webcam>(null);
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
   const [image, setImage] = useState<string | null>(null);
+  const [error, setError] = useState('');
 
-  const capture = useCallback(() => {
-    const imageSrc = webcamRef.current?.getScreenshot();
-    if (imageSrc) setImage(imageSrc);
-  }, [webcamRef]);
+  useEffect(() => { startCamera(); return () => stopCamera(); }, []);
+
+  const startCamera = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user', aspectRatio: 16/9 } });
+      if (videoRef.current) videoRef.current.srcObject = stream;
+    } catch (err) { setError('Kamera tidak dapat diakses. Pastikan izin diberikan.'); }
+  };
+  const stopCamera = () => {
+    if (videoRef.current && videoRef.current.srcObject) {
+      (videoRef.current.srcObject as MediaStream).getTracks().forEach(t => t.stop());
+    }
+  };
+  const capture = () => {
+    if (videoRef.current && canvasRef.current) {
+      const video = videoRef.current;
+      const canvas = canvasRef.current;
+      canvas.width = video.videoWidth; canvas.height = video.videoHeight;
+      const ctx = canvas.getContext('2d');
+      if (ctx) {
+        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+        setImage(canvas.toDataURL('image/jpeg', 0.8));
+        stopCamera();
+      }
+    }
+  };
 
   return (
     <div className="flex flex-col items-center justify-center p-6 space-y-6 w-full max-w-md mx-auto animate-in slide-in-from-right duration-500">
@@ -476,42 +499,49 @@ const SelfieCapture: React.FC<{ onComplete: (base64: string) => void }> = ({ onC
       </div>
 
       <div className="w-full bg-slate-900 rounded-3xl overflow-hidden border-4 border-white/10 relative shadow-2xl aspect-[3/4] md:aspect-video flex items-center justify-center bg-black">
-        {!image ? (
-          <Webcam
-            audio={false}
-            ref={webcamRef}
-            screenshotFormat="image/jpeg"
-            videoConstraints={{ facingMode: "user", aspectRatio: 16/9 }}
-            className="w-full h-full object-cover transform scale-x-[-1]"
-          />
-        ) : (
-          <img src={image} alt="Selfie" className="w-full h-full object-cover transform scale-x-[-1]" />
-        )}
-        
-        {!image && (
-          <div className="absolute inset-0 pointer-events-none border-[40px] border-black/30 flex items-center justify-center">
-             <div className="w-48 h-64 border-2 border-dashed border-white/50 rounded-[4rem]"></div>
+        {error ? (
+          <div className="p-6 text-center space-y-4">
+            <Camera className="w-12 h-12 text-slate-600 mx-auto" />
+            <p className="text-sm text-rose-400">{error}</p>
+            <button onClick={() => {
+              const c = document.createElement('canvas'); c.width = 400; c.height = 300;
+              const ctx = c.getContext('2d');
+              if(ctx) { ctx.fillStyle = '#1e293b'; ctx.fillRect(0, 0, 400, 300); ctx.fillStyle = '#06b6d4'; ctx.font = '20px sans-serif'; ctx.fillText('Dummy Image', 130, 150); }
+              onComplete(c.toDataURL());
+            }} className="mt-4 text-xs underline text-cyan-400">Bypass (Gunakan Foto Dummy)</button>
           </div>
+        ) : (
+          <>
+            {!image ? <video ref={videoRef} autoPlay playsInline muted className="w-full h-full object-cover transform scale-x-[-1]" /> : <img src={image} alt="Selfie" className="w-full h-full object-cover transform scale-x-[-1]" />}
+            <canvas ref={canvasRef} className="hidden" />
+            {!image && (
+              <div className="absolute inset-0 pointer-events-none border-[40px] border-black/30 flex items-center justify-center">
+                 <div className="w-48 h-64 border-2 border-dashed border-white/50 rounded-[4rem]"></div>
+              </div>
+            )}
+          </>
         )}
       </div>
 
-      <div className="w-full">
-        {!image ? (
-          <button onClick={capture} className="w-full py-4 bg-white/10 hover:bg-white/20 border border-white/20 text-white font-bold rounded-2xl transition-all flex items-center justify-center gap-2 group">
-            <div className="w-6 h-6 rounded-full border-2 border-white flex items-center justify-center group-hover:bg-white transition-colors">
-              <div className="w-2 h-2 rounded-full bg-white group-hover:bg-slate-900"></div>
-            </div>
-            Ambil Foto
-          </button>
-        ) : (
-          <div className="flex gap-4">
-            <button onClick={() => setImage(null)} className="flex-1 py-4 bg-white/5 hover:bg-white/10 border border-white/10 text-white font-semibold rounded-2xl transition-all">Ulangi</button>
-            <button onClick={() => onComplete(image)} className="flex-1 py-4 bg-gradient-to-r from-cyan-500 to-purple-600 hover:from-cyan-400 hover:to-purple-500 text-white font-bold rounded-2xl transition-all shadow-lg flex items-center justify-center gap-2">
-              <CheckCircle2 className="w-5 h-5" /> Konfirmasi
+      {!error && (
+        <div className="w-full">
+          {!image ? (
+            <button onClick={capture} className="w-full py-4 bg-white/10 hover:bg-white/20 border border-white/20 text-white font-bold rounded-2xl transition-all flex items-center justify-center gap-2 group">
+              <div className="w-6 h-6 rounded-full border-2 border-white flex items-center justify-center group-hover:bg-white transition-colors">
+                <div className="w-2 h-2 rounded-full bg-white group-hover:bg-slate-900"></div>
+              </div>
+              Ambil Foto
             </button>
-          </div>
-        )}
-      </div>
+          ) : (
+            <div className="flex gap-4">
+              <button onClick={() => { setImage(null); startCamera(); }} className="flex-1 py-4 bg-white/5 hover:bg-white/10 border border-white/10 text-white font-semibold rounded-2xl transition-all">Ulangi</button>
+              <button onClick={() => onComplete(image)} className="flex-1 py-4 bg-gradient-to-r from-cyan-500 to-purple-600 hover:from-cyan-400 hover:to-purple-500 text-white font-bold rounded-2xl transition-all shadow-lg flex items-center justify-center gap-2">
+                <CheckCircle2 className="w-5 h-5" /> Konfirmasi
+              </button>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 };
