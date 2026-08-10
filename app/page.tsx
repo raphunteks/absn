@@ -161,7 +161,7 @@ const CloudStore = {
 // ==========================================
 // INTERFACES
 // ==========================================
-interface Cluster { id: string; name: string; }
+interface Cluster { id: string; name: string; startDate?: string; endDate?: string; }
 interface Session { id: string; name: string; startTime: string; endTime: string; toleranceMinutes: number; isActive: boolean; }
 interface Log { id: string; nim: string; name: string; clusterName?: string; timestamp: string; sessionName: string; status: 'Hadir' | 'Terlambat'; location: { lat: number; lng: number }; photoBase64: string; deviceId: string; }
 interface Student { id: string; nim: string; name: string; password?: string; deviceId?: string | null; clusterId?: string; }
@@ -179,8 +179,8 @@ interface AppContextType {
   admins: AdminUser[];
   isCloudSync: boolean;
   syncStatus: SyncStatus;
-  addCluster: (name: string) => void;
-  updateCluster: (id: string, name: string) => void;
+  addCluster: (cluster: Omit<Cluster, 'id'>) => void;
+  updateCluster: (id: string, cluster: Omit<Cluster, 'id'>) => void;
   deleteCluster: (id: string) => void;
   addLog: (log: Omit<Log, 'id' | 'timestamp'>) => void;
   deleteLog: (id: string) => void;
@@ -298,8 +298,8 @@ const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const saveGeofence = (d: Geofence) => { setGeofence(d); localStorage.setItem('axaxyz_geofence', JSON.stringify(d)); syncToCloud('axaxyz_geofence', d); };
   const saveAdmins = (d: AdminUser[]) => { setAdmins(d); localStorage.setItem('axaxyz_admins', JSON.stringify(d)); syncToCloud('axaxyz_admins', d); };
 
-  const addCluster = (name: string) => saveClusters([...clusters, { id: Math.random().toString(36).substr(2, 9), name }]);
-  const updateCluster = (id: string, name: string) => saveClusters(clusters.map(c => c.id === id ? { ...c, name } : c));
+  const addCluster = (data: Omit<Cluster, 'id'>) => saveClusters([...clusters, { ...data, id: Math.random().toString(36).substr(2, 9) }]);
+  const updateCluster = (id: string, data: Omit<Cluster, 'id'>) => saveClusters(clusters.map(c => c.id === id ? { ...c, ...data } : c));
   const deleteCluster = (id: string) => saveClusters(clusters.filter(c => c.id !== id));
 
   const addLog = (logData: Omit<Log, 'id' | 'timestamp'>) => saveLogs([{ ...logData, id: Math.random().toString(36).substr(2, 9), timestamp: new Date().toISOString() }, ...logs]);
@@ -370,13 +370,73 @@ const useAppContext = () => {
 };
 
 // ==========================================
+// DATE FILTER UTILITY HOOK
+// ==========================================
+const useDateFilter = () => {
+  const todayStr = new Date().toISOString().split('T')[0];
+  const [datePreset, setDatePreset] = useState('today');
+  const [customStart, setCustomStart] = useState(todayStr);
+  const [customEnd, setCustomEnd] = useState(todayStr);
+
+  const { startObj, endObj } = useMemo(() => {
+    const now = new Date();
+    let s = startOfDay(now);
+    let e = endOfDay(now);
+
+    if (datePreset === 'week') {
+      const past = new Date(now);
+      past.setDate(past.getDate() - 7);
+      s = startOfDay(past);
+    } else if (datePreset === 'month') {
+      const past = new Date(now);
+      past.setDate(past.getDate() - 30);
+      s = startOfDay(past);
+    } else if (datePreset === 'custom') {
+      s = startOfDay(new Date(customStart));
+      e = endOfDay(new Date(customEnd));
+    }
+    return { startObj: s, endObj: e };
+  }, [datePreset, customStart, customEnd]);
+
+  const FilterUI = () => (
+    <div className="flex flex-col sm:flex-row gap-3 w-full sm:w-auto">
+      <div className="flex items-center bg-[#050B14] border border-cyan-500/30 rounded-xl px-2 h-11 w-full sm:w-auto focus-within:border-cyan-400 transition-colors">
+         <select value={datePreset} onChange={e=>setDatePreset(e.target.value)} className="bg-transparent text-cyan-50 text-xs font-bold uppercase outline-none cursor-pointer px-3 w-full sm:w-40 h-full">
+           <option value="today">Hari Ini</option>
+           <option value="week">1 Minggu Terakhir</option>
+           <option value="month">1 Bulan Terakhir</option>
+           <option value="custom">Custom Tanggal</option>
+         </select>
+      </div>
+      {datePreset === 'custom' && (
+        <div className="flex flex-col sm:flex-row gap-3 w-full sm:w-auto">
+          <div className="flex flex-col gap-1 w-full sm:w-auto">
+             <label className="text-[9px] text-cyan-500 uppercase tracking-widest font-bold">Mulai Tanggal</label>
+             <input type="date" value={customStart} onChange={e => setCustomStart(e.target.value)} className="bg-[#050B14] border border-cyan-500/30 text-cyan-50 text-xs font-mono p-2.5 rounded-lg outline-none focus:border-cyan-400 w-full" />
+          </div>
+          <div className="flex flex-col gap-1 w-full sm:w-auto">
+             <label className="text-[9px] text-cyan-500 uppercase tracking-widest font-bold">Hingga Tanggal</label>
+             <input type="date" value={customEnd} onChange={e => setCustomEnd(e.target.value)} className="bg-[#050B14] border border-cyan-500/30 text-cyan-50 text-xs font-mono p-2.5 rounded-lg outline-none focus:border-cyan-400 w-full" />
+          </div>
+        </div>
+      )}
+    </div>
+  );
+
+  return { startObj, endObj, FilterUI };
+};
+
+
+// ==========================================
 // STUDENT DASHBOARD (SUPER UPGRADE)
 // ==========================================
 const StudentDashboard: React.FC<{ onStartAbsen: () => void, linkedNim: string | null }> = ({ onStartAbsen, linkedNim }) => {
-  const { logs, students } = useAppContext();
+  const { logs, students, clusters } = useAppContext();
 
-  const studentName = students.find(s => s.nim === linkedNim)?.name;
+  const student = students.find(s => s.nim === linkedNim);
+  const studentName = student?.name;
   const firstName = studentName ? studentName.split(' ')[0] : 'Mahasiswa Baru';
+  const myCluster = clusters.find(c => c.id === student?.clusterId);
   
   const myLogs = useMemo(() => {
     if (!linkedNim) return [];
@@ -393,18 +453,26 @@ const StudentDashboard: React.FC<{ onStartAbsen: () => void, linkedNim: string |
   const hasClockedInToday = todayLogs.length > 0;
   const lastClockInTime = hasClockedInToday ? new Date(todayLogs[0].timestamp).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }) : null;
 
-  const weeklyData = useMemo(() => {
+  const staseData = useMemo(() => {
+     let startD = new Date(); 
+     startD.setDate(startD.getDate() - 6); // default 7 days
+     let endD = new Date();
+
+     if (myCluster?.startDate && myCluster?.endDate) {
+         startD = new Date(myCluster.startDate);
+         const staseEnd = new Date(myCluster.endDate);
+         endD = staseEnd > new Date() ? new Date() : staseEnd; // cap to today so chart isn't empty
+     }
+
      const data = [];
-     for (let i = 6; i >= 0; i--) {
-        const d = new Date();
-        d.setDate(d.getDate() - i);
-        const dateStr = d.toISOString().split('T')[0];
-        const dayName = d.toLocaleDateString('id-ID', { weekday: 'short' });
-        const count = myLogs.filter(l => l.timestamp.startsWith(dateStr)).length;
-        data.push({ day: dayName, count: count });
+     for (let d = new Date(startD); d <= endD; d.setDate(d.getDate() + 1)) {
+         const dateStr = d.toISOString().split('T')[0];
+         const label = d.toLocaleDateString('id-ID', { day: '2-digit', month: 'short' });
+         const count = myLogs.filter(l => l.timestamp.startsWith(dateStr)).length;
+         data.push({ day: label, count: count });
      }
      return data;
-  }, [myLogs]);
+  }, [myLogs, myCluster]);
 
   const recentLogs = myLogs.slice(0, 4);
 
@@ -473,21 +541,23 @@ const StudentDashboard: React.FC<{ onStartAbsen: () => void, linkedNim: string |
       {/* Middle Section */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
         {/* Chart */}
-        <div className="lg:col-span-2 bg-[#0A1628]/80 backdrop-blur-xl border border-cyan-500/20 p-6 md:p-8 rounded-[2rem] shadow-lg flex flex-col">
-          <h3 className="text-base font-black text-white mb-1 tracking-widest uppercase">Kehadiran Mingguan</h3>
+        <div className="lg:col-span-2 bg-[#0A1628]/80 backdrop-blur-xl border border-cyan-500/20 p-6 md:p-8 rounded-[2rem] shadow-lg flex flex-col overflow-hidden">
+          <h3 className="text-base font-black text-white mb-1 tracking-widest uppercase truncate">{myCluster?.startDate ? 'Kehadiran Periode Stase' : 'Kehadiran Mingguan'}</h3>
           <p className="text-[10px] md:text-xs text-cyan-500/70 font-mono uppercase mb-8">Jam tervalidasi, sinkronisasi otomatis ke sistem</p>
-          <div className="flex-1 w-full min-h-[200px]">
-             <ResponsiveContainer width="100%" height="100%">
-               <BarChart data={weeklyData} margin={{ top: 0, right: 0, left: 0, bottom: 0 }}>
-                 <XAxis dataKey="day" axisLine={false} tickLine={false} tick={{fill: '#64748b', fontSize: 11, fontWeight: 'bold'}} dy={10} />
-                 <Tooltip cursor={{fill: '#1e293b', opacity: 0.4}} contentStyle={{backgroundColor: '#050B14', borderColor: '#8b5cf6', color: '#f8fafc', borderRadius: '1rem', fontSize: '12px'}} />
-                 <Bar dataKey="count" fill="#8b5cf6" radius={[8, 8, 8, 8]} barSize={40}>
-                   {weeklyData.map((entry, index) => (
-                     <Cell key={`cell-${index}`} fill={entry.count > 0 ? '#8b5cf6' : '#2e1065'} opacity={entry.count > 0 ? 1 : 0.3} />
-                   ))}
-                 </Bar>
-               </BarChart>
-             </ResponsiveContainer>
+          <div className="flex-1 w-full min-h-[200px] overflow-x-auto custom-scrollbar">
+             <div className="min-w-[400px] h-full">
+                 <ResponsiveContainer width="100%" height="100%">
+                   <BarChart data={staseData} margin={{ top: 0, right: 0, left: 0, bottom: 0 }}>
+                     <XAxis dataKey="day" axisLine={false} tickLine={false} tick={{fill: '#64748b', fontSize: 10, fontWeight: 'bold'}} dy={10} interval="preserveStartEnd" minTickGap={20} />
+                     <Tooltip cursor={{fill: '#1e293b', opacity: 0.4}} contentStyle={{backgroundColor: '#050B14', borderColor: '#8b5cf6', color: '#f8fafc', borderRadius: '1rem', fontSize: '12px'}} />
+                     <Bar dataKey="count" fill="#8b5cf6" radius={[8, 8, 8, 8]} barSize={staseData.length > 15 ? 15 : 40}>
+                       {staseData.map((entry, index) => (
+                         <Cell key={`cell-${index}`} fill={entry.count > 0 ? '#8b5cf6' : '#2e1065'} opacity={entry.count > 0 ? 1 : 0.3} />
+                       ))}
+                     </Bar>
+                   </BarChart>
+                 </ResponsiveContainer>
+             </div>
           </div>
         </div>
 
@@ -1330,20 +1400,15 @@ const AdminLogin: React.FC<{ onLogin: () => void }> = ({ onLogin }) => {
 };
 
 const AdminDashboardHome: React.FC = () => {
-  const { logs, students, clusters } = useAppContext();
+  const { logs, students, clusters, sessions } = useAppContext();
   
   // Date Range and Filters
-  const [startDate, setStartDate] = useState(new Date().toISOString().split('T')[0]);
-  const [endDate, setEndDate] = useState(new Date().toISOString().split('T')[0]);
+  const { startObj, endObj, FilterUI } = useDateFilter();
   const [selectedCluster, setSelectedCluster] = useState('All');
-
-  // Parse dates safely
-  const startObj = startOfDay(new Date(startDate));
-  const endObj = endOfDay(new Date(endDate));
 
   // Dynamic Total Days Calculation for robust Alpha metrics
   const diffTime = Math.abs(endObj.getTime() - startObj.getTime());
-  const totalDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) || 1;
+  const totalDaysInRange = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) || 1;
 
   // Filter Logs based on Date & Cluster
   const filteredLogs = logs.filter(l => {
@@ -1352,34 +1417,60 @@ const AdminDashboardHome: React.FC = () => {
     
     let matchCluster = true;
     if (selectedCluster !== 'All') {
-       const clusterName = clusters.find(c => c.id === selectedCluster)?.name;
-       matchCluster = l.clusterName === clusterName;
+       matchCluster = l.clusterName === clusters.find(c => c.id === selectedCluster)?.name;
     }
     return inDateRange && matchCluster;
   });
 
   const filteredStudents = selectedCluster === 'All' ? students : students.filter(s => s.clusterId === selectedCluster);
 
-  // Student Stats Detail Calculation (For Table)
+  // Advanced Student Stats Detail Calculation (For Table)
+  const activeSessions = sessions.filter(s => s.isActive);
+  
   const studentStats = filteredStudents.map(student => {
      const studentLogs = filteredLogs.filter(l => l.nim === student.nim);
-     const hadir = studentLogs.filter(l => l.status === 'Hadir').length;
-     const terlambat = studentLogs.filter(l => l.status === 'Terlambat').length;
-     // Alpha based on total selected days
-     const alpha = Math.max(0, totalDays - (hadir + terlambat));
+     let hadir = 0;
+     let terlambat = 0;
+     let alpha = 0;
+     let belumAbsen = 0;
      
-     return { ...student, hadir, terlambat, alpha };
+     // Evaluate each day in the date range
+     const rangeStart = new Date(startObj);
+     const rangeEnd = endObj > new Date() ? new Date() : new Date(endObj); // Don't process future days
+
+     for (let d = new Date(rangeStart); d <= rangeEnd; d.setDate(d.getDate() + 1)) {
+         const dateStr = d.toISOString().split('T')[0];
+         const isToday = dateStr === new Date().toISOString().split('T')[0];
+         
+         activeSessions.forEach(sess => {
+             const log = studentLogs.find(l => l.timestamp.startsWith(dateStr) && l.sessionName === sess.name);
+             if (log) {
+                 if (log.status === 'Hadir') hadir++;
+                 else if (log.status === 'Terlambat') terlambat++;
+             } else {
+                 if (isToday) {
+                     const currentMinutes = new Date().getHours() * 60 + new Date().getMinutes();
+                     const [endH, endM] = sess.endTime.split(':').map(Number);
+                     const endTotal = endH * 60 + endM;
+                     const endWithTol = endTotal + sess.toleranceMinutes;
+                     
+                     if (currentMinutes > endWithTol) alpha++; // completely missed
+                     else belumAbsen++; // still has time or ongoing
+                 } else {
+                     alpha++; // past day missed
+                 }
+             }
+         });
+     }
+     
+     return { ...student, hadir, terlambat, alpha, belumAbsen };
   });
 
-  // Basic Stats
-  const totalLogs = filteredLogs.length;
-  const onTime = filteredLogs.filter(l => l.status === 'Hadir').length;
-  const late = filteredLogs.filter(l => l.status === 'Terlambat').length;
-  
-  // Calculate Absent robustly
-  const totalExpectedAttendance = filteredStudents.length * totalDays;
-  const totalActualAttendance = totalLogs;
-  const totalAbsent = Math.max(0, totalExpectedAttendance - totalActualAttendance);
+  // Basic Stats for Top Cards
+  const totalLogsCount = filteredLogs.length;
+  const onTimeCount = filteredLogs.filter(l => l.status === 'Hadir').length;
+  const lateCount = filteredLogs.filter(l => l.status === 'Terlambat').length;
+  const totalAlphaCount = studentStats.reduce((acc, curr) => acc + curr.alpha, 0);
 
   // Chart 1: Daily Trend (Area Chart)
   const dailyDataMap: Record<string, { date: string; Hadir: number; Terlambat: number }> = {};
@@ -1393,32 +1484,25 @@ const AdminDashboardHome: React.FC = () => {
   
   // Chart 2: Pie Chart Overall
   const pieData = [
-     { name: 'Tepat Waktu', value: onTime, color: '#10b981' }, 
-     { name: 'Terlambat', value: late, color: '#f59e0b' },
-     { name: 'Tidak Absen', value: totalAbsent, color: '#f43f5e' }
+     { name: 'Tepat Waktu', value: onTimeCount, color: '#10b981' }, 
+     { name: 'Terlambat', value: lateCount, color: '#f59e0b' },
+     { name: 'Tidak Absen', value: totalAlphaCount, color: '#f43f5e' }
   ].filter(d => d.value > 0);
 
   return (
     <div className="space-y-6 animate-in fade-in duration-500 pb-10">
       
       {/* FILTER SECTION */}
-      <div className="bg-[#0A1628]/80 backdrop-blur-md border border-cyan-500/20 p-5 rounded-[1.5rem] flex flex-col md:flex-row gap-4 justify-between items-end shadow-lg">
+      <div className="bg-[#0A1628]/80 backdrop-blur-md border border-cyan-500/20 p-5 md:p-6 rounded-[1.5rem] flex flex-col xl:flex-row gap-5 justify-between items-start xl:items-end shadow-lg">
          <div>
             <h2 className="text-xl md:text-2xl font-black text-cyan-50 tracking-widest uppercase">Dashboard Absensi</h2>
             <p className="text-cyan-500/70 text-xs font-mono uppercase mt-1">Ringkasan data kehadiran mahasiswa</p>
          </div>
-         <div className="flex flex-col md:flex-row gap-3 w-full md:w-auto">
-            <div className="flex flex-col gap-1">
-               <label className="text-[9px] text-cyan-500 uppercase tracking-widest font-bold">Mulai Tanggal</label>
-               <input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} className="bg-[#050B14] border border-cyan-500/30 text-cyan-50 text-xs font-mono p-2.5 rounded-lg outline-none focus:border-cyan-400" />
-            </div>
-            <div className="flex flex-col gap-1">
-               <label className="text-[9px] text-cyan-500 uppercase tracking-widest font-bold">Hingga Tanggal</label>
-               <input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} className="bg-[#050B14] border border-cyan-500/30 text-cyan-50 text-xs font-mono p-2.5 rounded-lg outline-none focus:border-cyan-400" />
-            </div>
-            <div className="flex flex-col gap-1">
+         <div className="flex flex-col sm:flex-row gap-3 w-full xl:w-auto">
+            <FilterUI />
+            <div className="flex flex-col gap-1 w-full sm:w-auto">
                <label className="text-[9px] text-cyan-500 uppercase tracking-widest font-bold">Filter Kelompok / Angkatan</label>
-               <select value={selectedCluster} onChange={e => setSelectedCluster(e.target.value)} className="bg-[#050B14] border border-cyan-500/30 text-cyan-50 text-xs font-bold uppercase p-2.5 rounded-lg outline-none focus:border-cyan-400 min-w-[150px]">
+               <select value={selectedCluster} onChange={e => setSelectedCluster(e.target.value)} className="bg-[#050B14] border border-cyan-500/30 text-cyan-50 text-xs font-bold uppercase p-2.5 rounded-xl h-11 outline-none focus:border-cyan-400 w-full sm:min-w-[150px] cursor-pointer">
                   <option value="All">Semua Kelompok</option>
                   {clusters.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
                </select>
@@ -1427,12 +1511,12 @@ const AdminDashboardHome: React.FC = () => {
       </div>
 
       {/* STATS WIDGETS */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4 md:gap-5">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 md:gap-5">
         {[
-          { title: 'Total Rekam Absen', val: totalLogs, icon: ActivitySquare, color: 'text-cyan-400', bg: 'bg-cyan-500/10', border: 'border-cyan-500/30' },
-          { title: 'Tepat Waktu', val: onTime, icon: CheckCircle2, color: 'text-emerald-400', bg: 'bg-emerald-500/10', border: 'border-emerald-500/30' },
-          { title: 'Terlambat Hadir', val: late, icon: Clock, color: 'text-amber-400', bg: 'bg-amber-500/10', border: 'border-amber-500/30' },
-          { title: 'Data Kosong (Alpha)', val: totalAbsent, icon: UserX, color: 'text-rose-400', bg: 'bg-rose-500/10', border: 'border-rose-500/30' }
+          { title: 'Total Rekam Absen', val: totalLogsCount, icon: ActivitySquare, color: 'text-cyan-400', bg: 'bg-cyan-500/10', border: 'border-cyan-500/30' },
+          { title: 'Tepat Waktu', val: onTimeCount, icon: CheckCircle2, color: 'text-emerald-400', bg: 'bg-emerald-500/10', border: 'border-emerald-500/30' },
+          { title: 'Terlambat Hadir', val: lateCount, icon: Clock, color: 'text-amber-400', bg: 'bg-amber-500/10', border: 'border-amber-500/30' },
+          { title: 'Data Kosong (Alpha)', val: totalAlphaCount, icon: UserX, color: 'text-rose-400', bg: 'bg-rose-500/10', border: 'border-rose-500/30' }
         ].map((stat, i) => (
           <div key={i} className={`bg-[#0A1628]/60 backdrop-blur-md border ${stat.border} p-5 rounded-[1.5rem] flex items-center justify-between transition-all duration-300 hover:bg-[#0A1628] hover:-translate-y-1 shadow-lg`}>
             <div>
@@ -1527,6 +1611,7 @@ const AdminDashboardHome: React.FC = () => {
                       <th className="p-4 text-center">Tepat Waktu</th>
                       <th className="p-4 text-center">Terlambat</th>
                       <th className="p-4 text-center">Tidak Hadir (Alpha)</th>
+                      <th className="p-4 text-center">Belum Absen (Hari Ini)</th>
                    </tr>
                 </thead>
                 <tbody className="divide-y divide-cyan-900/30">
@@ -1548,10 +1633,13 @@ const AdminDashboardHome: React.FC = () => {
                          <td className="p-4 text-center">
                             <span className="inline-flex items-center justify-center w-8 h-8 rounded-full bg-rose-500/10 text-rose-400 font-bold text-sm border border-rose-500/30 group-hover:bg-rose-500/20">{st.alpha}</span>
                          </td>
+                         <td className="p-4 text-center">
+                            <span className="inline-flex items-center justify-center w-8 h-8 rounded-full bg-slate-500/10 text-slate-300 font-bold text-sm border border-slate-500/30 group-hover:bg-slate-500/20">{st.belumAbsen}</span>
+                         </td>
                       </tr>
                    ))}
                    {studentStats.length === 0 && (
-                      <tr><td colSpan={6} className="p-12 text-center text-cyan-800 font-mono text-sm uppercase tracking-widest">Tidak ada data mahasiswa untuk filter ini.</td></tr>
+                      <tr><td colSpan={7} className="p-12 text-center text-cyan-800 font-mono text-sm uppercase tracking-widest">Tidak ada data mahasiswa untuk filter ini.</td></tr>
                    )}
                 </tbody>
              </table>
@@ -1566,20 +1654,20 @@ const AdminDashboardHome: React.FC = () => {
 const AdminClusters: React.FC = () => {
   const { clusters, addCluster, updateCluster, deleteCluster } = useAppContext();
   const [isAdding, setIsAdding] = useState(false);
-  const [newC, setNewC] = useState('');
+  const [newC, setNewC] = useState({ name: '', startDate: '', endDate: '' });
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [editName, setEditName] = useState('');
+  const [editData, setEditData] = useState({ name: '', startDate: '', endDate: '' });
 
   const handleAdd = (e: React.FormEvent) => {
     e.preventDefault();
-    if(newC.trim()) addCluster(newC);
-    setIsAdding(false); setNewC('');
+    if(newC.name.trim()) addCluster(newC);
+    setIsAdding(false); setNewC({ name: '', startDate: '', endDate: '' });
   };
 
   const handleUpdate = (e: React.FormEvent) => {
      e.preventDefault();
-     if(editingId && editName.trim()) updateCluster(editingId, editName);
-     setEditingId(null); setEditName('');
+     if(editingId && editData.name.trim()) updateCluster(editingId, editData);
+     setEditingId(null); setEditData({ name: '', startDate: '', endDate: '' });
   }
 
   return (
@@ -1587,41 +1675,63 @@ const AdminClusters: React.FC = () => {
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div>
           <h2 className="text-2xl md:text-3xl font-black text-cyan-50 tracking-widest uppercase">Data Kelompok / Angkatan</h2>
-          <p className="text-cyan-500/70 text-xs md:text-sm font-mono uppercase mt-1">Kelola Pengelompokan Mahasiswa</p>
+          <p className="text-cyan-500/70 text-xs md:text-sm font-mono uppercase mt-1">Kelola Pengelompokan Mahasiswa & Masa Stase</p>
         </div>
-        <button onClick={() => setIsAdding(!isAdding)} className="flex items-center gap-2 px-5 py-3 bg-cyan-600/20 text-cyan-400 hover:bg-cyan-500/30 border border-cyan-500/50 rounded-xl transition-all duration-300 font-black uppercase tracking-widest text-xs shadow-[0_0_15px_rgba(6,182,212,0.2)]">
+        <button onClick={() => setIsAdding(!isAdding)} className="flex items-center justify-center gap-2 px-5 py-3 bg-cyan-600/20 text-cyan-400 hover:bg-cyan-500/30 border border-cyan-500/50 rounded-xl transition-all duration-300 font-black uppercase tracking-widest text-xs shadow-[0_0_15px_rgba(6,182,212,0.2)] w-full md:w-auto">
           <Plus className="w-4 h-4" /> Tambah Kelompok Baru
         </button>
       </div>
 
       {isAdding && (
-        <form onSubmit={handleAdd} className="bg-[#0A1628]/80 backdrop-blur-md border border-cyan-500/30 p-5 md:p-6 rounded-2xl flex flex-col md:flex-row gap-4 items-end shadow-xl animate-in slide-in-from-top-4">
+        <form onSubmit={handleAdd} className="bg-[#0A1628]/80 backdrop-blur-md border border-cyan-500/30 p-5 md:p-6 rounded-2xl flex flex-col lg:flex-row gap-4 items-end shadow-xl animate-in slide-in-from-top-4">
           <div className="flex-1 space-y-1.5 w-full">
-            <label className="text-[10px] md:text-xs text-cyan-500 font-bold uppercase tracking-widest ml-1">Nama Kelompok / Angkatan</label>
-            <input required type="text" value={newC} onChange={e=>setNewC(e.target.value)} className="w-full bg-[#050B14] border border-cyan-500/30 rounded-xl px-4 py-3.5 text-white outline-none focus:border-cyan-400 transition-colors text-sm font-mono" placeholder="Contoh: Angkatan 2025" />
+            <label className="text-[10px] md:text-xs text-cyan-500 font-bold uppercase tracking-widest ml-1">Nama Kelompok</label>
+            <input required type="text" value={newC.name} onChange={e=>setNewC({...newC, name: e.target.value})} className="w-full bg-[#050B14] border border-cyan-500/30 rounded-xl px-4 py-3.5 text-white outline-none focus:border-cyan-400 transition-colors text-sm font-mono" placeholder="Contoh: Angkatan 2025" />
           </div>
-          <button type="submit" className="w-full md:w-auto px-8 py-3.5 bg-cyan-600 hover:bg-cyan-500 text-white font-black uppercase tracking-widest text-xs rounded-xl transition-all duration-300 shadow-lg active:scale-95">Simpan</button>
+          <div className="flex-1 space-y-1.5 w-full">
+            <label className="text-[10px] md:text-xs text-cyan-500 font-bold uppercase tracking-widest ml-1">Mulai Stase RKG</label>
+            <input type="date" value={newC.startDate} onChange={e=>setNewC({...newC, startDate: e.target.value})} className="w-full bg-[#050B14] border border-cyan-500/30 rounded-xl px-4 py-3.5 text-white outline-none focus:border-cyan-400 transition-colors text-sm font-mono" />
+          </div>
+          <div className="flex-1 space-y-1.5 w-full">
+            <label className="text-[10px] md:text-xs text-cyan-500 font-bold uppercase tracking-widest ml-1">Akhir Stase RKG</label>
+            <input type="date" value={newC.endDate} onChange={e=>setNewC({...newC, endDate: e.target.value})} className="w-full bg-[#050B14] border border-cyan-500/30 rounded-xl px-4 py-3.5 text-white outline-none focus:border-cyan-400 transition-colors text-sm font-mono" />
+          </div>
+          <button type="submit" className="w-full lg:w-auto px-8 py-3.5 bg-cyan-600 hover:bg-cyan-500 text-white font-black uppercase tracking-widest text-xs rounded-xl transition-all duration-300 shadow-lg active:scale-95">Simpan</button>
         </form>
       )}
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+      <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-5">
          {clusters.map(c => (
-            <div key={c.id} className="bg-[#0A1628]/60 backdrop-blur-md border border-cyan-500/20 p-5 rounded-2xl flex items-center justify-between group hover:border-cyan-500/50 transition-all duration-300 shadow-lg">
+            <div key={c.id} className="bg-[#0A1628]/60 backdrop-blur-md border border-cyan-500/20 p-5 md:p-6 rounded-2xl flex flex-col gap-4 group hover:border-cyan-500/50 transition-all duration-300 shadow-lg relative overflow-hidden">
                {editingId === c.id ? (
-                  <form onSubmit={handleUpdate} className="flex-1 flex gap-2">
-                     <input autoFocus type="text" value={editName} onChange={e=>setEditName(e.target.value)} className="w-full bg-[#050B14] border border-cyan-500/50 rounded-lg px-3 py-2 text-white outline-none text-sm font-mono" />
-                     <button type="submit" className="bg-emerald-500/20 text-emerald-400 p-2 rounded-lg border border-emerald-500/30"><CheckCircle2 className="w-4 h-4"/></button>
-                     <button type="button" onClick={()=>setEditingId(null)} className="bg-rose-500/20 text-rose-400 p-2 rounded-lg border border-rose-500/30"><X className="w-4 h-4"/></button>
+                  <form onSubmit={handleUpdate} className="flex flex-col gap-3 relative z-10">
+                     <input autoFocus required type="text" placeholder="Nama Kelompok" value={editData.name} onChange={e=>setEditData({...editData, name: e.target.value})} className="w-full bg-[#050B14] border border-cyan-500/50 rounded-lg px-3 py-2 text-white outline-none text-sm font-mono" />
+                     <div className="flex gap-2">
+                        <input type="date" value={editData.startDate} onChange={e=>setEditData({...editData, startDate: e.target.value})} className="w-full bg-[#050B14] border border-cyan-500/50 rounded-lg px-3 py-2 text-white outline-none text-[10px] font-mono" />
+                        <input type="date" value={editData.endDate} onChange={e=>setEditData({...editData, endDate: e.target.value})} className="w-full bg-[#050B14] border border-cyan-500/50 rounded-lg px-3 py-2 text-white outline-none text-[10px] font-mono" />
+                     </div>
+                     <div className="flex gap-2">
+                        <button type="submit" className="flex-1 bg-emerald-500/20 text-emerald-400 p-2 rounded-lg border border-emerald-500/30 flex justify-center"><CheckCircle2 className="w-4 h-4"/></button>
+                        <button type="button" onClick={()=>setEditingId(null)} className="flex-1 bg-rose-500/20 text-rose-400 p-2 rounded-lg border border-rose-500/30 flex justify-center"><X className="w-4 h-4"/></button>
+                     </div>
                   </form>
                ) : (
                   <>
-                     <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 bg-cyan-950/50 rounded-xl flex items-center justify-center border border-cyan-500/30"><Network className="w-5 h-5 text-cyan-400" /></div>
-                        <h3 className="font-bold text-white text-base tracking-wide">{c.name}</h3>
-                     </div>
-                     <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                        <button onClick={()=>{setEditingId(c.id); setEditName(c.name);}} className="p-2 bg-blue-500/10 hover:bg-blue-500/20 text-blue-400 border border-blue-500/20 rounded-lg"><Edit className="w-4 h-4"/></button>
-                        <button onClick={()=>{if(confirm(`Hapus kelompok ${c.name}? Data mahasiswa terkait akan terpengaruh.`)) deleteCluster(c.id);}} className="p-2 bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/20 rounded-lg"><Trash2 className="w-4 h-4"/></button>
+                     <div className="absolute top-0 right-0 w-24 h-24 bg-cyan-600/5 rounded-bl-[60px] pointer-events-none"></div>
+                     <div className="flex items-start justify-between relative z-10">
+                        <div className="flex items-center gap-3">
+                           <div className="w-10 h-10 bg-cyan-950/50 rounded-xl flex items-center justify-center border border-cyan-500/30 shrink-0"><Network className="w-5 h-5 text-cyan-400" /></div>
+                           <div>
+                              <h3 className="font-bold text-white text-base tracking-wide truncate max-w-[150px]">{c.name}</h3>
+                              <p className="text-[9px] text-cyan-500 font-mono uppercase tracking-widest mt-0.5">
+                                 {c.startDate && c.endDate ? `${new Date(c.startDate).toLocaleDateString('id-ID',{day:'2-digit', month:'short'})} - ${new Date(c.endDate).toLocaleDateString('id-ID',{day:'2-digit', month:'short'})}` : 'Tanggal Stase Belum Diatur'}
+                              </p>
+                           </div>
+                        </div>
+                        <div className="flex gap-2 opacity-100 lg:opacity-0 lg:group-hover:opacity-100 transition-opacity shrink-0">
+                           <button onClick={()=>{setEditingId(c.id); setEditData({name: c.name, startDate: c.startDate || '', endDate: c.endDate || ''});}} className="p-2 bg-blue-500/10 hover:bg-blue-500/20 text-blue-400 border border-blue-500/20 rounded-lg"><Edit className="w-4 h-4"/></button>
+                           <button onClick={()=>{if(confirm(`Hapus kelompok ${c.name}? Data mahasiswa terkait akan terpengaruh.`)) deleteCluster(c.id);}} className="p-2 bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/20 rounded-lg"><Trash2 className="w-4 h-4"/></button>
+                        </div>
                      </div>
                   </>
                )}
@@ -1638,8 +1748,10 @@ const AdminStudents: React.FC = () => {
   const [isAdding, setIsAdding] = useState(false);
   const [newS, setNewS] = useState({ name: '', nim: '', password: '', clusterId: '' });
   const [editingStudent, setEditingStudent] = useState<Student | null>(null);
+  
   const [search, setSearch] = useState('');
   const [selectedClusterForBulk, setSelectedClusterForBulk] = useState('');
+  const [filterClusterDisplay, setFilterClusterDisplay] = useState('All'); // Real display filter
   
   const [selectedStudentForKTM, setSelectedStudentForKTM] = useState<Student | null>(null);
 
@@ -1670,7 +1782,7 @@ const AdminStudents: React.FC = () => {
     if (!file) return;
 
     if (!selectedClusterForBulk) {
-       alert("Pilih Kelompok (Angkatan) terlebih dahulu sebelum upload file Excel.");
+       alert("Pilih Kelompok (Angkatan) terlebih dahulu di tombol 'PILIH KELOMPOK (IMPORT)' sebelum upload file Excel.");
        e.target.value = ''; // reset input
        return;
     }
@@ -1713,7 +1825,11 @@ const AdminStudents: React.FC = () => {
     e.target.value = ''; // reset input
   };
 
-  const filtered = students.filter(s => s.name.toLowerCase().includes(search.toLowerCase()) || s.nim.includes(search));
+  const filtered = students.filter(s => {
+      const matchesSearch = s.name.toLowerCase().includes(search.toLowerCase()) || s.nim.includes(search);
+      const matchesCluster = filterClusterDisplay === 'All' || s.clusterId === filterClusterDisplay;
+      return matchesSearch && matchesCluster;
+  });
 
   return (
     <div className="space-y-6 animate-in fade-in duration-500 h-full flex flex-col w-full relative pb-10">
@@ -1725,19 +1841,21 @@ const AdminStudents: React.FC = () => {
         
         <div className="flex flex-col sm:flex-row gap-3 w-full md:w-auto bg-[#0A1628]/80 p-2 rounded-2xl border border-cyan-500/20 shadow-lg">
            
-           <div className="flex items-center bg-[#050B14] border border-cyan-500/30 rounded-xl px-2 h-11">
-              <select value={selectedClusterForBulk} onChange={e=>setSelectedClusterForBulk(e.target.value)} className="bg-transparent text-cyan-50 text-xs font-bold uppercase outline-none w-32 cursor-pointer appearance-none px-2">
-                 <option value="" disabled>PILIH KELOMPOK</option>
-                 {clusters.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-              </select>
+           <div className="flex flex-col w-full md:w-auto gap-1">
+             <div className="flex items-center bg-[#050B14] border border-purple-500/30 rounded-xl px-2 h-11 w-full focus-within:border-purple-400 transition-colors">
+                <select value={selectedClusterForBulk} onChange={e=>setSelectedClusterForBulk(e.target.value)} className="bg-transparent text-purple-100 text-xs font-bold uppercase outline-none w-full md:w-40 cursor-pointer appearance-none px-2">
+                   <option value="" disabled>PILIH KELOMPOK (IMPORT)</option>
+                   {clusters.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                </select>
+             </div>
            </div>
            
-           <label className="flex flex-1 md:flex-none justify-center items-center gap-2 px-5 py-2.5 bg-purple-600/20 text-purple-400 hover:bg-purple-600/40 border border-purple-500/50 rounded-xl transition-all duration-300 font-black uppercase text-[10px] md:text-xs cursor-pointer active:scale-95 shadow-[0_0_10px_rgba(147,51,234,0.3)]">
+           <label className="flex flex-1 md:flex-none justify-center items-center gap-2 px-5 py-2.5 bg-purple-600/20 text-purple-400 hover:bg-purple-600/40 border border-purple-500/50 rounded-xl transition-all duration-300 font-black uppercase text-[10px] md:text-xs cursor-pointer active:scale-95 shadow-[0_0_10px_rgba(147,51,234,0.3)] whitespace-nowrap">
               <Upload className="w-4 h-4" /> Import Excel
               <input type="file" accept=".xlsx, .xls" className="hidden" onChange={handleBulkUpload} />
            </label>
            
-           <button onClick={() => setIsAdding(!isAdding)} className="flex flex-1 md:flex-none justify-center items-center gap-2 px-5 py-2.5 bg-cyan-600/20 text-cyan-400 hover:bg-cyan-600/40 border border-cyan-500/50 rounded-xl transition-all duration-300 font-black uppercase text-[10px] md:text-xs active:scale-95 shadow-[0_0_10px_rgba(6,182,212,0.3)]">
+           <button onClick={() => setIsAdding(!isAdding)} className="flex flex-1 md:flex-none justify-center items-center gap-2 px-5 py-2.5 bg-cyan-600/20 text-cyan-400 hover:bg-cyan-600/40 border border-cyan-500/50 rounded-xl transition-all duration-300 font-black uppercase text-[10px] md:text-xs active:scale-95 shadow-[0_0_10px_rgba(6,182,212,0.3)] whitespace-nowrap">
              <Plus className="w-4 h-4" /> Input Manual
            </button>
         </div>
@@ -1764,13 +1882,20 @@ const AdminStudents: React.FC = () => {
         </form>
       )}
 
-      <div className="relative w-full max-w-md">
-         <SearchIcon className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-cyan-600" />
-         <input type="text" placeholder="Cari Nama atau NIM..." value={search} onChange={e=>setSearch(e.target.value)} className="w-full bg-[#0A1628]/80 border border-cyan-500/30 rounded-2xl pl-11 pr-4 py-3.5 text-cyan-50 outline-none focus:border-cyan-400 transition-colors shadow-inner font-mono text-sm" />
+      {/* FILTER TAMPILAN TABEL */}
+      <div className="flex flex-col sm:flex-row gap-3 w-full max-w-2xl">
+         <div className="relative flex-1">
+            <SearchIcon className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-cyan-600" />
+            <input type="text" placeholder="Cari Nama atau NIM..." value={search} onChange={e=>setSearch(e.target.value)} className="w-full bg-[#0A1628]/80 border border-cyan-500/30 rounded-2xl pl-11 pr-4 py-3.5 text-cyan-50 outline-none focus:border-cyan-400 transition-colors shadow-inner font-mono text-sm" />
+         </div>
+         <select value={filterClusterDisplay} onChange={e=>setFilterClusterDisplay(e.target.value)} className="bg-[#0A1628]/80 border border-cyan-500/30 rounded-2xl px-5 py-3.5 text-cyan-50 outline-none focus:border-cyan-400 transition-colors shadow-inner w-full sm:w-56 font-bold text-xs uppercase cursor-pointer appearance-none">
+           <option value="All">Filter: Semua Kelompok</option>
+           {clusters.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+         </select>
       </div>
 
       <div className="flex-1 bg-[#0A1628]/60 backdrop-blur-md border border-cyan-500/20 rounded-[1.5rem] overflow-hidden flex flex-col shadow-[0_15px_40px_rgba(0,0,0,0.5)] relative">
-        <div className="overflow-x-auto">
+        <div className="overflow-x-auto custom-scrollbar">
           <table className="w-full text-left border-collapse min-w-[800px]">
             <thead>
               <tr className="bg-[#050B14]/80 border-b border-cyan-500/20 text-cyan-500 text-[10px] tracking-[0.2em] uppercase font-black">
@@ -1785,7 +1910,7 @@ const AdminStudents: React.FC = () => {
               {filtered.map(st => (
                 <tr key={st.id} className="hover:bg-cyan-900/20 transition-colors duration-200 text-cyan-50 group">
                   <td className="p-4 md:p-5 font-mono text-sm tracking-wider">{st.nim}</td>
-                  <td className="p-4 md:p-5 font-bold text-sm uppercase">{st.name}</td>
+                  <td className="p-4 md:p-5 font-bold text-sm uppercase max-w-[200px] truncate">{st.name}</td>
                   <td className="p-4 md:p-5">
                      <span className="text-[10px] uppercase font-bold tracking-widest text-cyan-300 bg-cyan-950/50 border border-cyan-500/30 px-3 py-1.5 rounded-md shadow-sm">
                         {clusters.find(c => c.id === st.clusterId)?.name || 'BELUM ADA KELOMPOK'}
@@ -1921,6 +2046,7 @@ const AdminReports: React.FC = () => {
   const [search, setSearch] = useState('');
   const [filterSession, setFilterSession] = useState('All');
   const [filterCluster, setFilterCluster] = useState('All');
+  const { startObj, endObj, FilterUI } = useDateFilter();
   
   const [previewImage, setPreviewImage] = useState<string | null>(null);
 
@@ -1929,7 +2055,12 @@ const AdminReports: React.FC = () => {
     const matchSession = filterSession === 'All' || log.sessionName === filterSession;
     const clusterName = clusters.find(c => c.id === filterCluster)?.name;
     const matchCluster = filterCluster === 'All' || log.clusterName === clusterName;
-    return matchSearch && matchSession && matchCluster;
+    
+    // Add Date Filter from Dropdown
+    const logDate = new Date(log.timestamp);
+    const inDateRange = logDate >= startObj && logDate <= endObj;
+
+    return matchSearch && matchSession && matchCluster && inDateRange;
   });
 
   return (
@@ -1944,23 +2075,27 @@ const AdminReports: React.FC = () => {
         </button>
       </div>
 
-      <div className="flex flex-col md:flex-row gap-3 md:gap-4 bg-[#0A1628]/60 p-4 rounded-2xl border border-cyan-500/20 shadow-lg">
-        <div className="relative flex-1">
+      <div className="flex flex-col md:flex-row gap-3 md:gap-4 bg-[#0A1628]/60 p-4 rounded-2xl border border-cyan-500/20 shadow-lg items-center">
+        <FilterUI />
+        
+        <div className="relative flex-1 w-full md:w-auto">
            <SearchIcon className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-cyan-600" />
-           <input type="text" placeholder="Cari Nama atau NIM..." value={search} onChange={e=>setSearch(e.target.value)} className="w-full bg-[#050B14] border border-cyan-500/30 rounded-xl pl-11 pr-4 py-3.5 text-cyan-50 outline-none focus:border-cyan-400 transition-colors shadow-inner font-mono text-sm" />
+           <input type="text" placeholder="Cari Nama atau NIM..." value={search} onChange={e=>setSearch(e.target.value)} className="w-full bg-[#050B14] border border-cyan-500/30 rounded-xl pl-11 pr-4 h-11 text-cyan-50 outline-none focus:border-cyan-400 transition-colors shadow-inner font-mono text-sm" />
         </div>
-        <select value={filterCluster} onChange={e=>setFilterCluster(e.target.value)} className="bg-[#050B14] border border-cyan-500/30 rounded-xl px-5 py-3.5 text-cyan-50 outline-none focus:border-cyan-400 transition-colors shadow-inner w-full md:w-48 font-bold text-xs uppercase cursor-pointer appearance-none">
+        
+        <select value={filterCluster} onChange={e=>setFilterCluster(e.target.value)} className="bg-[#050B14] border border-cyan-500/30 rounded-xl px-5 h-11 text-cyan-50 outline-none focus:border-cyan-400 transition-colors shadow-inner w-full md:w-40 font-bold text-xs uppercase cursor-pointer appearance-none">
           <option value="All">Semua Kelompok</option>
           {clusters.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
         </select>
-        <select value={filterSession} onChange={e=>setFilterSession(e.target.value)} className="bg-[#050B14] border border-cyan-500/30 rounded-xl px-5 py-3.5 text-cyan-50 outline-none focus:border-cyan-400 transition-colors shadow-inner w-full md:w-48 font-bold text-xs uppercase cursor-pointer appearance-none">
+        
+        <select value={filterSession} onChange={e=>setFilterSession(e.target.value)} className="bg-[#050B14] border border-cyan-500/30 rounded-xl px-5 h-11 text-cyan-50 outline-none focus:border-cyan-400 transition-colors shadow-inner w-full md:w-40 font-bold text-xs uppercase cursor-pointer appearance-none">
           <option value="All">Semua Jadwal Shift</option>
           {sessions.map(s => <option key={s.id} value={s.name}>{s.name}</option>)}
         </select>
       </div>
 
       <div className="flex-1 bg-[#0A1628]/60 backdrop-blur-md border border-cyan-500/20 rounded-[1.5rem] overflow-hidden flex flex-col shadow-xl">
-        <div className="overflow-x-auto">
+        <div className="overflow-x-auto custom-scrollbar">
           <table className="w-full text-left border-collapse min-w-[1000px]">
             <thead>
               <tr className="bg-[#050B14]/80 border-b border-cyan-500/30 text-cyan-500 text-[10px] tracking-[0.2em] uppercase font-black">
