@@ -12,7 +12,6 @@ import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, 
   PieChart, Pie, Cell, AreaChart, Area, ComposedChart, Legend, Line
 } from 'recharts';
-import * as XLSX from 'xlsx';
 
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
@@ -105,8 +104,22 @@ const calculateDistance = (lat1: number, lon1: number, lat2: number, lon2: numbe
   return R * c; 
 };
 
+// Fungsi pembantu untuk memuat XLSX secara dinamis (mengatasi error bundle pada Canvas)
+const loadXLSX = async () => {
+  if (typeof window !== 'undefined' && (window as any).XLSX) return (window as any).XLSX;
+  return new Promise((resolve, reject) => {
+    const script = document.createElement('script');
+    script.src = "https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js";
+    script.onload = () => resolve((window as any).XLSX);
+    script.onerror = reject;
+    document.head.appendChild(script);
+  });
+};
+
 // Poin 3: Export Data ke XLSX
-const exportToXLSX = (logs: Log[], students: Student[], clusters: Cluster[]) => {
+const exportToXLSX = async (logs: Log[], students: Student[], clusters: Cluster[]) => {
+  const XLSX: any = await loadXLSX();
+  
   const data = logs.map(log => {
     const student = students.find(s => s.nim === log.nim);
     const cluster = clusters.find(c => c.id === student?.clusterId)?.name || 'Tanpa Cluster';
@@ -1223,50 +1236,58 @@ const AdminStudents: React.FC = () => {
   };
 
   // Poin 1 & 2: Bulk Upload XLSX
-  const handleBulkUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleBulkUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
     
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      try {
-        const data = event.target?.result;
-        const workbook = XLSX.read(data, { type: 'binary' });
-        const sheetName = workbook.SheetNames[0];
-        const worksheet = workbook.Sheets[sheetName];
-        const json: any[] = XLSX.utils.sheet_to_json(worksheet);
-        
-        const newSt: Omit<Student, 'id'>[] = [];
-        json.forEach(row => {
-          // Asumsi header excel: Nama, NIM, Cluster (Opsional, merujuk ke Nama Cluster)
-          const name = row['Nama'] || row['NAMA'] || row['name'];
-          const nim = String(row['NIM'] || row['nim']);
-          const clusterName = row['Cluster'] || row['CLUSTER'] || row['Kategori'];
+    try {
+      const XLSX: any = await loadXLSX();
+      const reader = new FileReader();
+      
+      reader.onload = (event) => {
+        try {
+          const data = event.target?.result;
+          const workbook = XLSX.read(data, { type: 'binary' });
+          const sheetName = workbook.SheetNames[0];
+          const worksheet = workbook.Sheets[sheetName];
+          const json: any[] = XLSX.utils.sheet_to_json(worksheet);
           
-          let clusterId = undefined;
-          if (clusterName) {
-            const foundCluster = clusters.find(c => c.name.toLowerCase() === String(clusterName).toLowerCase());
-            if (foundCluster) clusterId = foundCluster.id;
-          }
+          const newSt: Omit<Student, 'id'>[] = [];
+          json.forEach(row => {
+            // Asumsi header excel: Nama, NIM, Cluster (Opsional, merujuk ke Nama Cluster)
+            const name = row['Nama'] || row['NAMA'] || row['name'];
+            const nim = String(row['NIM'] || row['nim']);
+            const clusterName = row['Cluster'] || row['CLUSTER'] || row['Kategori'];
+            
+            let clusterId = undefined;
+            if (clusterName) {
+              const foundCluster = clusters.find(c => c.name.toLowerCase() === String(clusterName).toLowerCase());
+              if (foundCluster) clusterId = foundCluster.id;
+            }
 
-          if (name && nim) {
-             newSt.push({ name: String(name), nim, password: `${nim}123`, clusterId });
+            if (name && nim) {
+               newSt.push({ name: String(name), nim, password: `${nim}123`, clusterId });
+            }
+          });
+          
+          if (newSt.length > 0) {
+            bulkAddStudents(newSt);
+            alert(`Berhasil menginjeksi ${newSt.length} data subjek ke database.`);
+          } else {
+            alert('Gagal mendeteksi kolom yang valid (Pastikan ada header "Nama" dan "NIM").');
           }
-        });
-        
-        if (newSt.length > 0) {
-          bulkAddStudents(newSt);
-          alert(`Berhasil menginjeksi ${newSt.length} data subjek ke database.`);
-        } else {
-          alert('Gagal mendeteksi kolom yang valid (Pastikan ada header "Nama" dan "NIM").');
+        } catch (err) {
+          console.error(err);
+          alert('Format file korup atau tidak didukung.');
         }
-      } catch (err) {
-        console.error(err);
-        alert('Format file korup atau tidak didukung.');
-      }
-    };
-    reader.readAsBinaryString(file);
-    e.target.value = ''; // Reset input
+      };
+      reader.readAsBinaryString(file);
+    } catch (err) {
+      console.error(err);
+      alert('Gagal memuat parser XLSX.');
+    } finally {
+      e.target.value = ''; // Reset input
+    }
   };
 
   const filtered = students.filter(s => {
