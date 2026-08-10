@@ -167,6 +167,7 @@ interface Session { id: string; name: string; startTime: string; endTime: string
 interface Log { id: string; nim: string; name: string; clusterName?: string; timestamp: string; sessionName: string; status: 'Hadir' | 'Terlambat'; location: { lat: number; lng: number }; photoBase64: string; deviceId: string; }
 interface Student { id: string; nim: string; name: string; password?: string; deviceId?: string | null; clusterId?: string; }
 interface Geofence { lat: number; lng: number; radius: number; name?: string; }
+interface AdminUser { id: string; username: string; password?: string; }
 
 type SyncStatus = 'offline' | 'synced' | 'syncing' | 'error';
 
@@ -176,6 +177,7 @@ interface AppContextType {
   logs: Log[];
   students: Student[];
   geofence: Geofence;
+  admins: AdminUser[];
   isCloudSync: boolean;
   syncStatus: SyncStatus;
   addCluster: (name: string) => void;
@@ -191,6 +193,9 @@ interface AppContextType {
   bulkAddStudents: (newStudents: Omit<Student, 'id'>[]) => void;
   deleteStudent: (id: string) => void;
   updateGeofence: (data: Geofence) => void;
+  addAdmin: (admin: Omit<AdminUser, 'id'>) => void;
+  updateAdmin: (id: string, updates: Partial<AdminUser>) => void;
+  deleteAdmin: (id: string) => void;
   forceManualSync: () => Promise<void>;
   studentLogout: () => void;
 }
@@ -214,6 +219,7 @@ const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [logs, setLogs] = useState<Log[]>([]);
   const [students, setStudents] = useState<Student[]>([]);
   const [geofence, setGeofence] = useState<Geofence>(defaultGeofence);
+  const [admins, setAdmins] = useState<AdminUser[]>([]);
 
   useEffect(() => {
     const initData = async () => {
@@ -221,7 +227,7 @@ const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
       setIsCloudSync(cloudAvailable);
       setSyncStatus(cloudAvailable ? 'synced' : 'offline');
 
-      let c = null, s = null, l = null, st = null, gf = null;
+      let c = null, s = null, l = null, st = null, gf = null, ad = null;
 
       if (cloudAvailable) {
         c = await CloudStore.get('axaxyz_clusters');
@@ -229,6 +235,7 @@ const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
         l = await CloudStore.get('axaxyz_logs');
         st = await CloudStore.get('axaxyz_students');
         gf = await CloudStore.get('axaxyz_geofence');
+        ad = await CloudStore.get('axaxyz_admins');
       }
 
       if (!c) c = JSON.parse(localStorage.getItem('axaxyz_clusters') || 'null');
@@ -236,12 +243,14 @@ const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
       if (!l) l = JSON.parse(localStorage.getItem('axaxyz_logs') || 'null');
       if (!st) st = JSON.parse(localStorage.getItem('axaxyz_students') || 'null');
       if (!gf) gf = JSON.parse(localStorage.getItem('axaxyz_geofence') || 'null');
+      if (!ad) ad = JSON.parse(localStorage.getItem('axaxyz_admins') || 'null');
 
       setClusters(c || defaultClusters);
       setSessions(s || defaultSessions);
       setLogs(l || []);
       setStudents(st || []);
       setGeofence(gf || defaultGeofence);
+      setAdmins(ad || []);
       
       setIsAppLoading(false);
     };
@@ -272,6 +281,7 @@ const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
       await CloudStore.set('axaxyz_logs', JSON.stringify(logs));
       await CloudStore.set('axaxyz_students', JSON.stringify(students));
       await CloudStore.set('axaxyz_geofence', JSON.stringify(geofence));
+      await CloudStore.set('axaxyz_admins', JSON.stringify(admins));
       setSyncStatus('synced');
       alert("✅ Sistem Radiologi tersinkronisasi paksa ke Cloud Database!");
     } catch (e: any) {
@@ -286,6 +296,7 @@ const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const saveLogs = (d: Log[]) => { setLogs(d); localStorage.setItem('axaxyz_logs', JSON.stringify(d)); syncToCloud('axaxyz_logs', d); };
   const saveStudents = (d: Student[]) => { setStudents(d); localStorage.setItem('axaxyz_students', JSON.stringify(d)); syncToCloud('axaxyz_students', d); };
   const saveGeofence = (d: Geofence) => { setGeofence(d); localStorage.setItem('axaxyz_geofence', JSON.stringify(d)); syncToCloud('axaxyz_geofence', d); };
+  const saveAdmins = (d: AdminUser[]) => { setAdmins(d); localStorage.setItem('axaxyz_admins', JSON.stringify(d)); syncToCloud('axaxyz_admins', d); };
 
   const addCluster = (name: string) => saveClusters([...clusters, { id: Math.random().toString(36).substr(2, 9), name }]);
   const updateCluster = (id: string, name: string) => saveClusters(clusters.map(c => c.id === id ? { ...c, name } : c));
@@ -306,6 +317,10 @@ const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   };
   const deleteStudent = (id: string) => saveStudents(students.filter(s => s.id !== id));
   const updateGeofence = (data: Geofence) => saveGeofence(data);
+
+  const addAdmin = (adminData: Omit<AdminUser, 'id'>) => saveAdmins([...admins, { ...adminData, id: Math.random().toString(36).substr(2, 9) }]);
+  const updateAdmin = (id: string, updates: Partial<AdminUser>) => saveAdmins(admins.map(a => a.id === id ? { ...a, ...updates } : a));
+  const deleteAdmin = (id: string) => saveAdmins(admins.filter(a => a.id !== id));
 
   const studentLogout = () => {
      if(!confirm('Apakah Anda yakin ingin mengeluarkan perangkat ini dari sesi mahasiswa Anda?')) return;
@@ -338,9 +353,10 @@ const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
 
   return (
     <AppContext.Provider value={{ 
-      isCloudSync, syncStatus, clusters, sessions, logs, students, geofence, 
+      isCloudSync, syncStatus, clusters, sessions, logs, students, geofence, admins,
       addCluster, updateCluster, deleteCluster, addLog, deleteLog, updateSession, addSession, deleteSession, 
-      addStudent, updateStudent, bulkAddStudents, deleteStudent, updateGeofence, forceManualSync, studentLogout
+      addStudent, updateStudent, bulkAddStudents, deleteStudent, updateGeofence, forceManualSync, studentLogout,
+      addAdmin, updateAdmin, deleteAdmin
     }}>
       {children}
     </AppContext.Provider>
@@ -527,7 +543,7 @@ const QRScanner: React.FC<{ activeSessionName: string, onComplete: (data: {nim: 
               const alreadyAttended = logs.some(l => l.nim === ownerNim && l.sessionName === activeSessionName && l.timestamp.startsWith(today));
               
               if (alreadyAttended) {
-                 setError(`⚠️ Entitas ${foundStudent.name} telah tercatat hadir pada sesi ${activeSessionName} ini hari ini.`);
+                 setError(`⚠️ Entitas ${foundStudent.name} telah tercatat hadir pada sesi ${activeSessionName} hari ini.`);
                  setIsAutoLoggingIn(false);
                  return;
               }
@@ -554,12 +570,19 @@ const QRScanner: React.FC<{ activeSessionName: string, onComplete: (data: {nim: 
 
     const today = new Date().toISOString().split('T')[0];
     const alreadyAttended = logs.some(l => l.nim === targetNim && l.sessionName === activeSessionName && l.timestamp.startsWith(today));
+    
+    let studentName = 'Entitas Tidak Dikenal';
+    
+    if (students.length > 0) {
+      const foundStudent = students.find(s => s.nim === targetNim);
+      if (foundStudent) studentName = foundStudent.name;
+    }
+
     if (alreadyAttended) {
-      setError(`⚠️ Akses Ditolak: Anda sudah melakukan absensi untuk sesi ${activeSessionName} ini hari ini.`);
+      setError(`⚠️ Akses Ditolak: Entitas ${studentName} telah tercatat hadir pada sesi ${activeSessionName} hari ini.`);
       return;
     }
 
-    let studentName = 'Entitas Tidak Dikenal';
     let clusterName = '';
     let finalDeviceId = localStorage.getItem('axaxyz_device_id');
     
@@ -954,23 +977,23 @@ const AttendanceWizard: React.FC = () => {
         {step < 5 && (
           <div className="mb-8 md:mb-16 max-w-2xl mx-auto w-full px-2 relative z-20">
             <div className="flex justify-between relative">
-              <div className="absolute top-1/2 -translate-y-1/2 left-0 w-full h-[2px] bg-cyan-950"></div>
+              <div className="absolute top-1/2 -translate-y-1/2 left-0 w-full h-[2px] bg-cyan-950/50"></div>
               <div className="absolute top-1/2 -translate-y-1/2 left-0 h-[2px] bg-cyan-400 transition-all duration-700 ease-in-out shadow-[0_0_10px_rgba(6,182,212,0.8)]" style={{ width: `${((step - 1) / (steps.length - 1)) * 100}%` }}></div>
               {steps.map((label, idx) => {
                 const isActive = step === idx + 1; const isPassed = step > idx + 1;
                 return (
                   <div key={label} className="relative z-10 flex flex-col items-center gap-3">
-                    <div className={cn("w-8 h-8 md:w-10 md:h-10 rounded-lg flex items-center justify-center text-xs md:text-sm font-black border-2 transition-all duration-500 transform rotate-45", isActive ? "bg-[#0A1628] border-cyan-400 text-cyan-400 shadow-[0_0_20px_rgba(6,182,212,0.6)] scale-110" : isPassed ? "bg-cyan-600 border-cyan-400 text-white" : "bg-[#050B14] border-cyan-900 text-cyan-800")}>
-                      <div className="-rotate-45">{isPassed ? <CheckCircle2 className="w-4 h-4 md:w-5 md:h-5" /> : idx + 1}</div>
+                    <div className={cn("w-10 h-10 md:w-12 md:h-12 rounded-full flex items-center justify-center text-xs md:text-sm font-black border-[3px] transition-all duration-500 bg-[#050B14]", isActive ? "border-cyan-400 text-cyan-400 shadow-[0_0_20px_rgba(6,182,212,0.6)] scale-110" : isPassed ? "border-cyan-600 text-cyan-500" : "border-slate-800 text-slate-600")}>
+                      {isPassed ? <CheckCircle2 className="w-5 h-5 md:w-6 md:h-6" /> : idx + 1}
                     </div>
-                    <span className={cn("text-[9px] md:text-[10px] font-mono absolute -bottom-7 w-max tracking-widest uppercase", isActive ? "text-cyan-400 font-bold" : isPassed ? "text-cyan-600" : "text-cyan-900")}>{label}</span>
+                    <span className={cn("text-[9px] md:text-[10px] font-mono absolute -bottom-8 w-max tracking-widest uppercase", isActive ? "text-cyan-400 font-bold" : isPassed ? "text-cyan-600" : "text-slate-600")}>{label}</span>
                   </div>
                 );
               })}
             </div>
           </div>
         )}
-        <div className="flex-1 flex items-center justify-center w-full">
+        <div className="flex-1 flex items-center justify-center w-full pt-4">
           {step === 1 && <TimeCheck onComplete={(d) => { activeSessionRef.current = d.sessionName; setData(prev => ({...prev, ...d})); setStep(2); }} />}
           {step === 2 && <LocationCheck onComplete={(d) => { setData(prev => ({...prev, location: d})); setStep(3); }} />}
           {step === 3 && <QRScanner activeSessionName={activeSessionRef.current} onComplete={(d) => { setData(prev => ({...prev, ...d})); setStep(4); }} />}
@@ -993,6 +1016,7 @@ const AttendanceWizard: React.FC = () => {
 // ADMIN AREA
 // ==========================================
 const AdminLogin: React.FC<{ onLogin: () => void }> = ({ onLogin }) => {
+  const { admins } = useAppContext();
   const [user, setUser] = useState('');
   const [pass, setPass] = useState('');
   const [err, setErr] = useState('');
@@ -1016,15 +1040,14 @@ const AdminLogin: React.FC<{ onLogin: () => void }> = ({ onLogin }) => {
     setIsLoading(true); setErr('');
     await new Promise(resolve => setTimeout(resolve, 800));
 
-    let ADMIN_USER = 'admin';
-    let ADMIN_PASS = 'admin123';
+    // Verify Env Fallback OR Custom Admin Logic
+    const envUser = process.env.NEXT_PUBLIC_ADMIN_USER;
+    const envPass = process.env.NEXT_PUBLIC_ADMIN_PASS;
 
-    if (typeof process !== 'undefined' && process.env) {
-      if (process.env.NEXT_PUBLIC_ADMIN_USER) ADMIN_USER = process.env.NEXT_PUBLIC_ADMIN_USER;
-      if (process.env.NEXT_PUBLIC_ADMIN_PASS) ADMIN_PASS = process.env.NEXT_PUBLIC_ADMIN_PASS;
-    }
+    const isEnvMatch = (envUser && envPass && user === envUser && pass === envPass);
+    const isDbMatch = admins.some(a => a.username === user && a.password === pass);
 
-    if (user === ADMIN_USER && pass === ADMIN_PASS) {
+    if (isEnvMatch || isDbMatch) {
       setAttempts(0);
       localStorage.setItem('axaxyz_admin_auth', 'true');
       onLogin();
@@ -1762,192 +1785,96 @@ const AdminSettings: React.FC = () => {
   );
 };
 
-const AdminReports: React.FC = () => {
-  const { logs, sessions, clusters, deleteLog } = useAppContext();
-  const [search, setSearch] = useState('');
-  const [filterSession, setFilterSession] = useState('All');
-  const [filterCluster, setFilterCluster] = useState('All');
-  
-  const [previewImage, setPreviewImage] = useState<string | null>(null);
+const AdminManagement: React.FC = () => {
+  const { admins, addAdmin, updateAdmin, deleteAdmin } = useAppContext();
+  const [isAdding, setIsAdding] = useState(false);
+  const [newAd, setNewAd] = useState({ username: '', password: '' });
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editUser, setEditUser] = useState('');
+  const [editPass, setEditPass] = useState('');
 
-  const filteredLogs = logs.filter(log => {
-    const matchSearch = log.name.toLowerCase().includes(search.toLowerCase()) || log.nim.includes(search);
-    const matchSession = filterSession === 'All' || log.sessionName === filterSession;
-    const clusterName = clusters.find(c => c.id === filterCluster)?.name;
-    const matchCluster = filterCluster === 'All' || log.clusterName === clusterName;
-    return matchSearch && matchSession && matchCluster;
-  });
-
-  return (
-    <div className="space-y-6 animate-in fade-in duration-500 h-full flex flex-col relative w-full pb-10">
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-        <div>
-           <h2 className="text-2xl md:text-3xl font-black text-cyan-50 tracking-widest uppercase">Pusat Data Log</h2>
-           <p className="text-cyan-500/70 text-xs md:text-sm font-mono mt-1 uppercase">Histori Audit, Citra Biometrik & Geolokasi</p>
-        </div>
-        <button onClick={() => exportToExcel(filteredLogs)} className="w-full md:w-auto flex items-center justify-center gap-3 px-8 py-3.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white rounded-xl transition-all duration-300 font-black tracking-widest uppercase text-xs shadow-[0_0_20px_rgba(16,185,129,0.4)] active:scale-95">
-           <Download className="w-4 h-4" /> Export Report (XLSX)
-        </button>
-      </div>
-
-      <div className="flex flex-col md:flex-row gap-3 md:gap-4 bg-[#0A1628]/60 p-4 rounded-2xl border border-cyan-500/20 shadow-lg">
-        <div className="relative flex-1">
-           <SearchIcon className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-cyan-600" />
-           <input type="text" placeholder="Pencarian spesifik..." value={search} onChange={e=>setSearch(e.target.value)} className="w-full bg-[#050B14] border border-cyan-500/30 rounded-xl pl-11 pr-4 py-3.5 text-cyan-50 outline-none focus:border-cyan-400 transition-colors shadow-inner font-mono text-sm" />
-        </div>
-        <select value={filterCluster} onChange={e=>setFilterCluster(e.target.value)} className="bg-[#050B14] border border-cyan-500/30 rounded-xl px-5 py-3.5 text-cyan-50 outline-none focus:border-cyan-400 transition-colors shadow-inner w-full md:w-48 font-bold text-xs uppercase cursor-pointer appearance-none">
-          <option value="All">Filter: Semua Cluster</option>
-          {clusters.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-        </select>
-        <select value={filterSession} onChange={e=>setFilterSession(e.target.value)} className="bg-[#050B14] border border-cyan-500/30 rounded-xl px-5 py-3.5 text-cyan-50 outline-none focus:border-cyan-400 transition-colors shadow-inner w-full md:w-48 font-bold text-xs uppercase cursor-pointer appearance-none">
-          <option value="All">Filter: Semua Sesi</option>
-          {sessions.map(s => <option key={s.id} value={s.name}>{s.name}</option>)}
-        </select>
-      </div>
-
-      <div className="flex-1 bg-[#0A1628]/60 backdrop-blur-md border border-cyan-500/20 rounded-[1.5rem] overflow-hidden flex flex-col shadow-xl">
-        <div className="overflow-x-auto">
-          <table className="w-full text-left border-collapse min-w-[1000px]">
-            <thead>
-              <tr className="bg-[#050B14]/80 border-b border-cyan-500/30 text-cyan-500 text-[10px] tracking-[0.2em] uppercase font-black">
-                <th className="p-4 md:p-5">Citra Visual</th>
-                <th className="p-4 md:p-5">Data Entitas</th>
-                <th className="p-4 md:p-5">Waktu Pencatatan (Log)</th>
-                <th className="p-4 md:p-5">Parameter Sesi</th>
-                <th className="p-4 md:p-5">Satelit Geofence</th>
-                <th className="p-4 md:p-5 text-right">Opsi</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-cyan-900/30">
-              {filteredLogs.map(log => (
-                <tr key={log.id} className="hover:bg-cyan-900/20 transition-colors duration-200">
-                  <td className="p-4 md:p-5">
-                    <div onClick={() => setPreviewImage(log.photoBase64)} className="w-16 h-16 rounded-xl overflow-hidden border-2 border-cyan-500/40 bg-black relative group cursor-pointer shadow-md hover:shadow-[0_0_15px_rgba(6,182,212,0.6)] hover:border-cyan-300 transition-all duration-300">
-                      {/* Filter warna dihapus */}
-                      <img src={log.photoBase64} alt="Selfie" className="w-full h-full object-cover" />
-                      <div className="absolute inset-0 bg-[#0A1628]/60 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity backdrop-blur-sm">
-                        <Maximize className="w-5 h-5 text-cyan-400" />
-                      </div>
-                    </div>
-                  </td>
-                  <td className="p-4 md:p-5">
-                     <p className="font-bold text-cyan-50 text-sm uppercase tracking-wide truncate max-w-[200px] mb-1">{log.name}</p>
-                     <p className="text-xs text-cyan-400/80 font-mono tracking-widest">{log.nim}</p>
-                     <p className="text-[9px] mt-2 inline-block px-2 py-0.5 bg-cyan-950 text-cyan-300 rounded border border-cyan-500/20 font-bold uppercase tracking-wider">{log.clusterName || 'Tanpa Cluster'}</p>
-                  </td>
-                  <td className="p-4 md:p-5">
-                     <p className="text-cyan-50 font-black font-mono text-base tracking-wider mb-1 drop-shadow-md">{new Date(log.timestamp).toLocaleTimeString('id-ID')}</p>
-                     <p className="text-[10px] md:text-xs text-cyan-500/80 font-mono uppercase tracking-widest">{new Date(log.timestamp).toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'short' })}</p>
-                  </td>
-                  <td className="p-4 md:p-5">
-                     <p className="text-cyan-200 text-xs font-bold uppercase tracking-widest mb-2">{log.sessionName}</p>
-                     <span className={cn("px-3 py-1 text-[9px] font-black uppercase tracking-[0.2em] rounded-md border shadow-sm", log.status === 'Hadir' ? "bg-emerald-950/50 text-emerald-400 border-emerald-500/40 shadow-[0_0_10px_rgba(16,185,129,0.2)]" : "bg-amber-950/50 text-amber-400 border-amber-500/40 shadow-[0_0_10px_rgba(245,158,11,0.2)]")}>{log.status}</span>
-                  </td>
-                  <td className="p-4 md:p-5">
-                    <a href={`https://www.google.com/maps?q=${log.location.lat},${log.location.lng}`} target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 px-3 py-2 bg-cyan-950/50 hover:bg-cyan-600 hover:text-white text-cyan-400 text-[9px] font-black uppercase tracking-[0.2em] rounded-lg border border-cyan-500/40 transition-all duration-300 shadow-sm active:scale-95">
-                      <MapPin className="w-3 h-3" /> Pindai G-Maps
-                    </a>
-                    <p className="text-[9px] text-cyan-600/70 mt-2.5 font-mono uppercase tracking-widest bg-[#050B14] inline-block px-2 py-1 rounded-md border border-cyan-900/50">{log.location.lat.toFixed(5)}, {log.location.lng.toFixed(5)}</p>
-                  </td>
-                  <td className="p-4 md:p-5 text-right">
-                    <button onClick={() => { if(confirm(`Hapus permanen log absensi entitas ${log.name}?`)) deleteLog(log.id); }} title="Terminasi Log" className="p-2.5 text-rose-500 hover:text-white hover:bg-rose-600 rounded-xl transition-all duration-300 border border-transparent hover:border-rose-500/50 hover:shadow-[0_0_15px_rgba(244,63,94,0.4)] active:scale-95">
-                      <Trash2 className="w-5 h-5" />
-                    </button>
-                  </td>
-                </tr>
-              ))}
-              {filteredLogs.length === 0 && <tr><td colSpan={6} className="p-16 text-center text-cyan-800 font-mono text-sm uppercase tracking-widest">Database Log Kosong / Tidak Ditemukan.</td></tr>}
-            </tbody>
-          </table>
-        </div>
-      </div>
-      
-      {/* MODAL FULLSCREEN PREVIEW IMAGE RESPONSIVE */}
-      {previewImage && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-[#050B14]/95 backdrop-blur-2xl p-4 animate-in fade-in zoom-in-95 duration-300" onClick={() => setPreviewImage(null)}>
-          <div className="relative max-w-3xl w-full flex flex-col items-center justify-center">
-            <button onClick={() => setPreviewImage(null)} className="absolute -top-14 md:-top-16 right-0 md:-right-8 p-3 bg-rose-950/50 hover:bg-rose-500 hover:text-white rounded-xl transition-all duration-300 text-rose-400 shadow-[0_0_15px_rgba(244,63,94,0.2)] active:scale-90 border border-rose-500/30">
-              <X className="w-6 h-6"/>
-            </button>
-            <div className="relative w-full overflow-hidden rounded-[2rem] border-[4px] md:border-[8px] border-cyan-500/30 shadow-[0_0_80px_rgba(6,182,212,0.4)] bg-black">
-                {/* HUD Overlay for fullscreen */}
-                <div className="absolute inset-0 pointer-events-none bg-[linear-gradient(transparent_95%,rgba(6,182,212,0.2)_100%),linear-gradient(90deg,transparent_95%,rgba(6,182,212,0.2)_100%)] bg-[length:40px_40px] mix-blend-screen opacity-50"></div>
-                {/* Filter warna juga dihapus di fullscreen preview */}
-                <img src={previewImage} alt="Preview Selfie Fullscreen" className="max-w-full max-h-[75vh] md:max-h-[85vh] w-full object-contain mx-auto" onClick={e => e.stopPropagation()} />
-            </div>
-            <p className="mt-5 text-cyan-400 text-[10px] font-mono tracking-[0.2em] bg-[#0A1628] px-4 py-2 rounded-lg border border-cyan-500/20 uppercase">Ketuk area luar untuk terminasi pratinjau</p>
-          </div>
-        </div>
-      )}
-    </div>
-  );
-};
-
-const AdminGeofence: React.FC = () => {
-  const { geofence, updateGeofence } = useAppContext();
-  const [lat, setLat] = useState(geofence.lat.toString());
-  const [lng, setLng] = useState(geofence.lng.toString());
-  const [radius, setRadius] = useState(geofence.radius.toString());
-  const [locationName, setLocationName] = useState(geofence.name || 'Klinik Radiologi');
-
-  const handleSave = (e: React.FormEvent) => {
+  const handleAdd = (e: React.FormEvent) => {
     e.preventDefault();
-    updateGeofence({ lat: parseFloat(lat), lng: parseFloat(lng), radius: parseInt(radius), name: locationName });
-    alert('Konfigurasi spasial berhasil disimpan dan disinkronisasikan ke Server.');
-  };
-
-  const getMyLocation = () => {
-    if (navigator.geolocation) {
-      navigator.geolocation.getCurrentPosition(
-        (pos) => { setLat(pos.coords.latitude.toString()); setLng(pos.coords.longitude.toString()); },
-        () => alert('Sensor GPS gagal mengunci lokasi.')
-      );
+    if(newAd.username.trim() && newAd.password.trim()) {
+       addAdmin(newAd);
+       setIsAdding(false); 
+       setNewAd({ username: '', password: '' });
     }
   };
 
+  const handleUpdate = (e: React.FormEvent) => {
+     e.preventDefault();
+     if(editingId && editUser.trim()) {
+        updateAdmin(editingId, { username: editUser, password: editPass });
+        setEditingId(null); 
+        setEditUser('');
+        setEditPass('');
+     }
+  }
+
   return (
-    <div className="space-y-6 animate-in fade-in duration-500 max-w-3xl pb-10">
-      <div>
-        <h2 className="text-2xl md:text-3xl font-black text-cyan-50 tracking-widest uppercase">Konfigurasi Geofencing</h2>
-        <p className="text-cyan-500/70 text-xs md:text-sm font-mono mt-1 uppercase">Pemetaan radius keamanan area kerja</p>
+    <div className="space-y-6 animate-in fade-in duration-500 pb-10">
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+        <div>
+          <h2 className="text-2xl md:text-3xl font-black text-cyan-50 tracking-widest uppercase">Manajemen Admin</h2>
+          <p className="text-cyan-500/70 text-xs md:text-sm font-mono uppercase mt-1">Kelola Akun Otorisasi Keamanan Pusat</p>
+        </div>
+        <button onClick={() => setIsAdding(!isAdding)} className="flex items-center gap-2 px-5 py-3 bg-cyan-600/20 text-cyan-400 hover:bg-cyan-500/30 border border-cyan-500/50 rounded-xl transition-all duration-300 font-black uppercase tracking-widest text-xs shadow-[0_0_15px_rgba(6,182,212,0.2)]">
+          <Plus className="w-4 h-4" /> Tambah Admin
+        </button>
       </div>
 
-      <form onSubmit={handleSave} className="bg-[#0A1628]/80 backdrop-blur-md border border-cyan-500/30 p-6 md:p-8 rounded-[2rem] space-y-6 md:space-y-8 shadow-[0_15px_40px_rgba(0,0,0,0.5)]">
-        <div className="p-5 bg-cyan-950/30 border border-cyan-500/30 rounded-2xl flex items-start gap-4 shadow-inner relative overflow-hidden">
-          <div className="absolute left-0 top-0 w-1 h-full bg-cyan-500"></div>
-          <Navigation className="w-7 h-7 text-cyan-400 mt-1 shrink-0 drop-shadow-[0_0_8px_rgba(6,182,212,0.8)]" />
-          <p className="text-xs text-cyan-100/90 leading-relaxed font-mono uppercase tracking-wide">Radar sistem hanya akan mengizinkan otorisasi kehadiran jika kordinat spasial pengguna (secara realtime) berada dalam zona hijau (<b>Radius Maksimal</b>) dari titik pusat radar di bawah ini.</p>
-        </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-5 md:gap-6">
-          <div className="space-y-1.5 md:col-span-2">
-             <label className="text-[10px] text-cyan-500 font-bold uppercase tracking-widest ml-1">Nama Titik Radar (Pesan Kegagalan)</label>
-             <input required type="text" value={locationName} onChange={e=>setLocationName(e.target.value)} className="w-full bg-[#050B14] border border-cyan-500/30 rounded-xl px-4 py-3.5 text-cyan-50 outline-none focus:border-cyan-400 transition-colors shadow-inner text-sm font-mono" placeholder="Contoh: Gedung Klinik Pusat" />
+      {isAdding && (
+        <form onSubmit={handleAdd} className="bg-[#0A1628]/80 backdrop-blur-md border border-cyan-500/30 p-5 md:p-6 rounded-2xl flex flex-col md:flex-row gap-4 items-end shadow-xl animate-in slide-in-from-top-4">
+          <div className="flex-1 space-y-1.5 w-full">
+            <label className="text-[10px] md:text-xs text-cyan-500 font-bold uppercase tracking-widest ml-1">Username Admin Baru</label>
+            <input required type="text" value={newAd.username} onChange={e=>setNewAd({...newAd, username: e.target.value})} className="w-full bg-[#050B14] border border-cyan-500/30 rounded-xl px-4 py-3.5 text-white outline-none focus:border-cyan-400 transition-colors text-sm font-mono" placeholder="Ketik Username..." />
           </div>
-          <div className="space-y-1.5">
-            <label className="text-[10px] text-cyan-500 font-bold uppercase tracking-widest ml-1">Sumbu Y (Latitude)</label>
-            <input required type="number" step="any" value={lat} onChange={e=>setLat(e.target.value)} className="w-full bg-[#050B14] border border-cyan-500/30 rounded-xl px-4 py-3.5 text-cyan-50 outline-none focus:border-cyan-400 transition-colors shadow-inner font-mono text-sm" />
+          <div className="flex-1 space-y-1.5 w-full">
+            <label className="text-[10px] md:text-xs text-cyan-500 font-bold uppercase tracking-widest ml-1">Password Baru</label>
+            <input required type="text" value={newAd.password} onChange={e=>setNewAd({...newAd, password: e.target.value})} className="w-full bg-[#050B14] border border-cyan-500/30 rounded-xl px-4 py-3.5 text-white outline-none focus:border-cyan-400 transition-colors text-sm font-mono" placeholder="Ketik Password..." />
           </div>
-          <div className="space-y-1.5">
-            <label className="text-[10px] text-cyan-500 font-bold uppercase tracking-widest ml-1">Sumbu X (Longitude)</label>
-            <input required type="number" step="any" value={lng} onChange={e=>setLng(e.target.value)} className="w-full bg-[#050B14] border border-cyan-500/30 rounded-xl px-4 py-3.5 text-cyan-50 outline-none focus:border-cyan-400 transition-colors shadow-inner font-mono text-sm" />
-          </div>
-        </div>
+          <button type="submit" className="w-full md:w-auto px-8 py-3.5 bg-cyan-600 hover:bg-cyan-500 text-white font-black uppercase tracking-widest text-xs rounded-xl transition-all duration-300 shadow-lg active:scale-95">Simpan Kredensial</button>
+        </form>
+      )}
 
-        <div className="space-y-1.5">
-           <label className="text-[10px] text-cyan-500 font-bold uppercase tracking-widest ml-1">Limitasi Jarak Radar (Meter)</label>
-           <input required type="number" min="10" value={radius} onChange={e=>setRadius(e.target.value)} className="w-full bg-[#050B14] border border-cyan-500/30 rounded-xl px-4 py-4 text-cyan-400 outline-none focus:border-cyan-400 transition-colors shadow-inner font-black text-lg md:text-xl text-center tracking-widest" />
-        </div>
-
-        <div className="flex flex-col md:flex-row gap-3 md:gap-4 pt-8 border-t border-cyan-900/50">
-          <button type="button" onClick={getMyLocation} className="w-full md:w-auto px-6 py-4 bg-[#050B14] hover:bg-cyan-950/40 border border-cyan-500/40 text-cyan-400 font-black tracking-widest uppercase text-xs rounded-xl transition-all duration-300 flex items-center justify-center gap-3 active:scale-95 shadow-sm">
-            <MapPin className="w-4 h-4" /> Kalibrasi Posisi
-          </button>
-          <button type="submit" className="w-full md:flex-1 py-4 bg-cyan-600 hover:bg-cyan-500 text-white font-black tracking-[0.15em] uppercase text-xs rounded-xl transition-all duration-300 shadow-[0_0_20px_rgba(6,182,212,0.4)] active:scale-95 border border-cyan-400/50">
-            Kunci Pengaturan Spasial
-          </button>
-        </div>
-      </form>
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+         {admins.map(a => (
+            <div key={a.id} className="bg-[#0A1628]/60 backdrop-blur-md border border-cyan-500/20 p-5 rounded-2xl flex flex-col gap-4 group hover:border-cyan-500/50 transition-all duration-300 shadow-lg">
+               {editingId === a.id ? (
+                  <form onSubmit={handleUpdate} className="flex flex-col gap-3">
+                     <div className="flex gap-2">
+                         <User className="w-5 h-5 text-cyan-600" />
+                         <input autoFocus required placeholder="Username" type="text" value={editUser} onChange={e=>setEditUser(e.target.value)} className="w-full bg-[#050B14] border border-cyan-500/50 rounded-lg px-3 py-2 text-white outline-none text-sm font-mono" />
+                     </div>
+                     <div className="flex gap-2">
+                         <Key className="w-5 h-5 text-cyan-600" />
+                         <input required placeholder="Password" type="text" value={editPass} onChange={e=>setEditPass(e.target.value)} className="w-full bg-[#050B14] border border-cyan-500/50 rounded-lg px-3 py-2 text-white outline-none text-sm font-mono" />
+                     </div>
+                     <div className="flex gap-2 justify-end mt-2">
+                         <button type="submit" className="bg-emerald-500/20 text-emerald-400 p-2 rounded-lg border border-emerald-500/30 flex-1 flex justify-center"><CheckCircle2 className="w-4 h-4"/></button>
+                         <button type="button" onClick={()=>setEditingId(null)} className="bg-rose-500/20 text-rose-400 p-2 rounded-lg border border-rose-500/30 flex-1 flex justify-center"><X className="w-4 h-4"/></button>
+                     </div>
+                  </form>
+               ) : (
+                  <>
+                     <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 bg-cyan-950/50 rounded-xl flex items-center justify-center border border-cyan-500/30"><ShieldCheck className="w-5 h-5 text-cyan-400" /></div>
+                        <div>
+                           <h3 className="font-bold text-white text-base tracking-wide font-mono">{a.username}</h3>
+                           <p className="text-[10px] text-cyan-500 tracking-widest uppercase mt-0.5">Admin Security</p>
+                        </div>
+                     </div>
+                     <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <button onClick={()=>{setEditingId(a.id); setEditUser(a.username); setEditPass(a.password || '');}} className="flex-1 flex justify-center items-center gap-2 py-2 bg-blue-500/10 hover:bg-blue-500/20 text-blue-400 border border-blue-500/20 rounded-lg text-[10px] uppercase font-bold tracking-wider"><Edit className="w-3.5 h-3.5"/> Edit</button>
+                        <button onClick={()=>{if(confirm(`Hapus Admin ${a.username}? Akses login orang tersebut akan tertutup.`)) deleteAdmin(a.id);}} className="flex-1 flex justify-center items-center gap-2 py-2 bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/20 rounded-lg text-[10px] uppercase font-bold tracking-wider"><Trash2 className="w-3.5 h-3.5"/> Hapus</button>
+                     </div>
+                  </>
+               )}
+            </div>
+         ))}
+         {admins.length === 0 && <div className="col-span-full p-8 text-center border-2 border-dashed border-cyan-900 rounded-2xl text-cyan-700 font-mono text-sm uppercase">Belum Ada Admin Terdaftar di Cloud</div>}
+      </div>
     </div>
   );
 };
@@ -1969,6 +1896,7 @@ const AdminLayout: React.FC<{ children: React.ReactNode, activeRoute: string, se
     { id: 'admin-reports', icon: FileText, label: 'Pusat Data Log' },
     { id: 'admin-geofence', icon: Map, label: 'Sistem Geofencing' },
     { id: 'admin-settings', icon: Calendar, label: 'Konfigurasi Sesi' },
+    { id: 'admin-management', icon: ShieldCheck, label: 'Manajemen Admin' },
   ];
 
   return (
@@ -2095,7 +2023,7 @@ export default function App() {
       {route === 'student' && <AttendanceWizard />}
       {route === 'admin-login' && <AdminLogin onLogin={() => setRoute('admin-dashboard')} />}
       
-      {['admin-dashboard', 'admin-students', 'admin-clusters', 'admin-settings', 'admin-reports', 'admin-geofence'].includes(route) && (
+      {['admin-dashboard', 'admin-students', 'admin-clusters', 'admin-settings', 'admin-reports', 'admin-geofence', 'admin-management'].includes(route) && (
         <AdminLayout activeRoute={route} setRoute={setRoute}>
           {route === 'admin-dashboard' && <AdminDashboardHome />}
           {route === 'admin-students' && <AdminStudents />}
@@ -2103,11 +2031,9 @@ export default function App() {
           {route === 'admin-geofence' && <AdminGeofence />}
           {route === 'admin-settings' && <AdminSettings />}
           {route === 'admin-reports' && <AdminReports />}
+          {route === 'admin-management' && <AdminManagement />}
         </AdminLayout>
       )}
-
-      {/* PENTING: Hapus tanda komentar di bawah ini saat kode dijalankan di lokal/Vercel */}
-      {/* <SpeedInsights /> */}
     </AppProvider>
   );
 }
