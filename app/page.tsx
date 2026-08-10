@@ -370,6 +370,194 @@ const useAppContext = () => {
 };
 
 // ==========================================
+// STUDENT DASHBOARD (SUPER UPGRADE)
+// ==========================================
+const StudentDashboard: React.FC<{ onStartAbsen: () => void, linkedNim: string | null }> = ({ onStartAbsen, linkedNim }) => {
+  const { logs, students } = useAppContext();
+
+  const studentName = students.find(s => s.nim === linkedNim)?.name;
+  const firstName = studentName ? studentName.split(' ')[0] : 'Mahasiswa Baru';
+  
+  const myLogs = useMemo(() => {
+    if (!linkedNim) return [];
+    return logs.filter(l => l.nim === linkedNim).sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+  }, [logs, linkedNim]);
+
+  const totalHadir = myLogs.length;
+  const onTime = myLogs.filter(l => l.status === 'Hadir').length;
+  const late = myLogs.filter(l => l.status === 'Terlambat').length;
+  const onTimePercent = totalHadir > 0 ? Math.round((onTime / totalHadir) * 100) : 0;
+
+  const todayStr = new Date().toISOString().split('T')[0];
+  const todayLogs = myLogs.filter(l => l.timestamp.startsWith(todayStr));
+  const hasClockedInToday = todayLogs.length > 0;
+  const lastClockInTime = hasClockedInToday ? new Date(todayLogs[0].timestamp).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }) : null;
+
+  const weeklyData = useMemo(() => {
+     const data = [];
+     for (let i = 6; i >= 0; i--) {
+        const d = new Date();
+        d.setDate(d.getDate() - i);
+        const dateStr = d.toISOString().split('T')[0];
+        const dayName = d.toLocaleDateString('id-ID', { weekday: 'short' });
+        const count = myLogs.filter(l => l.timestamp.startsWith(dateStr)).length;
+        data.push({ day: dayName, count: count });
+     }
+     return data;
+  }, [myLogs]);
+
+  const recentLogs = myLogs.slice(0, 4);
+
+  const getInitials = (name: string) => {
+     const parts = name.split(' ');
+     if (parts.length > 1) return (parts[0][0] + parts[1][0]).toUpperCase();
+     return name.substring(0, 2).toUpperCase();
+  }
+
+  const getGreeting = () => {
+     const hour = new Date().getHours();
+     if (hour < 12) return 'Selamat Pagi';
+     if (hour < 15) return 'Selamat Siang';
+     if (hour < 18) return 'Selamat Sore';
+     return 'Selamat Malam';
+  };
+
+  return (
+    <div className="animate-in fade-in duration-700 w-full space-y-6">
+      {/* Header */}
+      <div className="mb-8">
+        <h2 className="text-3xl md:text-4xl font-black text-white tracking-wide">{getGreeting()}, {firstName}</h2>
+        <p className="text-cyan-500/70 text-xs md:text-sm font-mono mt-2">{new Date().toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })} • Ringkasan kehadiran live</p>
+      </div>
+
+      {/* Stats Cards */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+        {/* Card 1 */}
+        <div className="bg-[#0A1628]/80 backdrop-blur-xl border border-cyan-500/20 p-6 rounded-[2rem] shadow-lg relative overflow-hidden group hover:border-cyan-400/50 transition-all">
+          <div className="flex items-center gap-3 mb-4">
+             <div className="w-10 h-10 rounded-full bg-cyan-500/10 flex items-center justify-center text-cyan-400"><Clock className="w-5 h-5"/></div>
+             <span className="text-xs font-black uppercase tracking-widest text-cyan-500">Total Hadir</span>
+          </div>
+          <div className="flex items-end gap-2">
+             <h3 className="text-5xl font-black text-white leading-none">{totalHadir}</h3>
+             <span className="text-cyan-400 text-xs font-bold mb-1 tracking-wider bg-cyan-500/10 px-2 py-1 rounded-md">Total Sesi</span>
+          </div>
+        </div>
+        
+        {/* Card 2 */}
+        <div className="bg-[#0A1628]/80 backdrop-blur-xl border border-cyan-500/20 p-6 rounded-[2rem] shadow-lg relative overflow-hidden group hover:border-emerald-400/50 transition-all">
+          <div className="flex items-center gap-3 mb-4">
+             <div className="w-10 h-10 rounded-full bg-emerald-500/10 flex items-center justify-center text-emerald-400"><CheckCircle2 className="w-5 h-5"/></div>
+             <span className="text-xs font-black uppercase tracking-widest text-emerald-500">Tepat Waktu</span>
+          </div>
+          <div className="flex items-end gap-2">
+             <h3 className="text-5xl font-black text-white leading-none">{onTimePercent}<span className="text-2xl">%</span></h3>
+             <span className="text-emerald-400 text-xs font-bold mb-1 tracking-wider bg-emerald-500/10 px-2 py-1 rounded-md">Rata-rata</span>
+          </div>
+        </div>
+
+        {/* Card 3 (Purple theme) */}
+        <div className="bg-gradient-to-br from-[#4c1d95]/90 to-[#7e22ce]/90 backdrop-blur-xl border border-purple-500/50 p-6 rounded-[2rem] shadow-[0_10px_40px_rgba(126,34,206,0.3)] relative overflow-hidden group">
+          <div className="absolute top-0 right-0 w-32 h-32 bg-white/5 rounded-full blur-2xl pointer-events-none"></div>
+          <div className="flex items-center gap-3 mb-4 relative z-10">
+             <div className="w-10 h-10 rounded-full bg-white/20 flex items-center justify-center text-white"><AlertCircle className="w-5 h-5"/></div>
+             <span className="text-xs font-black uppercase tracking-widest text-purple-100">Terlambat</span>
+          </div>
+          <div className="flex items-end gap-2 relative z-10">
+             <h3 className="text-5xl font-black text-white leading-none">{late}</h3>
+             <span className="text-purple-200 text-xs font-bold mb-1 tracking-wider bg-white/20 px-2 py-1 rounded-md">Sesi</span>
+          </div>
+        </div>
+      </div>
+
+      {/* Middle Section */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
+        {/* Chart */}
+        <div className="lg:col-span-2 bg-[#0A1628]/80 backdrop-blur-xl border border-cyan-500/20 p-6 md:p-8 rounded-[2rem] shadow-lg flex flex-col">
+          <h3 className="text-base font-black text-white mb-1 tracking-widest uppercase">Kehadiran Mingguan</h3>
+          <p className="text-[10px] md:text-xs text-cyan-500/70 font-mono uppercase mb-8">Jam tervalidasi, sinkronisasi otomatis ke sistem</p>
+          <div className="flex-1 w-full min-h-[200px]">
+             <ResponsiveContainer width="100%" height="100%">
+               <BarChart data={weeklyData} margin={{ top: 0, right: 0, left: 0, bottom: 0 }}>
+                 <XAxis dataKey="day" axisLine={false} tickLine={false} tick={{fill: '#64748b', fontSize: 11, fontWeight: 'bold'}} dy={10} />
+                 <Tooltip cursor={{fill: '#1e293b', opacity: 0.4}} contentStyle={{backgroundColor: '#050B14', borderColor: '#8b5cf6', color: '#f8fafc', borderRadius: '1rem', fontSize: '12px'}} />
+                 <Bar dataKey="count" fill="#8b5cf6" radius={[8, 8, 8, 8]} barSize={40}>
+                   {weeklyData.map((entry, index) => (
+                     <Cell key={`cell-${index}`} fill={entry.count > 0 ? '#8b5cf6' : '#2e1065'} opacity={entry.count > 0 ? 1 : 0.3} />
+                   ))}
+                 </Bar>
+               </BarChart>
+             </ResponsiveContainer>
+          </div>
+        </div>
+
+        {/* Clock-in Card */}
+        <div className="bg-[#0A1628]/80 backdrop-blur-xl border border-cyan-500/20 p-6 md:p-8 rounded-[2rem] shadow-lg flex flex-col items-center justify-center text-center relative overflow-hidden">
+           <div className="absolute top-0 right-0 w-48 h-48 bg-purple-600/10 rounded-full blur-3xl pointer-events-none"></div>
+           
+           <h3 className="text-base font-black text-white mb-1 tracking-widest uppercase relative z-10">Panel Absensi</h3>
+           <p className="text-[10px] md:text-xs text-cyan-500/70 font-mono uppercase mb-8 relative z-10">Face ID + GPS verified</p>
+
+           {/* Segmented Circle Avatar (Matching the reference UI) */}
+           <div className="relative w-32 h-32 md:w-36 md:h-36 mb-8 z-10">
+              <svg className="absolute inset-0 w-full h-full" viewBox="0 0 100 100">
+                 <circle cx="50" cy="50" r="46" fill="none" stroke={hasClockedInToday ? "#8b5cf6" : "#1e293b"} strokeWidth="3" strokeDasharray="60 12" strokeLinecap="round" className={hasClockedInToday ? "animate-[spin_20s_linear_infinite]" : ""} />
+              </svg>
+              <div className="absolute inset-0 flex items-center justify-center">
+                 <div className="w-20 h-20 md:w-24 md:h-24 bg-[#050B14] rounded-full border border-purple-500/30 flex items-center justify-center shadow-[inset_0_0_20px_rgba(147,51,234,0.2)]">
+                    <User className={cn("w-10 h-10", hasClockedInToday ? "text-purple-400" : "text-slate-600")} />
+                 </div>
+              </div>
+           </div>
+
+           <div className="relative z-10 w-full">
+             {hasClockedInToday ? (
+                <div className="w-full py-4 bg-gradient-to-r from-purple-700 to-purple-500 rounded-2xl shadow-[0_10px_30px_rgba(147,51,234,0.4)] border border-purple-400/50">
+                   <span className="text-white font-black tracking-widest text-lg md:text-xl">{lastClockInTime}</span>
+                </div>
+             ) : (
+                <button onClick={onStartAbsen} className="w-full py-4 bg-gradient-to-r from-cyan-600 to-purple-600 hover:from-cyan-500 hover:to-purple-500 text-white rounded-2xl transition-all duration-300 shadow-[0_10px_30px_rgba(147,51,234,0.4)] font-black tracking-widest text-sm active:scale-95 border border-purple-400/50">
+                   MULAI ABSENSI
+                </button>
+             )}
+             {!linkedNim && (
+               <p className="text-[9px] text-cyan-400 font-mono mt-4 uppercase">Tautkan perangkat ini dengan melakukan absensi perdana.</p>
+             )}
+           </div>
+        </div>
+      </div>
+
+      {/* Bottom Section */}
+      <div className="bg-[#0A1628]/80 backdrop-blur-xl border border-cyan-500/20 p-6 md:p-8 rounded-[2rem] shadow-lg">
+         <h3 className="text-base font-black text-white mb-6 tracking-widest uppercase">Absen Terakhir</h3>
+         <div className="flex flex-wrap gap-4 overflow-x-auto pb-2 custom-scrollbar">
+            {recentLogs.map((log, idx) => (
+               <div key={log.id + idx} className="flex items-center gap-4 bg-[#050B14] p-3 md:p-4 rounded-2xl border border-cyan-500/20 min-w-[220px] shadow-sm hover:border-cyan-500/50 transition-colors">
+                  <div className="w-10 h-10 md:w-12 md:h-12 rounded-full bg-purple-500/20 flex items-center justify-center text-purple-400 font-black text-xs md:text-sm border border-purple-500/30 shrink-0">
+                     {getInitials(log.name)}
+                  </div>
+                  <div className="flex-1">
+                     <p className="text-xs md:text-sm font-bold text-white uppercase truncate max-w-[120px]">{log.name}</p>
+                     <p className="text-[10px] text-cyan-500/70 font-mono">{new Date(log.timestamp).toLocaleTimeString('id-ID', {hour: '2-digit', minute:'2-digit'})}</p>
+                  </div>
+                  <div className="shrink-0 w-6 h-6 rounded-full flex items-center justify-center bg-[#0A1628] border border-cyan-900/50">
+                     {log.status === 'Hadir' ? <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 drop-shadow-[0_0_5px_rgba(16,185,129,0.8)]"/> : <AlertCircle className="w-3.5 h-3.5 text-amber-400 drop-shadow-[0_0_5px_rgba(245,158,11,0.8)]"/>}
+                  </div>
+               </div>
+            ))}
+            {recentLogs.length === 0 && (
+              <div className="w-full text-center py-6 border-2 border-dashed border-cyan-900/50 rounded-2xl">
+                 <p className="text-xs text-cyan-700 font-mono uppercase tracking-widest">Belum ada riwayat absensi tercatat di perangkat ini.</p>
+              </div>
+            )}
+         </div>
+      </div>
+    </div>
+  );
+};
+
+
+// ==========================================
 // PORTAL MAHASISWA WIZARD
 // ==========================================
 const TimeCheck: React.FC<{ onComplete: (data: { sessionName: string; status: 'Hadir' | 'Terlambat' }) => void }> = ({ onComplete }) => {
@@ -427,7 +615,7 @@ const TimeCheck: React.FC<{ onComplete: (data: { sessionName: string; status: 'H
               </span>
             </div>
             <button onClick={() => onComplete({ sessionName: activeSession.session.name, status: activeSession.status as 'Hadir' | 'Terlambat' })} className="w-full py-4 bg-cyan-600 hover:bg-cyan-500 text-white font-black uppercase tracking-widest rounded-2xl transition-all duration-300 shadow-[0_0_20px_rgba(6,182,212,0.4)] hover:shadow-[0_0_30px_rgba(6,182,212,0.6)] flex items-center justify-center gap-3 active:scale-[0.98]">
-              Mulai Absen <ScanFace className="w-5 h-5" />
+              Lanjut Cek Lokasi <ScanFace className="w-5 h-5" />
             </button>
           </div>
         ) : (
@@ -908,7 +1096,7 @@ const SuccessScreen: React.FC<{ reset: () => void }> = ({ reset }) => (
 
 const AttendanceWizard: React.FC = () => {
   const { addLog, studentLogout } = useAppContext();
-  const [step, setStep] = useState(1);
+  const [step, setStep] = useState(0); // 0 = Dashboard
   const [data, setData] = useState<Partial<Log>>({});
   const [linkedNim, setLinkedNim] = useState<string | null>(null);
 
@@ -916,9 +1104,9 @@ const AttendanceWizard: React.FC = () => {
 
   useEffect(() => {
      setLinkedNim(localStorage.getItem('axaxyz_device_owner'));
-  }, []);
+  }, [step]); // re-check on step change
 
-  const reset = () => { setStep(1); setData({}); activeSessionRef.current = ''; };
+  const reset = () => { setStep(0); setData({}); activeSessionRef.current = ''; };
   const steps = ['Waktu', 'Lokasi', 'Identitas', 'Verifikasi'];
 
   return (
@@ -971,8 +1159,8 @@ const AttendanceWizard: React.FC = () => {
         </div>
       </header>
 
-      <main className="flex-1 flex flex-col relative z-10 w-full max-w-5xl mx-auto px-4 py-6 md:py-12 overflow-y-auto">
-        {step < 5 && (
+      <main className="flex-1 flex flex-col relative z-10 w-full max-w-[1400px] mx-auto px-4 py-6 md:py-10 overflow-y-auto custom-scrollbar">
+        {step > 0 && step < 5 && (
           <div className="mb-8 md:mb-16 max-w-2xl mx-auto w-full px-2 relative z-20">
             <div className="flex justify-between relative">
               <div className="absolute top-1/2 -translate-y-1/2 left-0 w-full h-[2px] bg-cyan-950"></div>
@@ -992,6 +1180,7 @@ const AttendanceWizard: React.FC = () => {
           </div>
         )}
         <div className="flex-1 flex items-center justify-center w-full pt-4">
+          {step === 0 && <StudentDashboard onStartAbsen={() => setStep(1)} linkedNim={linkedNim} />}
           {step === 1 && <TimeCheck onComplete={(d) => { activeSessionRef.current = d.sessionName; setData(prev => ({...prev, ...d})); setStep(2); }} />}
           {step === 2 && <LocationCheck onComplete={(d) => { setData(prev => ({...prev, location: d})); setStep(3); }} />}
           {step === 3 && <QRScanner activeSessionName={activeSessionRef.current} onComplete={(d) => { setData(prev => ({...prev, ...d})); setStep(4); }} />}
@@ -1005,6 +1194,13 @@ const AttendanceWizard: React.FC = () => {
           Copyright © 2026 DEPT. RKG RSIGM UMI— All Rights Reserved. Made with ❤️
         </a>
       </footer>
+      
+      <style>{`
+        .custom-scrollbar::-webkit-scrollbar { width: 4px; height: 4px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: #050B14; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: rgba(6, 182, 212, 0.3); border-radius: 10px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: rgba(6, 182, 212, 0.6); }
+      `}</style>
     </div>
   );
 };
