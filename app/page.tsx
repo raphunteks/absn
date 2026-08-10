@@ -5,17 +5,18 @@ import {
   Camera, MapPin, Clock, QrCode, CheckCircle2, AlertCircle, 
   BarChart3, Settings, FileText, LogOut, Users, Download, Plus, Trash2,
   RefreshCcw, ChevronRight, Fingerprint, Map, Activity, Key, Upload, Database, Navigation,
-  Printer, X, CreditCard, Eye, EyeOff, Lock, ShieldCheck, Loader2, User, CloudOff,
-  Maximize, Menu, Edit, UserMinus, Calendar, Layers, ActivitySquare, ScanFace
+  Printer, X, CreditCard, Eye, EyeOff, Lock, ShieldCheck, Loader2, User, Cloud, CloudOff,
+  ServerCrash, Maximize, Menu, Network, Edit, Calendar, UserX, ScanFace, ActivitySquare
 } from 'lucide-react';
-import { 
-  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, 
-  PieChart, Pie, Cell, AreaChart, Area, ComposedChart, Legend, Line
-} from 'recharts';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, LineChart, Line, AreaChart, Area } from 'recharts';
+import * as XLSX from 'xlsx';
 
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
-import { format, parseISO, isWithinInterval, startOfDay, endOfDay } from 'date-fns';
+import { format, subDays, isWithinInterval, startOfDay, endOfDay } from 'date-fns';
+
+// PENTING: Hapus tanda komentar di bawah ini saat di-deploy ke Vercel agar Speed Insights berjalan.
+// import { SpeedInsights } from "@vercel/speed-insights/next";
 
 // ==========================================
 // UPSTASH REDIS CLOUD CLIENT (REST API POST)
@@ -101,51 +102,26 @@ const calculateDistance = (lat1: number, lon1: number, lat2: number, lon2: numbe
   return R * c; 
 };
 
-// Fungsi pembantu untuk memuat modul XLSX secara dinamis melalui CDN untuk menghindari error kompilasi
-const loadXLSX = async (): Promise<any> => {
-  if (typeof window !== 'undefined' && (window as any).XLSX) return (window as any).XLSX;
-  return new Promise((resolve, reject) => {
-    const script = document.createElement('script');
-    script.src = "https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js";
-    script.onload = () => resolve((window as any).XLSX);
-    script.onerror = reject;
-    document.head.appendChild(script);
-  });
-};
+// EXPORT TO XLSX
+const exportToExcel = (logs: Log[]) => {
+  const dataToExport = logs.map(log => ({
+    'ID Log': log.id,
+    'NIM': log.nim,
+    'Nama Mahasiswa': log.name,
+    'Cluster': log.clusterName || 'Tanpa Cluster',
+    'Tanggal': new Date(log.timestamp).toLocaleDateString('id-ID'),
+    'Waktu': new Date(log.timestamp).toLocaleTimeString('id-ID'),
+    'Sesi': log.sessionName,
+    'Status': log.status,
+    'Latitude': log.location.lat,
+    'Longitude': log.location.lng,
+    'Link G-Maps': `https://www.google.com/maps?q=${log.location.lat},${log.location.lng}`
+  }));
 
-// Poin 3: Export Data ke XLSX
-const exportToXLSX = async (logs: Log[], students: Student[], clusters: Cluster[]) => {
-  try {
-    const XLSX = await loadXLSX();
-    const data = logs.map(log => {
-      const student = students.find(s => s.nim === log.nim);
-      const cluster = clusters.find(c => c.id === student?.clusterId)?.name || 'Tanpa Cluster';
-      const date = new Date(log.timestamp).toLocaleDateString('id-ID');
-      const time = new Date(log.timestamp).toLocaleTimeString('id-ID');
-      const mapsLink = `https://www.google.com/maps?q=${log.location.lat},${log.location.lng}`;
-      
-      return {
-        'ID Log': log.id,
-        'NIM': log.nim,
-        'Nama': log.name,
-        'Cluster / Kategori': cluster,
-        'Tanggal': date,
-        'Waktu': time,
-        'Sesi': log.sessionName,
-        'Status': log.status,
-        'Latitude': log.location.lat,
-        'Longitude': log.location.lng,
-        'Link Maps': mapsLink
-      };
-    });
-
-    const worksheet = XLSX.utils.json_to_sheet(data);
-    const workbook = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(workbook, worksheet, "Riwayat Absensi");
-    XLSX.writeFile(workbook, `Rekap_Absensi_RKG_${new Date().toISOString().split('T')[0]}.xlsx`);
-  } catch (err) {
-    alert("Gagal memuat modul Excel. Pastikan koneksi internet stabil.");
-  }
+  const worksheet = XLSX.utils.json_to_sheet(dataToExport);
+  const workbook = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(workbook, worksheet, "Riwayat Absensi");
+  XLSX.writeFile(workbook, `Radiology_Absensi_Report_${new Date().toISOString().split('T')[0]}.xlsx`);
 };
 
 const redis = Redis.fromEnv();
@@ -153,9 +129,6 @@ const redis = Redis.fromEnv();
 const CloudStore = {
   isAvailable: () => { 
     return redis !== null && redis.url !== '' && redis.token !== ''; 
-  },
-  getCredentials: () => {
-    return { url: redis.url, token: redis.token };
   },
   async get(key: string) {
     if (!this.isAvailable()) return null;
@@ -172,49 +145,45 @@ const CloudStore = {
   }
 };
 
-// Interfaces
 interface Cluster { id: string; name: string; }
 interface Session { id: string; name: string; startTime: string; endTime: string; toleranceMinutes: number; isActive: boolean; }
-interface Log { id: string; nim: string; name: string; timestamp: string; sessionName: string; status: 'Hadir' | 'Terlambat'; location: { lat: number; lng: number }; photoBase64: string; deviceId: string; }
+interface Log { id: string; nim: string; name: string; clusterName?: string; timestamp: string; sessionName: string; status: 'Hadir' | 'Terlambat'; location: { lat: number; lng: number }; photoBase64: string; deviceId: string; }
 interface Student { id: string; nim: string; name: string; password?: string; deviceId?: string | null; clusterId?: string; }
 interface Geofence { lat: number; lng: number; radius: number; name?: string; }
 
 type SyncStatus = 'offline' | 'synced' | 'syncing' | 'error';
 
 interface AppContextType {
-  sessions: Session[];
   clusters: Cluster[];
+  sessions: Session[];
   logs: Log[];
   students: Student[];
   geofence: Geofence;
   isCloudSync: boolean;
   syncStatus: SyncStatus;
+  addCluster: (name: string) => void;
+  updateCluster: (id: string, name: string) => void;
+  deleteCluster: (id: string) => void;
   addLog: (log: Omit<Log, 'id' | 'timestamp'>) => void;
   deleteLog: (id: string) => void;
   updateSession: (id: string, updates: Partial<Session>) => void;
   addSession: (session: Omit<Session, 'id'>) => void;
   deleteSession: (id: string) => void;
-  addCluster: (cluster: Omit<Cluster, 'id'>) => void;
-  updateCluster: (id: string, updates: Partial<Cluster>) => void;
-  deleteCluster: (id: string) => void;
   addStudent: (student: Omit<Student, 'id'>) => void;
   updateStudent: (id: string, updates: Partial<Student>) => void;
   bulkAddStudents: (newStudents: Omit<Student, 'id'>[]) => void;
   deleteStudent: (id: string) => void;
-  unlinkMyDevice: (nim: string) => void;
   updateGeofence: (data: Geofence) => void;
   forceManualSync: () => Promise<void>;
+  studentLogout: () => void;
 }
 
 const defaultSessions: Session[] = [
-  { id: '1', name: 'Pagi', startTime: '07:00', endTime: '09:00', toleranceMinutes: 15, isActive: true },
-  { id: '2', name: 'Siang', startTime: '12:00', endTime: '13:30', toleranceMinutes: 15, isActive: true },
+  { id: '1', name: 'Shift Pagi (Radiologi)', startTime: '07:00', endTime: '09:00', toleranceMinutes: 15, isActive: true },
+  { id: '2', name: 'Shift Siang (Lab)', startTime: '12:00', endTime: '13:30', toleranceMinutes: 15, isActive: true },
 ];
-const defaultClusters: Cluster[] = [
-  { id: 'c1', name: 'Cluster I 2025' },
-  { id: 'c2', name: 'Cluster II 2025' }
-];
-const defaultGeofence: Geofence = { lat: -6.200000, lng: 106.816666, radius: 500, name: 'Kampus Utama' };
+const defaultGeofence: Geofence = { lat: -6.200000, lng: 106.816666, radius: 500, name: 'Klinik Radiologi Pusat' };
+const defaultClusters: Cluster[] = [{ id: 'c1', name: 'Cluster I 2025' }, { id: 'c2', name: 'Cluster II 2025' }];
 
 const AppContext = createContext<AppContextType | null>(null);
 
@@ -223,8 +192,8 @@ const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [isCloudSync, setIsCloudSync] = useState(false);
   const [syncStatus, setSyncStatus] = useState<SyncStatus>('offline');
   
-  const [sessions, setSessions] = useState<Session[]>([]);
   const [clusters, setClusters] = useState<Cluster[]>([]);
+  const [sessions, setSessions] = useState<Session[]>([]);
   const [logs, setLogs] = useState<Log[]>([]);
   const [students, setStudents] = useState<Student[]>([]);
   const [geofence, setGeofence] = useState<Geofence>(defaultGeofence);
@@ -235,24 +204,24 @@ const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
       setIsCloudSync(cloudAvailable);
       setSyncStatus(cloudAvailable ? 'synced' : 'offline');
 
-      let s = null, c = null, l = null, st = null, gf = null;
+      let c = null, s = null, l = null, st = null, gf = null;
 
       if (cloudAvailable) {
-        s = await CloudStore.get('axaxyz_sessions');
         c = await CloudStore.get('axaxyz_clusters');
+        s = await CloudStore.get('axaxyz_sessions');
         l = await CloudStore.get('axaxyz_logs');
         st = await CloudStore.get('axaxyz_students');
         gf = await CloudStore.get('axaxyz_geofence');
       }
 
-      if (!s) s = JSON.parse(localStorage.getItem('axaxyz_sessions') || 'null');
       if (!c) c = JSON.parse(localStorage.getItem('axaxyz_clusters') || 'null');
+      if (!s) s = JSON.parse(localStorage.getItem('axaxyz_sessions') || 'null');
       if (!l) l = JSON.parse(localStorage.getItem('axaxyz_logs') || 'null');
       if (!st) st = JSON.parse(localStorage.getItem('axaxyz_students') || 'null');
       if (!gf) gf = JSON.parse(localStorage.getItem('axaxyz_geofence') || 'null');
 
-      setSessions(s || defaultSessions);
       setClusters(c || defaultClusters);
+      setSessions(s || defaultSessions);
       setLogs(l || []);
       setStudents(st || []);
       setGeofence(gf || defaultGeofence);
@@ -276,18 +245,18 @@ const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
 
   const forceManualSync = async () => {
     if (!CloudStore.isAvailable()) {
-      alert("❌ Sinkronisasi Gagal: Konfigurasi NEXT_PUBLIC_... Upstash tidak terbaca.");
+      alert("❌ Sinkronisasi Gagal: Konfigurasi NEXT_PUBLIC_... Upstash tidak terbaca di Environment Variables.");
       return;
     }
     setSyncStatus('syncing');
     try {
-      await CloudStore.set('axaxyz_sessions', JSON.stringify(sessions));
       await CloudStore.set('axaxyz_clusters', JSON.stringify(clusters));
+      await CloudStore.set('axaxyz_sessions', JSON.stringify(sessions));
       await CloudStore.set('axaxyz_logs', JSON.stringify(logs));
       await CloudStore.set('axaxyz_students', JSON.stringify(students));
       await CloudStore.set('axaxyz_geofence', JSON.stringify(geofence));
       setSyncStatus('synced');
-      alert("✅ Data berhasil disinkronisasi paksa ke Cloud Upstash.");
+      alert("✅ Sistem Radiologi tersinkronisasi paksa ke Cloud Database!");
     } catch (e: any) {
       console.error(e);
       setSyncStatus('error');
@@ -295,11 +264,15 @@ const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
     }
   };
 
-  const saveSessions = (d: Session[]) => { setSessions(d); localStorage.setItem('axaxyz_sessions', JSON.stringify(d)); syncToCloud('axaxyz_sessions', d); };
   const saveClusters = (d: Cluster[]) => { setClusters(d); localStorage.setItem('axaxyz_clusters', JSON.stringify(d)); syncToCloud('axaxyz_clusters', d); };
+  const saveSessions = (d: Session[]) => { setSessions(d); localStorage.setItem('axaxyz_sessions', JSON.stringify(d)); syncToCloud('axaxyz_sessions', d); };
   const saveLogs = (d: Log[]) => { setLogs(d); localStorage.setItem('axaxyz_logs', JSON.stringify(d)); syncToCloud('axaxyz_logs', d); };
   const saveStudents = (d: Student[]) => { setStudents(d); localStorage.setItem('axaxyz_students', JSON.stringify(d)); syncToCloud('axaxyz_students', d); };
   const saveGeofence = (d: Geofence) => { setGeofence(d); localStorage.setItem('axaxyz_geofence', JSON.stringify(d)); syncToCloud('axaxyz_geofence', d); };
+
+  const addCluster = (name: string) => saveClusters([...clusters, { id: Math.random().toString(36).substr(2, 9), name }]);
+  const updateCluster = (id: string, name: string) => saveClusters(clusters.map(c => c.id === id ? { ...c, name } : c));
+  const deleteCluster = (id: string) => saveClusters(clusters.filter(c => c.id !== id));
 
   const addLog = (logData: Omit<Log, 'id' | 'timestamp'>) => saveLogs([{ ...logData, id: Math.random().toString(36).substr(2, 9), timestamp: new Date().toISOString() }, ...logs]);
   const deleteLog = (id: string) => saveLogs(logs.filter(l => l.id !== id));
@@ -308,10 +281,6 @@ const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const addSession = (sessionData: Omit<Session, 'id'>) => saveSessions([...sessions, { ...sessionData, id: Math.random().toString(36).substr(2, 9) }]);
   const deleteSession = (id: string) => saveSessions(sessions.filter(s => s.id !== id));
   
-  const addCluster = (clusterData: Omit<Cluster, 'id'>) => saveClusters([...clusters, { ...clusterData, id: Math.random().toString(36).substr(2, 9) }]);
-  const updateCluster = (id: string, updates: Partial<Cluster>) => saveClusters(clusters.map(c => c.id === id ? { ...c, ...updates } : c));
-  const deleteCluster = (id: string) => saveClusters(clusters.filter(c => c.id !== id));
-
   const addStudent = (studentData: Omit<Student, 'id'>) => saveStudents([...students, { ...studentData, id: Math.random().toString(36).substr(2, 9) }]);
   const updateStudent = (id: string, updates: Partial<Student>) => saveStudents(students.map(s => s.id === id ? { ...s, ...updates } : s));
   const bulkAddStudents = (newStudents: Omit<Student, 'id'>[]) => {
@@ -319,40 +288,41 @@ const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
     saveStudents([...students, ...formatted]);
   };
   const deleteStudent = (id: string) => saveStudents(students.filter(s => s.id !== id));
-  
-  // Poin 5: Unlink device untuk mahasiswa
-  const unlinkMyDevice = (nim: string) => {
-    const student = students.find(s => s.nim === nim);
-    if(student) {
-      updateStudent(student.id, { deviceId: null });
-    }
-  };
-
   const updateGeofence = (data: Geofence) => saveGeofence(data);
+
+  const studentLogout = () => {
+     const ownerNim = localStorage.getItem('axaxyz_device_owner');
+     if (ownerNim) {
+        const student = students.find(s => s.nim === ownerNim);
+        if (student) updateStudent(student.id, { deviceId: null });
+     }
+     localStorage.removeItem('axaxyz_device_id');
+     localStorage.removeItem('axaxyz_device_owner');
+     alert('Perangkat Anda telah berhasil dikeluarkan dari sistem (Logged Out).');
+     window.location.reload();
+  };
 
   if (isAppLoading) {
     return (
-      <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center p-4">
+      <div className="min-h-screen bg-[#050B14] flex flex-col items-center justify-center p-4 radiology-bg">
         <div className="relative mb-6">
-          <div className="absolute inset-0 bg-cyan-500/20 blur-3xl rounded-full"></div>
-          <div className="w-20 h-20 bg-gradient-to-br from-cyan-900 to-slate-800 border-2 border-cyan-500/50 rounded-3xl flex items-center justify-center shadow-[0_0_30px_rgba(6,182,212,0.5)] animate-[pulse_2s_ease-in-out_infinite] relative z-10 overflow-hidden p-3">
-             <ScanFace className="w-10 h-10 text-cyan-400" />
+          <div className="absolute inset-0 bg-cyan-500/30 blur-[50px] rounded-full animate-pulse"></div>
+          <div className="w-24 h-24 bg-[#0A1628] border border-cyan-500/50 rounded-3xl flex items-center justify-center shadow-[0_0_30px_rgba(6,182,212,0.4)] relative z-10 overflow-hidden p-4">
+             <ScanFace className="w-full h-full text-cyan-400 opacity-80" />
           </div>
         </div>
-        <Loader2 className="w-8 h-8 text-cyan-400 animate-spin mb-4" />
-        <h2 className="text-xl font-bold text-white mb-2 tracking-widest">INITIALIZING X-RAY CORE...</h2>
-        <p className="text-cyan-500/70 text-sm text-center max-w-xs font-mono">Connecting to Secure Cloud Database</p>
+        <Loader2 className="w-8 h-8 text-cyan-400 animate-spin mb-4 drop-shadow-[0_0_10px_rgba(6,182,212,0.8)]" />
+        <h2 className="text-xl font-black text-cyan-100 tracking-widest uppercase mb-2">Inisialisasi Sistem...</h2>
+        <p className="text-cyan-600/80 text-xs text-center max-w-xs font-mono uppercase">Memuat modul Dentomaxillofacial Radiology</p>
       </div>
     );
   }
 
   return (
     <AppContext.Provider value={{ 
-      isCloudSync, syncStatus, sessions, clusters, logs, students, geofence, 
-      addLog, deleteLog, updateSession, addSession, deleteSession, 
-      addCluster, updateCluster, deleteCluster,
-      addStudent, updateStudent, bulkAddStudents, deleteStudent, unlinkMyDevice,
-      updateGeofence, forceManualSync 
+      isCloudSync, syncStatus, clusters, sessions, logs, students, geofence, 
+      addCluster, updateCluster, deleteCluster, addLog, deleteLog, updateSession, addSession, deleteSession, 
+      addStudent, updateStudent, bulkAddStudents, deleteStudent, updateGeofence, forceManualSync, studentLogout
     }}>
       {children}
     </AppContext.Provider>
@@ -366,9 +336,8 @@ const useAppContext = () => {
 };
 
 // ==========================================
-// COMPONENT: STUDENT ATTENDANCE WIZARD
+// PORTAL MAHASISWA WIZARD
 // ==========================================
-
 const TimeCheck: React.FC<{ onComplete: (data: { sessionName: string; status: 'Hadir' | 'Terlambat' }) => void }> = ({ onComplete }) => {
   const { sessions } = useAppContext();
   const [currentTime, setCurrentTime] = useState(new Date());
@@ -396,44 +365,44 @@ const TimeCheck: React.FC<{ onComplete: (data: { sessionName: string; status: 'H
 
   return (
     <div className="flex flex-col items-center justify-center p-4 md:p-8 space-y-6 md:space-y-8 animate-in fade-in zoom-in duration-500 w-full">
-      <div className="relative animate-[bounce_3s_ease-in-out_infinite]">
-        <div className="absolute inset-0 bg-cyan-500/20 blur-3xl rounded-full"></div>
-        <Clock className="w-20 h-20 md:w-24 md:h-24 text-cyan-400 relative z-10 drop-shadow-[0_0_15px_rgba(6,182,212,0.8)]" />
+      <div className="relative animate-[pulse_4s_ease-in-out_infinite]">
+        <div className="absolute inset-0 bg-cyan-600/30 blur-[40px] rounded-full"></div>
+        <Clock className="w-20 h-20 md:w-24 md:h-24 text-cyan-400 relative z-10 drop-shadow-[0_0_20px_rgba(6,182,212,0.8)]" />
       </div>
       <div className="text-center space-y-2">
-        <h2 className="text-5xl md:text-6xl font-black bg-clip-text text-transparent bg-gradient-to-r from-cyan-300 via-cyan-100 to-purple-300 tracking-tighter drop-shadow-sm font-mono">
-          {format(currentTime, 'HH.mm.ss')}
+        <h2 className="text-4xl md:text-5xl font-black text-white tracking-widest drop-shadow-md font-mono">
+          {format(currentTime, 'HH:mm:ss')}
         </h2>
-        <p className="text-sm md:text-base text-cyan-500/70 font-medium tracking-widest uppercase">{currentTime.toLocaleDateString('id-ID', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</p>
+        <p className="text-sm md:text-base text-cyan-400/70 font-medium uppercase tracking-widest">{currentTime.toLocaleDateString('id-ID', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</p>
       </div>
 
-      <div className="w-full max-w-md bg-slate-900/60 backdrop-blur-xl border border-cyan-500/20 p-5 md:p-6 rounded-3xl shadow-[0_0_40px_rgba(6,182,212,0.1)] transition-all duration-300">
+      <div className="w-full max-w-md bg-[#0A1628]/80 backdrop-blur-xl border border-cyan-500/20 p-5 md:p-6 rounded-3xl shadow-[0_20px_50px_rgba(0,0,0,0.5)] transition-all duration-300">
         {activeSession ? (
           <div className="space-y-6">
-            <div className="flex items-center justify-between p-4 bg-black/40 border border-cyan-500/10 rounded-2xl relative overflow-hidden">
-              <div className="absolute top-0 left-0 w-1 h-full bg-cyan-500"></div>
+            <div className="flex items-center justify-between p-4 bg-[#050B14]/80 border border-cyan-500/10 rounded-2xl relative overflow-hidden">
+              <div className="absolute left-0 top-0 w-1 h-full bg-cyan-500"></div>
               <div className="pl-2">
-                <p className="text-white font-bold text-lg md:text-xl tracking-wide">{activeSession.session.name}</p>
-                <p className="text-xs md:text-sm text-cyan-200/60 font-medium mt-0.5">{activeSession.session.startTime} - {activeSession.session.endTime}</p>
-                <p className="text-[10px] md:text-xs text-slate-500 mt-1.5 font-mono">
+                <p className="text-cyan-50 font-black text-lg md:text-xl tracking-wide">{activeSession.session.name}</p>
+                <p className="text-xs md:text-sm text-cyan-400/80 font-mono mt-1">{activeSession.session.startTime} - {activeSession.session.endTime}</p>
+                <p className="text-[10px] md:text-xs text-slate-500 mt-2 font-mono uppercase">
                   Batas Waktu: {activeSession.session.startTime.split(':')[0]}:{String(parseInt(activeSession.session.startTime.split(':')[1]) + activeSession.session.toleranceMinutes).padStart(2, '0')}
                 </p>
               </div>
-              <span className={cn("px-3 py-1.5 text-xs font-black rounded-full shadow-lg border", activeSession.status === 'Hadir' ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/30 shadow-emerald-500/20" : "bg-orange-500/10 text-orange-400 border-orange-500/30 shadow-orange-500/20")}>
+              <span className={cn("px-4 py-2 text-xs font-black uppercase tracking-widest rounded-xl shadow-lg border", activeSession.status === 'Hadir' ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/30" : "bg-amber-500/10 text-amber-400 border-amber-500/30")}>
                 {activeSession.status}
               </span>
             </div>
-            <button onClick={() => onComplete({ sessionName: activeSession.session.name, status: activeSession.status as 'Hadir' | 'Terlambat' })} className="w-full py-4 bg-gradient-to-r from-cyan-600 to-cyan-800 hover:from-cyan-500 hover:to-cyan-700 text-white font-bold tracking-widest uppercase rounded-2xl transition-all duration-300 shadow-[0_0_20px_rgba(6,182,212,0.4)] hover:shadow-[0_0_30px_rgba(6,182,212,0.6)] flex items-center justify-center gap-2 active:scale-[0.98] border border-cyan-400/30">
-              Inisiasi Sesi <ChevronRight className="w-5 h-5" />
+            <button onClick={() => onComplete({ sessionName: activeSession.session.name, status: activeSession.status as 'Hadir' | 'Terlambat' })} className="w-full py-4 bg-cyan-600 hover:bg-cyan-500 text-white font-black uppercase tracking-widest rounded-2xl transition-all duration-300 shadow-[0_0_20px_rgba(6,182,212,0.4)] hover:shadow-[0_0_30px_rgba(6,182,212,0.6)] flex items-center justify-center gap-3 active:scale-[0.98]">
+              Inisiasi Pemindaian <ScanFace className="w-5 h-5" />
             </button>
           </div>
         ) : (
           <div className="space-y-4 text-center">
-            <div className="p-6 bg-rose-950/40 border border-rose-500/20 rounded-2xl text-rose-400 flex flex-col items-center gap-3">
-              <AlertCircle className="w-10 h-10 animate-pulse drop-shadow-[0_0_10px_rgba(244,63,94,0.8)]" />
+            <div className="p-6 bg-rose-950/30 border border-rose-500/30 rounded-2xl text-rose-400 flex flex-col items-center gap-3">
+              <AlertCircle className="w-12 h-12 animate-pulse drop-shadow-[0_0_15px_rgba(244,63,94,0.5)]" />
               <div>
-                 <p className="font-bold text-lg tracking-wider">OFFLINE</p>
-                 <p className="text-sm mt-1 opacity-80">Tidak ada sesi aktif untuk saat ini.</p>
+                 <p className="font-black text-lg uppercase tracking-widest text-rose-200">Sistem Terkunci</p>
+                 <p className="text-xs mt-2 font-mono text-rose-400/80">Tidak ada sesi absensi radiologi yang aktif saat ini.</p>
               </div>
             </div>
           </div>
@@ -452,7 +421,7 @@ const LocationCheck: React.FC<{ onComplete: (loc: {lat: number, lng: number}) =>
   const checkLocation = useCallback(() => {
     setStatus('loading');
     if (!navigator.geolocation) {
-      setStatus('error'); setErrorMsg('Sensor Geolocation tidak didukung sistem.'); return;
+      setStatus('error'); setErrorMsg('Sensor Geolocation tidak diizinkan.'); return;
     }
     navigator.geolocation.getCurrentPosition(
       (position) => {
@@ -464,10 +433,10 @@ const LocationCheck: React.FC<{ onComplete: (loc: {lat: number, lng: number}) =>
           setTimeout(() => onComplete({ lat: latitude, lng: longitude }), 1500);
         } else {
           setStatus('error');
-          setErrorMsg(`Target berada di luar zona radiasi aman (${geofence.name || 'Pusat'}).`);
+          setErrorMsg(`Titik GPS berada di luar area aman ${geofence.name || 'klinik'}.`);
         }
       },
-      (error) => { setStatus('error'); setErrorMsg('Gagal mendeteksi sinyal GPS. Pastikan izin akses lokasi aktif.'); },
+      (error) => { setStatus('error'); setErrorMsg('Sinyal satelit lemah. Pastikan GPS aktif.'); },
       { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
     );
   }, [onComplete, geofence]);
@@ -476,39 +445,39 @@ const LocationCheck: React.FC<{ onComplete: (loc: {lat: number, lng: number}) =>
 
   return (
     <div className="flex flex-col items-center justify-center p-4 md:p-8 space-y-6 max-w-md mx-auto animate-in slide-in-from-right duration-500 w-full">
-      <div className="w-32 h-32 bg-slate-900/50 rounded-full flex items-center justify-center border-2 border-cyan-500/20 relative overflow-hidden shadow-[0_0_40px_rgba(6,182,212,0.15)]">
-        {status === 'loading' && (
-           <>
-             <div className="absolute inset-0 border-[4px] border-cyan-500/10 border-t-cyan-400 rounded-full animate-spin"></div>
-             <div className="absolute inset-4 border-[2px] border-purple-500/10 border-b-purple-400 rounded-full animate-spin-reverse"></div>
-             <div className="absolute inset-0 bg-cyan-500/5 rounded-full animate-ping opacity-50"></div>
-           </>
-        )}
-        <Navigation className={cn("w-12 h-12 relative z-10 transition-colors duration-500", status === 'error' ? 'text-rose-400 drop-shadow-[0_0_10px_rgba(244,63,94,0.8)]' : 'text-cyan-400 drop-shadow-[0_0_10px_rgba(6,182,212,0.8)]')} />
+      <div className="w-32 h-32 bg-[#0A1628] rounded-full flex items-center justify-center border-2 border-cyan-500/20 relative overflow-hidden shadow-[0_0_40px_rgba(6,182,212,0.15)]">
+        {status === 'loading' && <div className="absolute inset-0 border-[6px] border-cyan-500/20 border-t-cyan-500 rounded-full animate-spin"></div>}
+        {status === 'loading' && <div className="absolute inset-0 bg-cyan-500/10 rounded-full animate-pulse opacity-50"></div>}
+        
+        {/* Radar Line Effect */}
+        {status === 'loading' && <div className="absolute top-1/2 left-1/2 w-[150%] h-[2px] bg-gradient-to-r from-transparent via-cyan-400 to-transparent origin-left animate-[spin_2s_linear_infinite] opacity-60"></div>}
+
+        <Navigation className={cn("w-12 h-12 relative z-10 transition-colors duration-500", status === 'error' ? 'text-rose-400 drop-shadow-[0_0_15px_rgba(244,63,94,0.8)]' : 'text-cyan-400 drop-shadow-[0_0_15px_rgba(6,182,212,0.8)]')} />
       </div>
 
-      <div className="text-center space-y-2 w-full bg-slate-900/60 backdrop-blur-xl border border-cyan-500/20 p-6 md:p-8 rounded-3xl shadow-2xl transition-all duration-300">
-        <h3 className="text-2xl font-black text-white tracking-widest uppercase">Geo-Scan</h3>
-        {status === 'loading' && <p className="text-cyan-200/60 text-sm font-mono animate-pulse">Memindai koordinat satelit...</p>}
+      <div className="text-center space-y-2 w-full bg-[#0A1628]/80 backdrop-blur-xl border border-cyan-500/20 p-6 md:p-8 rounded-3xl shadow-[0_20px_50px_rgba(0,0,0,0.5)] transition-all duration-300">
+        <h3 className="text-2xl font-black text-white tracking-widest uppercase">Pemindaian Spasial</h3>
+        {status === 'loading' && <p className="text-cyan-400/60 font-mono text-xs uppercase tracking-widest mt-2">Menyelaraskan koordinat satelit...</p>}
         
         {status === 'success' && (
-          <div className="text-cyan-400 space-y-3 animate-in fade-in zoom-in mt-4">
-            <CheckCircle2 className="w-14 h-14 mx-auto drop-shadow-[0_0_15px_rgba(6,182,212,0.8)]" />
+          <div className="text-emerald-400 space-y-3 animate-in fade-in zoom-in mt-6">
+            <ActivitySquare className="w-16 h-16 mx-auto drop-shadow-[0_0_20px_rgba(16,185,129,0.8)]" />
             <div>
-               <p className="font-bold text-xl tracking-widest">AKSES DIBERIKAN</p>
-               <p className="text-sm text-cyan-200/60 font-mono mt-1">Deviasi: {Math.round(distance || 0)}m dari inti.</p>
+               <p className="font-black text-xl uppercase tracking-widest text-emerald-300">Validasi Geofence Cocok</p>
+               <p className="text-xs text-emerald-500/80 font-mono mt-1">Jarak deviasi: {Math.round(distance || 0)}m dari pusat radar.</p>
             </div>
           </div>
         )}
         
         {status === 'error' && (
-          <div className="space-y-5 animate-in fade-in zoom-in mt-4">
-            <div className="p-4 bg-rose-950/40 border border-rose-500/20 rounded-2xl text-center">
-              <p className="text-sm font-bold text-rose-400 leading-relaxed">{errorMsg}</p>
-              {distance && <p className="text-[10px] text-rose-300 mt-2 font-mono bg-rose-900/30 inline-block px-3 py-1 rounded-full border border-rose-500/20">Deviasi saat ini: {Math.round(distance)}m (Maks: {geofence.radius}m)</p>}
+          <div className="space-y-6 animate-in fade-in zoom-in mt-4">
+            <div className="p-5 bg-rose-950/40 border border-rose-500/40 rounded-2xl text-center relative overflow-hidden">
+              <div className="absolute top-0 left-0 w-full h-1 bg-rose-500"></div>
+              <p className="text-xs font-black text-rose-200 uppercase tracking-wide leading-relaxed">{errorMsg}</p>
+              {distance && <p className="text-[10px] text-rose-400 mt-3 font-mono bg-rose-950 inline-block px-3 py-1.5 rounded-lg border border-rose-500/20">Jarak saat ini: {Math.round(distance)}m (Batas Maksimal: {geofence.radius}m)</p>}
             </div>
-            <button onClick={checkLocation} className="w-full py-4 bg-slate-800/50 hover:bg-slate-800 text-white rounded-2xl text-sm font-bold tracking-widest uppercase flex items-center justify-center gap-2 transition-all duration-300 border border-cyan-500/20 hover:border-cyan-400/50 active:scale-[0.98]">
-              <RefreshCcw className="w-5 h-5" /> Pindai Ulang
+            <button onClick={checkLocation} className="w-full py-4 bg-transparent border border-cyan-500/50 hover:bg-cyan-500/10 text-cyan-400 rounded-2xl text-xs uppercase tracking-widest font-black flex items-center justify-center gap-3 transition-all duration-300 active:scale-[0.98]">
+              <RefreshCcw className="w-4 h-4" /> Resinkronisasi Satelit
             </button>
           </div>
         )}
@@ -517,8 +486,8 @@ const LocationCheck: React.FC<{ onComplete: (loc: {lat: number, lng: number}) =>
   );
 };
 
-const QRScanner: React.FC<{ onComplete: (data: {nim: string, name: string, deviceId: string}) => void }> = ({ onComplete }) => {
-  const { students, updateStudent } = useAppContext();
+const QRScanner: React.FC<{ onComplete: (data: {nim: string, name: string, deviceId: string, clusterName?: string}) => void }> = ({ onComplete }) => {
+  const { students, updateStudent, clusters } = useAppContext();
   const [nimInput, setNimInput] = useState('');
   const [passInput, setPassInput] = useState('');
   const [error, setError] = useState('');
@@ -529,9 +498,10 @@ const QRScanner: React.FC<{ onComplete: (data: {nim: string, name: string, devic
   const handleVerify = (scannedNim?: string) => {
     setError('');
     const targetNim = scannedNim || nimInput;
-    if (!targetNim) { setError('Otorisasi ditolak. Masukkan atau Scan NIM.'); return; }
+    if (!targetNim) { setError('Masukkan atau pindai identitas NIM.'); return; }
 
-    let studentName = 'Subjek Tidak Dikenal';
+    let studentName = 'Entitas Tidak Dikenal';
+    let clusterName = '';
     let finalDeviceId = localStorage.getItem('axaxyz_device_id');
     
     if (!finalDeviceId) {
@@ -540,19 +510,22 @@ const QRScanner: React.FC<{ onComplete: (data: {nim: string, name: string, devic
     }
     
     if (students.length > 0) {
-      if (!passInput && !scannedNim) { setError('Otorisasi ditolak. Masukkan Password (PIN).'); return; }
+      if (!passInput && !scannedNim) { setError('Otorisasi sandi diperlukan.'); return; }
       const foundStudent = students.find(s => s.nim === targetNim);
       if (!foundStudent) {
-        setError('Data NIM tidak ditemukan di server.'); return;
+        setError('Akses ditolak: NIM tidak ditemukan dalam database.'); return;
       }
       
       if (!scannedNim && foundStudent.password !== passInput) {
-        setError('Kredensial tidak valid.'); return;
+        setError('Akses ditolak: Sandi tidak valid.'); return;
       }
       studentName = foundStudent.name;
+      if (foundStudent.clusterId) {
+         clusterName = clusters.find(c => c.id === foundStudent.clusterId)?.name || '';
+      }
 
       if (foundStudent.deviceId && foundStudent.deviceId !== finalDeviceId) {
-        setError('⚠️ FRAUD ALERT: Kredensial telah digunakan di perangkat/instrumen lain. Hubungi Admin.');
+        setError('⚠️ Protokol Keamanan: NIM ini telah terkunci pada perangkat lain. Harap hubungi Admin.');
         return;
       }
       
@@ -560,20 +533,20 @@ const QRScanner: React.FC<{ onComplete: (data: {nim: string, name: string, devic
         updateStudent(foundStudent.id, { deviceId: finalDeviceId });
       }
     } else {
-      studentName = 'Subjek Mode Bypass'; 
+      studentName = 'Bypass Mode'; 
       let deviceOwner = localStorage.getItem('axaxyz_device_owner');
       if (!deviceOwner) {
         localStorage.setItem('axaxyz_device_owner', targetNim); 
       } else if (deviceOwner !== targetNim) {
-        setError('⚠️ FRAUD ALERT: Perangkat terkunci untuk NIM lain.');
+        setError('⚠️ Protokol Keamanan: Perangkat ini terikat pada identitas lain.');
         return;
       }
     }
 
-    // Poin 5: Pastikan axaxyz_device_owner diset untuk fitur Unlink Device
+    // Bind owner to localstorage to show NIM in header
     localStorage.setItem('axaxyz_device_owner', targetNim);
 
-    onComplete({ nim: targetNim, name: studentName, deviceId: finalDeviceId });
+    onComplete({ nim: targetNim, name: studentName, deviceId: finalDeviceId, clusterName });
   };
 
   const startScanner = async () => {
@@ -600,16 +573,16 @@ const QRScanner: React.FC<{ onComplete: (data: {nim: string, name: string, devic
             },
             () => {} 
           ).catch((err: any) => {
-             setError('Optik gagal dimuat. Periksa izin akses instrumen kamera.');
+             setError('Gagal menginisiasi modul kamera optik.');
              setIsScanning(false);
           });
         } catch (err) {
-          setError('Kesalahan fatal pada modul optik.');
+          setError('Terjadi kegagalan sistem kamera optik.');
           setIsScanning(false);
         }
       }, 100);
     } catch (error) {
-      setError('Modul QR Scanner corrupt.');
+      setError('Modul QR Scanner rusak. Hubungi teknisi.');
       setIsScanning(false);
     }
   };
@@ -623,77 +596,88 @@ const QRScanner: React.FC<{ onComplete: (data: {nim: string, name: string, devic
 
   return (
     <div className="flex flex-col items-center justify-center p-4 md:p-8 space-y-6 max-w-md mx-auto animate-in slide-in-from-right duration-500 w-full">
-      <div className="w-full bg-slate-900/60 backdrop-blur-xl border border-cyan-500/20 p-6 md:p-8 rounded-[2rem] shadow-[0_0_40px_rgba(6,182,212,0.1)] transition-all duration-300">
+      <div className="w-full bg-[#0A1628]/80 backdrop-blur-xl border border-cyan-500/20 p-6 md:p-8 rounded-3xl shadow-[0_20px_50px_rgba(0,0,0,0.5)] transition-all duration-300">
         <div className="text-center mb-8">
-          <div className="w-16 h-16 bg-slate-800 border border-cyan-500/50 rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-[0_0_20px_rgba(6,182,212,0.4)]">
-            {isScanning ? <ScanFace className="w-8 h-8 text-cyan-400 animate-pulse" /> : <QrCode className="w-8 h-8 text-cyan-400 drop-shadow-[0_0_5px_rgba(6,182,212,0.8)]" />}
+          <div className="w-20 h-20 bg-[#050B14] border border-cyan-500/50 rounded-2xl flex items-center justify-center mx-auto mb-5 shadow-[0_0_30px_rgba(6,182,212,0.3)]">
+            {isScanning ? <Camera className="w-10 h-10 text-cyan-400 animate-pulse drop-shadow-[0_0_10px_rgba(6,182,212,0.8)]" /> : <QrCode className="w-10 h-10 text-cyan-400 drop-shadow-[0_0_10px_rgba(6,182,212,0.8)]" />}
           </div>
           <h3 className="text-2xl font-black text-white mb-2 tracking-widest uppercase">Identifikasi</h3>
-          <p className="text-cyan-500/70 text-xs font-mono">Pindai KTM / Input Kredensial Manual</p>
+          <p className="text-cyan-500/70 text-xs font-mono uppercase tracking-wide">Pindai KTM Dentomaxillofacial Anda</p>
         </div>
 
         {isScanning ? (
           <div className="space-y-4 animate-in fade-in zoom-in">
-             <div className="relative w-full rounded-2xl overflow-hidden border border-cyan-500/50 bg-black aspect-square shadow-[0_0_30px_rgba(6,182,212,0.3)]">
+             <div className="relative w-full rounded-2xl overflow-hidden border border-cyan-500 bg-black aspect-square shadow-[0_0_40px_rgba(6,182,212,0.3)]">
                 <div id="qr-reader-box" className="w-full h-full opacity-80 mix-blend-screen"></div>
+                
+                {/* Scanner Grid Overlay */}
+                <div className="absolute inset-0 pointer-events-none bg-[linear-gradient(transparent_50%,rgba(6,182,212,0.1)_50%)] bg-[length:100%_4px]"></div>
+                
                 <div className="absolute inset-0 pointer-events-none">
-                   <div className="w-full h-[15%] bg-gradient-to-b from-transparent via-cyan-500/30 to-transparent animate-[scan_2s_ease-in-out_infinite] border-y border-cyan-400/50"></div>
+                   <div className="w-full h-full bg-gradient-to-b from-transparent via-cyan-500/30 to-transparent animate-[scan_2s_ease-in-out_infinite] border-b-2 border-cyan-400"></div>
                 </div>
-                {/* Crosshair Overlay */}
-                <div className="absolute inset-0 pointer-events-none flex items-center justify-center">
-                    <div className="w-48 h-48 border-2 border-cyan-500/30 rounded-3xl"></div>
-                </div>
+                
+                {/* Corner Accents */}
+                <div className="absolute top-4 left-4 w-8 h-8 border-t-4 border-l-4 border-cyan-400 rounded-tl-lg shadow-[0_0_10px_rgba(6,182,212,0.8)]"></div>
+                <div className="absolute top-4 right-4 w-8 h-8 border-t-4 border-r-4 border-cyan-400 rounded-tr-lg shadow-[0_0_10px_rgba(6,182,212,0.8)]"></div>
+                <div className="absolute bottom-4 left-4 w-8 h-8 border-b-4 border-l-4 border-cyan-400 rounded-bl-lg shadow-[0_0_10px_rgba(6,182,212,0.8)]"></div>
+                <div className="absolute bottom-4 right-4 w-8 h-8 border-b-4 border-r-4 border-cyan-400 rounded-br-lg shadow-[0_0_10px_rgba(6,182,212,0.8)]"></div>
              </div>
-             <p className="text-[10px] text-center text-cyan-400 font-mono tracking-widest uppercase animate-pulse">Menyelaraskan Optik...</p>
-             <button onClick={stopScanner} className="w-full py-3.5 bg-rose-950/40 hover:bg-rose-900/60 border border-rose-500/30 text-rose-400 rounded-xl text-xs font-bold tracking-widest uppercase transition-colors duration-300 active:scale-[0.98]">Batalkan Pemindaian</button>
+             <p className="text-[10px] text-center text-cyan-400 font-mono uppercase tracking-widest animate-pulse">Menunggu data optik...</p>
+             <button onClick={stopScanner} className="w-full py-4 bg-transparent border border-rose-500/50 hover:bg-rose-500/10 text-rose-400 rounded-xl text-xs uppercase tracking-widest font-black transition-all duration-300 active:scale-[0.98]">Batalkan Pemindaian</button>
           </div>
         ) : (
-          <div className="space-y-5">
-            <button onClick={startScanner} className="w-full py-4 bg-cyan-950/40 hover:bg-cyan-900/60 border border-cyan-500/50 text-cyan-400 font-bold tracking-widest uppercase rounded-2xl flex justify-center items-center gap-2 transition-all duration-300 active:scale-[0.98] shadow-[inset_0_0_20px_rgba(6,182,212,0.1)]">
-              <Camera className="w-5 h-5" /> Aktifkan Optik KTM
+          <div className="space-y-6">
+            <button onClick={startScanner} className="w-full py-4 bg-cyan-600/20 hover:bg-cyan-600/40 border border-cyan-500/50 text-cyan-400 font-black tracking-widest uppercase text-xs rounded-2xl flex justify-center items-center gap-3 transition-all duration-300 active:scale-[0.98] shadow-[0_0_15px_rgba(6,182,212,0.2)]">
+              <Camera className="w-5 h-5" /> Inisiasi Kamera Optik
             </button>
             
-            <div className="relative flex items-center py-2 opacity-60">
-               <div className="flex-grow border-t border-cyan-500/30"></div>
-               <span className="flex-shrink-0 mx-4 text-cyan-500/50 text-[10px] font-mono tracking-widest uppercase">Atau Override Manual</span>
-               <div className="flex-grow border-t border-cyan-500/30"></div>
+            <div className="relative flex items-center py-2 opacity-40">
+               <div className="flex-grow border-t border-cyan-500/50"></div>
+               <span className="flex-shrink-0 mx-4 text-cyan-300 text-[9px] font-mono tracking-[0.3em] uppercase">Bypass Manual</span>
+               <div className="flex-grow border-t border-cyan-500/50"></div>
             </div>
 
-            <div className="space-y-2">
-              <label className="text-[10px] text-cyan-200/60 font-bold uppercase tracking-widest ml-1 font-mono">Nomor Induk Mahasiswa</label>
-              <div className="flex items-center bg-black/40 border border-cyan-500/20 rounded-2xl overflow-hidden focus-within:border-cyan-400 focus-within:ring-1 focus-within:ring-cyan-400 transition-all duration-300 shadow-inner">
-                <div className="pl-4 pr-2 text-cyan-500/50"><Fingerprint className="w-5 h-5"/></div>
-                <input type="text" placeholder="Masukkan NIM..." className="w-full bg-transparent py-3.5 pr-4 text-white font-mono outline-none placeholder-slate-700 text-sm" value={nimInput} onChange={(e) => setNimInput(e.target.value)} />
+            <div className="space-y-1.5">
+              <label className="text-[9px] text-cyan-500/80 font-bold uppercase tracking-[0.2em] ml-1">Nomor Induk Mahasiswa (NIM)</label>
+              <div className="flex items-center bg-[#050B14] border border-cyan-500/30 rounded-xl overflow-hidden focus-within:border-cyan-400 focus-within:shadow-[0_0_15px_rgba(6,182,212,0.3)] transition-all duration-300">
+                <div className="pl-4 pr-2 text-cyan-600"><Fingerprint className="w-5 h-5"/></div>
+                <input type="text" placeholder="Ketik NIM..." className="w-full bg-transparent py-4 pr-4 text-cyan-50 font-mono outline-none placeholder-cyan-900/50" value={nimInput} onChange={(e) => setNimInput(e.target.value)} />
               </div>
             </div>
             
             {students.length > 0 && (
-              <div className="space-y-2">
-                <label className="text-[10px] text-cyan-200/60 font-bold uppercase tracking-widest ml-1 font-mono">Kode Akses (PIN)</label>
-                <div className="flex items-center bg-black/40 border border-cyan-500/20 rounded-2xl overflow-hidden focus-within:border-cyan-400 focus-within:ring-1 focus-within:ring-cyan-400 transition-all duration-300 shadow-inner">
-                  <div className="pl-4 pr-2 text-cyan-500/50"><Key className="w-5 h-5"/></div>
-                  <input type="password" placeholder="••••••••" className="w-full bg-transparent py-3.5 pr-4 text-white font-mono outline-none placeholder-slate-700 text-sm tracking-widest" value={passInput} onChange={(e) => setPassInput(e.target.value)} />
+              <div className="space-y-1.5">
+                <label className="text-[9px] text-cyan-500/80 font-bold uppercase tracking-[0.2em] ml-1">Kode Otorisasi (Sandi)</label>
+                <div className="flex items-center bg-[#050B14] border border-cyan-500/30 rounded-xl overflow-hidden focus-within:border-cyan-400 focus-within:shadow-[0_0_15px_rgba(6,182,212,0.3)] transition-all duration-300">
+                  <div className="pl-4 pr-2 text-cyan-600"><Key className="w-5 h-5"/></div>
+                  <input type="password" placeholder="Ketik Sandi..." className="w-full bg-transparent py-4 pr-4 text-cyan-50 font-mono outline-none placeholder-cyan-900/50" value={passInput} onChange={(e) => setPassInput(e.target.value)} />
                 </div>
               </div>
             )}
             
             {error && (
-              <div className="p-4 bg-rose-950/40 border border-rose-500/30 rounded-2xl flex items-start gap-3 animate-in shake">
+              <div className="p-4 bg-rose-950/40 border border-rose-500/40 rounded-xl flex items-start gap-3 animate-in shake">
                 <AlertCircle className="w-5 h-5 text-rose-400 shrink-0 mt-0.5" />
-                <p className="text-[11px] font-mono text-rose-300 leading-relaxed uppercase tracking-wider">{error}</p>
+                <p className="text-xs font-mono text-rose-200 leading-relaxed uppercase tracking-wide">{error}</p>
               </div>
             )}
 
-            <button onClick={() => handleVerify()} className="w-full py-4 mt-2 bg-slate-800 hover:bg-slate-700 border border-cyan-500/30 text-cyan-300 font-bold tracking-widest uppercase rounded-2xl transition-all duration-300 shadow-[0_0_15px_rgba(6,182,212,0.1)] hover:shadow-[0_0_25px_rgba(6,182,212,0.3)] active:scale-[0.98]">
-              Verifikasi Data
+            <button onClick={() => handleVerify()} className="w-full py-4 mt-4 bg-cyan-600 hover:bg-cyan-500 text-white font-black tracking-widest uppercase text-xs rounded-2xl transition-all duration-300 shadow-[0_0_20px_rgba(6,182,212,0.4)] active:scale-[0.98]">
+              Verifikasi Kredensial
             </button>
           </div>
         )}
       </div>
+      <p className="text-[9px] text-cyan-600/60 text-center max-w-xs uppercase tracking-[0.2em] font-mono">
+        Dilindungi Oleh Security Device Fingerprinting
+      </p>
+
       <style>{`
         @keyframes scan {
-          0%, 100% { transform: translateY(-100%); }
-          50% { transform: translateY(600%); }
+          0% { transform: translateY(-100%); }
+          50% { transform: translateY(100%); }
+          100% { transform: translateY(-100%); }
         }
       `}</style>
     </div>
@@ -745,60 +729,67 @@ const SelfieCapture: React.FC<{ onComplete: (base64: string) => void }> = ({ onC
   return (
     <div className="flex flex-col items-center justify-center p-4 md:p-6 space-y-6 w-full max-w-md mx-auto animate-in slide-in-from-right duration-500">
       <div className="text-center">
-        <h3 className="text-2xl md:text-3xl font-black text-white tracking-widest uppercase">Visual Scan</h3>
-        <p className="text-cyan-500/70 text-xs font-mono mt-1.5">Posisikan struktur wajah pada grid pandang.</p>
+        <h3 className="text-2xl md:text-3xl font-black text-white tracking-widest uppercase">Pemindaian Biometrik</h3>
+        <p className="text-cyan-500/70 text-xs font-mono uppercase tracking-wide mt-2">Posisikan struktur wajah pada area frame X-Ray</p>
       </div>
 
-      <div className="w-full bg-slate-950 rounded-[2rem] overflow-hidden border border-cyan-500/50 p-2 relative shadow-[0_0_40px_rgba(6,182,212,0.2)] flex items-center justify-center transition-all duration-500 group aspect-[3/4] md:aspect-video">
-        <div className="w-full h-full rounded-[1.5rem] overflow-hidden relative bg-black">
-          {!image ? (
-            <video
-              ref={videoRef}
-              autoPlay
-              playsInline
-              muted
-              className="w-full h-full object-cover transform scale-x-[-1] opacity-90 sepia-[.3] hue-rotate-[180deg] contrast-125 saturate-50"
-            />
-          ) : (
-            <img src={image} alt="Selfie" className="w-full h-full object-cover sepia-[.3] hue-rotate-[180deg] contrast-125 saturate-50" />
-          )}
-          
-          {/* X-Ray / Medical Overlay Effects */}
-          <div className="absolute inset-0 pointer-events-none bg-[url('https://www.transparenttextures.com/patterns/scan-lines-light.png')] opacity-30 mix-blend-overlay"></div>
-          
-          {!image && (
-            <div className="absolute inset-0 pointer-events-none flex items-center justify-center">
-               <div className="absolute inset-0 bg-cyan-900/10"></div>
-               {/* Center Focus Target */}
-               <div className="relative w-48 h-64 md:w-56 md:h-72 border border-cyan-400/30 rounded-[3rem] shadow-[inset_0_0_30px_rgba(6,182,212,0.2)] flex flex-col items-center justify-between py-4">
-                  <div className="w-full flex justify-between px-4">
-                    <div className="w-4 h-4 border-t-2 border-l-2 border-cyan-300"></div>
-                    <div className="w-4 h-4 border-t-2 border-r-2 border-cyan-300"></div>
-                  </div>
-                  <div className="w-16 h-[1px] bg-cyan-400/50"></div>
-                  <div className="w-full flex justify-between px-4">
-                    <div className="w-4 h-4 border-b-2 border-l-2 border-cyan-300"></div>
-                    <div className="w-4 h-4 border-b-2 border-r-2 border-cyan-300"></div>
-                  </div>
-               </div>
-            </div>
-          )}
-        </div>
-      </div>
-
-      <div className="w-full">
+      <div className="w-full bg-[#050B14] rounded-3xl overflow-hidden border-2 border-cyan-500/50 relative shadow-[0_0_40px_rgba(6,182,212,0.3)] aspect-[3/4] md:aspect-video flex items-center justify-center transition-all duration-500 group">
+        
         {!image ? (
-          <button onClick={capture} className="w-full py-4 bg-cyan-950/40 hover:bg-cyan-900/60 border border-cyan-500/50 text-cyan-400 font-bold tracking-widest uppercase rounded-2xl transition-all duration-300 flex items-center justify-center gap-3 active:scale-[0.98] shadow-[0_0_20px_rgba(6,182,212,0.1)]">
-            <div className="w-6 h-6 rounded-full border-[2px] border-cyan-400 flex items-center justify-center">
-              <div className="w-2 h-2 rounded-full bg-cyan-300 animate-pulse"></div>
+          <video
+            ref={videoRef}
+            autoPlay
+            playsInline
+            muted
+            // UX Viewfinder tetap ter-mirror sebagai cermin
+            className="w-full h-full object-cover transform scale-x-[-1] opacity-90 sepia-[.2] hue-rotate-[180deg] saturate-[1.5]"
+          />
+        ) : (
+          // Hasil Foto TIDAK TER-MIRROR lagi (scale-x dihapus)
+          <img src={image} alt="Biometric" className="w-full h-full object-cover sepia-[.2] hue-rotate-[180deg] saturate-[1.5]" />
+        )}
+        
+        {/* Overlay X-Ray Style Grid */}
+        <div className="absolute inset-0 pointer-events-none bg-[linear-gradient(transparent_95%,rgba(6,182,212,0.2)_100%),linear-gradient(90deg,transparent_95%,rgba(6,182,212,0.2)_100%)] bg-[length:40px_40px]"></div>
+
+        {!image && (
+          <div className="absolute inset-0 pointer-events-none flex items-center justify-center">
+             <div className="absolute inset-0 bg-[#0A1628]/40 mix-blend-multiply"></div>
+             
+             {/* Face Tracking HUD */}
+             <div className="relative w-56 h-72">
+                {/* HUD Corners */}
+                <div className="absolute top-0 left-0 w-8 h-8 border-t-2 border-l-2 border-cyan-400"></div>
+                <div className="absolute top-0 right-0 w-8 h-8 border-t-2 border-r-2 border-cyan-400"></div>
+                <div className="absolute bottom-0 left-0 w-8 h-8 border-b-2 border-l-2 border-cyan-400"></div>
+                <div className="absolute bottom-0 right-0 w-8 h-8 border-b-2 border-r-2 border-cyan-400"></div>
+                
+                {/* Scanning Line */}
+                <div className="absolute w-full h-[1px] bg-cyan-400 shadow-[0_0_10px_rgba(6,182,212,1)] animate-[scan_3s_ease-in-out_infinite]"></div>
+                
+                {/* Crosshair */}
+                <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-4 h-4">
+                   <div className="absolute top-1/2 left-0 w-full h-[1px] bg-cyan-500/50"></div>
+                   <div className="absolute top-0 left-1/2 w-[1px] h-full bg-cyan-500/50"></div>
+                </div>
+             </div>
+          </div>
+        )}
+      </div>
+
+      <div className="w-full mt-4">
+        {!image ? (
+          <button onClick={capture} className="w-full py-5 bg-transparent border-2 border-cyan-500 hover:bg-cyan-500/20 text-cyan-400 font-black tracking-widest uppercase text-sm rounded-2xl transition-all duration-300 flex items-center justify-center gap-4 active:scale-[0.98] shadow-[0_0_20px_rgba(6,182,212,0.3)] inset-shadow">
+            <div className="w-6 h-6 rounded-full border-[3px] border-cyan-400 flex items-center justify-center">
+              <div className="w-2 h-2 rounded-full bg-cyan-400 animate-ping"></div>
             </div>
-            Ekstrak Biometrik
+            Rekam Citra Radiologi
           </button>
         ) : (
           <div className="flex gap-4">
-            <button onClick={() => { setImage(null); startCamera(); }} className="flex-1 py-4 bg-slate-800/50 hover:bg-slate-800 border border-cyan-500/20 text-slate-300 font-bold tracking-widest uppercase rounded-2xl transition-all duration-300 active:scale-[0.95] text-xs">Ulangi</button>
-            <button onClick={() => onComplete(image)} className="flex-[2] py-4 bg-gradient-to-r from-cyan-600 to-cyan-800 hover:from-cyan-500 hover:to-cyan-700 border border-cyan-400/50 text-white font-bold tracking-widest uppercase rounded-2xl transition-all duration-300 shadow-[0_0_30px_rgba(6,182,212,0.4)] flex items-center justify-center gap-2 active:scale-[0.95] text-xs">
-              <CheckCircle2 className="w-4 h-4" /> Autentikasi
+            <button onClick={() => { setImage(null); startCamera(); }} className="flex-1 py-4 bg-transparent border border-rose-500/50 hover:bg-rose-500/10 text-rose-400 font-bold uppercase tracking-widest text-xs rounded-xl transition-all duration-300 active:scale-[0.95]">Buang Citra</button>
+            <button onClick={() => onComplete(image)} className="flex-[2] py-4 bg-cyan-600 hover:bg-cyan-500 text-white font-black tracking-widest uppercase text-xs rounded-xl transition-all duration-300 shadow-[0_0_20px_rgba(6,182,212,0.4)] flex items-center justify-center gap-3 active:scale-[0.95]">
+              <CheckCircle2 className="w-5 h-5" /> Verifikasi Citra
             </button>
           </div>
         )}
@@ -810,79 +801,73 @@ const SelfieCapture: React.FC<{ onComplete: (base64: string) => void }> = ({ onC
 const SuccessScreen: React.FC<{ reset: () => void }> = ({ reset }) => (
   <div className="flex flex-col items-center justify-center p-8 space-y-8 text-center animate-in zoom-in duration-500 w-full">
     <div className="relative">
-      <div className="absolute inset-0 bg-cyan-500/20 blur-3xl rounded-full"></div>
-      <div className="w-32 h-32 bg-cyan-950/50 border-2 border-cyan-500/50 rounded-full flex items-center justify-center relative z-10 animate-bounce shadow-[0_0_40px_rgba(6,182,212,0.4)]">
-         <ShieldCheck className="w-16 h-16 text-cyan-300 drop-shadow-[0_0_10px_rgba(6,182,212,0.8)]" />
+      <div className="absolute inset-0 bg-emerald-500/20 blur-[50px] rounded-full"></div>
+      <div className="w-36 h-36 bg-[#050B14] border border-emerald-500/50 rounded-full flex items-center justify-center relative z-10 animate-bounce shadow-[0_0_40px_rgba(16,185,129,0.3)]">
+         <ShieldCheck className="w-20 h-20 text-emerald-400 drop-shadow-[0_0_15px_rgba(16,185,129,0.8)]" />
       </div>
     </div>
-    <div className="space-y-3">
-      <h2 className="text-3xl md:text-4xl font-black text-white tracking-widest uppercase">Data Terekam</h2>
-      <p className="text-cyan-500/70 font-mono text-xs md:text-sm max-w-sm mx-auto leading-relaxed">Matriks kehadiran dan struktur biometrik berhasil dienkripsi ke dalam database pusat.</p>
+    <div className="space-y-4">
+      <h2 className="text-3xl md:text-4xl font-black text-emerald-300 tracking-widest uppercase">Protokol Selesai</h2>
+      <p className="text-cyan-500/70 text-xs font-mono uppercase tracking-wide max-w-sm mx-auto leading-relaxed">
+        Data Spasial, Waktu, & Citra Biometrik berhasil diamankan dalam Database Radiologi Terenkripsi.
+      </p>
     </div>
-    <button onClick={reset} className="px-10 py-4 bg-slate-800/50 hover:bg-slate-800 border border-cyan-500/30 text-cyan-300 font-bold tracking-widest uppercase rounded-2xl transition-all duration-300 mt-8 shadow-xl active:scale-95 text-xs">Terminasi Sesi</button>
+    <button onClick={reset} className="px-10 py-4 bg-transparent border border-cyan-500 hover:bg-cyan-500/20 text-cyan-400 rounded-2xl transition-all duration-300 font-black tracking-widest uppercase text-sm mt-8 shadow-[0_0_20px_rgba(6,182,212,0.2)] active:scale-95">
+      Tutup Terminal
+    </button>
   </div>
 );
 
 const AttendanceWizard: React.FC = () => {
-  const { addLog, unlinkMyDevice } = useAppContext();
+  const { addLog, studentLogout } = useAppContext();
   const [step, setStep] = useState(1);
   const [data, setData] = useState<Partial<Log>>({});
-  
-  // Poin 5: Mendapatkan NIM dari localStorage untuk fitur Logout Device
-  const [deviceOwnerNIM, setDeviceOwnerNIM] = useState<string | null>(null);
+  const [linkedNim, setLinkedNim] = useState<string | null>(null);
 
   useEffect(() => {
-     if(typeof window !== 'undefined') {
-        setDeviceOwnerNIM(localStorage.getItem('axaxyz_device_owner'));
-     }
-  }, [step]); // re-check on step change
+     setLinkedNim(localStorage.getItem('axaxyz_device_owner'));
+  }, []);
 
   const reset = () => { setStep(1); setData({}); };
-  const steps = ['Waktu', 'Lokasi', 'Identitas', 'Verifikasi'];
-
-  const handleDeviceLogout = () => {
-     if(!deviceOwnerNIM) return;
-     if(confirm(`PERHATIAN!\n\nAnda akan menghapus tautan instrumen ini dari NIM: ${deviceOwnerNIM}.\n\nLanjutkan Unlink Device?`)) {
-        unlinkMyDevice(deviceOwnerNIM);
-        localStorage.removeItem('axaxyz_device_owner');
-        localStorage.removeItem('axaxyz_device_id');
-        setDeviceOwnerNIM(null);
-        alert('Tautan instrumen berhasil diputus. Sistem siap untuk subjek baru.');
-        window.location.reload();
-     }
-  };
+  const steps = ['Kronologi', 'Spasial', 'Kredensial', 'Biometrik'];
 
   return (
-    <div className="min-h-screen bg-slate-950 flex flex-col font-sans text-slate-100 overflow-hidden relative selection:bg-cyan-500/30">
-      {/* Background futuristik medis radiologi */}
-      <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-slate-900 via-slate-950 to-slate-950"></div>
-      <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/carbon-fibre.png')] opacity-5 mix-blend-overlay"></div>
-      <div className="absolute top-[-10%] left-[-10%] w-[60%] h-[60%] bg-cyan-900/20 rounded-full blur-[150px] pointer-events-none"></div>
-      <div className="absolute bottom-[-10%] right-[-10%] w-[60%] h-[60%] bg-purple-900/10 rounded-full blur-[150px] pointer-events-none"></div>
+    <div className="min-h-screen bg-[#050B14] flex flex-col font-sans text-slate-100 overflow-hidden relative radiology-bg">
+      {/* Radiology Dark Theme Global Styling */}
+      <style>{`
+        .radiology-bg {
+           background-image: 
+              radial-gradient(circle at 15% 50%, rgba(6, 182, 212, 0.05), transparent 25%),
+              radial-gradient(circle at 85% 30%, rgba(59, 130, 246, 0.05), transparent 25%);
+        }
+      `}</style>
       
-      <header className="w-full p-4 md:p-6 flex justify-between items-center relative z-10 border-b border-cyan-500/10 bg-slate-950/80 backdrop-blur-xl shadow-lg">
-        <div className="flex items-center gap-3 md:gap-4">
-          <div className="w-10 h-10 md:w-12 md:h-12 bg-slate-900 border border-cyan-500/30 rounded-xl flex items-center justify-center shadow-[0_0_15px_rgba(6,182,212,0.3)] overflow-hidden p-1.5 md:p-2 transition-transform duration-300 hover:scale-105 cursor-pointer">
-             <img src="/axalogo.png" alt="ABSENSI DEPT. RKG" className="w-full h-full object-contain drop-shadow-md brightness-150 grayscale contrast-125" onError={(e) => { e.currentTarget.style.display = 'none'; e.currentTarget.nextElementSibling?.classList.remove('hidden'); }} />
-             <ActivitySquare className="w-6 h-6 text-cyan-400 hidden" />
+      <header className="w-full p-4 md:p-6 flex justify-between items-center relative z-10 border-b border-cyan-500/20 bg-[#0A1628]/80 backdrop-blur-xl shadow-[0_4px_30px_rgba(0,0,0,0.5)]">
+        <div className="flex items-center gap-4">
+          <div className="w-12 h-12 bg-[#050B14] border border-cyan-500/50 rounded-xl flex items-center justify-center shadow-[0_0_15px_rgba(6,182,212,0.4)] overflow-hidden p-2">
+             <img src="/axalogo.png" alt="ABSENSI DEPT. RKG" className="w-full h-full object-contain filter drop-shadow-[0_0_5px_rgba(6,182,212,0.8)]" onError={(e) => { e.currentTarget.style.display = 'none'; e.currentTarget.nextElementSibling?.classList.remove('hidden'); }} />
+             <ActivitySquare className="text-cyan-400 w-full h-full hidden" />
           </div>
           <div className="flex flex-col">
-             <span className="font-black text-lg md:text-2xl tracking-[0.2em] text-cyan-50 drop-shadow-[0_0_5px_rgba(6,182,212,0.5)]">DEPT. RKG</span>
-             <span className="text-[8px] md:text-[10px] text-cyan-500/80 font-mono tracking-widest uppercase">Radiology Core System</span>
+             <span className="font-black text-lg md:text-2xl tracking-[0.2em] text-cyan-50 uppercase drop-shadow-[0_0_10px_rgba(6,182,212,0.5)]">DEPT. RKG</span>
+             <span className="text-[8px] md:text-[10px] text-cyan-400 font-mono tracking-widest uppercase mt-0.5">Dentomaxillofacial Radiology</span>
           </div>
         </div>
         
-        {/* Poin 5: Tombol Logout Device MHS */}
-        <div className="flex flex-col md:flex-row items-end md:items-center gap-2 md:gap-4">
-           {deviceOwnerNIM && (
-              <div className="flex items-center gap-2 bg-slate-900 border border-cyan-500/20 px-3 py-1.5 rounded-lg shadow-inner">
-                 <span className="text-[9px] md:text-[10px] text-cyan-500/70 font-mono tracking-widest uppercase">ID: {deviceOwnerNIM}</span>
-                 <button onClick={handleDeviceLogout} title="Unlink Instrumen" className="text-rose-400/70 hover:text-rose-400 transition-colors ml-1 p-1 bg-rose-950/30 rounded hover:bg-rose-900/50">
-                    <UserMinus className="w-3.5 h-3.5" />
-                 </button>
+        <div className="flex items-center gap-3">
+           {linkedNim && (
+              <div className="hidden md:flex items-center gap-2 px-3 py-1.5 bg-[#050B14] border border-cyan-500/30 rounded-lg">
+                 <User className="w-3.5 h-3.5 text-cyan-400" />
+                 <span className="text-[10px] font-mono text-cyan-300 tracking-widest">{linkedNim}</span>
               </div>
            )}
-           <div className="text-[9px] md:text-[10px] font-bold px-4 py-2 bg-cyan-950/50 border border-cyan-500/30 rounded-full text-cyan-300 tracking-[0.2em] shadow-[0_0_10px_rgba(6,182,212,0.2)] uppercase">PORTAL MHS</div>
+           {linkedNim ? (
+              <button onClick={studentLogout} className="text-[9px] md:text-[10px] font-black px-4 py-2 bg-rose-950/50 border border-rose-500/50 hover:bg-rose-500 hover:text-white rounded-lg text-rose-400 tracking-[0.15em] uppercase shadow-[0_0_10px_rgba(244,63,94,0.2)] transition-all flex items-center gap-2">
+                 <LogOut className="w-3 h-3" /> Logout
+              </button>
+           ) : (
+              <div className="text-[9px] md:text-[10px] font-black px-4 py-2 bg-cyan-950/50 border border-cyan-500/50 rounded-lg text-cyan-300 tracking-[0.15em] uppercase shadow-[0_0_10px_rgba(6,182,212,0.2)]">PORTAL MHS</div>
+           )}
         </div>
       </header>
 
@@ -890,16 +875,16 @@ const AttendanceWizard: React.FC = () => {
         {step < 5 && (
           <div className="mb-8 md:mb-16 max-w-2xl mx-auto w-full px-2">
             <div className="flex justify-between relative">
-              <div className="absolute top-1/2 -translate-y-1/2 left-0 w-full h-1 bg-slate-800/80 rounded-full shadow-inner"></div>
-              <div className="absolute top-1/2 -translate-y-1/2 left-0 h-1 bg-gradient-to-r from-cyan-600 to-cyan-300 rounded-full transition-all duration-700 ease-in-out shadow-[0_0_15px_rgba(6,182,212,0.8)]" style={{ width: `${((step - 1) / (steps.length - 1)) * 100}%` }}></div>
+              <div className="absolute top-1/2 -translate-y-1/2 left-0 w-full h-[2px] bg-cyan-950"></div>
+              <div className="absolute top-1/2 -translate-y-1/2 left-0 h-[2px] bg-cyan-400 transition-all duration-700 ease-in-out shadow-[0_0_10px_rgba(6,182,212,0.8)]" style={{ width: `${((step - 1) / (steps.length - 1)) * 100}%` }}></div>
               {steps.map((label, idx) => {
                 const isActive = step === idx + 1; const isPassed = step > idx + 1;
                 return (
-                  <div key={label} className="relative z-10 flex flex-col items-center gap-2 md:gap-3">
-                    <div className={cn("w-8 h-8 md:w-10 md:h-10 rounded-full flex items-center justify-center text-xs md:text-sm font-black border-[2px] transition-all duration-500 font-mono", isActive ? "bg-slate-950 border-cyan-400 text-cyan-300 shadow-[0_0_20px_rgba(6,182,212,0.6)] scale-110" : isPassed ? "bg-cyan-900 border-cyan-600 text-cyan-100" : "bg-slate-900 border-slate-700 text-slate-600")}>
-                      {isPassed ? <CheckCircle2 className="w-4 h-4 md:w-5 md:h-5" /> : `0${idx + 1}`}
+                  <div key={label} className="relative z-10 flex flex-col items-center gap-3">
+                    <div className={cn("w-8 h-8 md:w-10 md:h-10 rounded-lg flex items-center justify-center text-xs md:text-sm font-black border-2 transition-all duration-500 transform rotate-45", isActive ? "bg-[#0A1628] border-cyan-400 text-cyan-400 shadow-[0_0_20px_rgba(6,182,212,0.6)] scale-110" : isPassed ? "bg-cyan-600 border-cyan-400 text-white" : "bg-[#050B14] border-cyan-900 text-cyan-800")}>
+                      <div className="-rotate-45">{isPassed ? <CheckCircle2 className="w-4 h-4 md:w-5 md:h-5" /> : idx + 1}</div>
                     </div>
-                    <span className={cn("text-[9px] md:text-[10px] font-bold absolute -bottom-6 md:-bottom-7 w-max tracking-widest uppercase font-mono", isActive ? "text-cyan-300 drop-shadow-[0_0_5px_rgba(6,182,212,0.8)]" : isPassed ? "text-cyan-600" : "text-slate-600")}>{label}</span>
+                    <span className={cn("text-[9px] md:text-[10px] font-mono absolute -bottom-7 w-max tracking-widest uppercase", isActive ? "text-cyan-400 font-bold" : isPassed ? "text-cyan-600" : "text-cyan-900")}>{label}</span>
                   </div>
                 );
               })}
@@ -918,10 +903,10 @@ const AttendanceWizard: React.FC = () => {
   );
 };
 
-// ==========================================
-// COMPONENT: ADMIN LOGIN
-// ==========================================
 
+// ==========================================
+// ADMIN AREA
+// ==========================================
 const AdminLogin: React.FC<{ onLogin: () => void }> = ({ onLogin }) => {
   const [user, setUser] = useState('');
   const [pass, setPass] = useState('');
@@ -940,7 +925,7 @@ const AdminLogin: React.FC<{ onLogin: () => void }> = ({ onLogin }) => {
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     if (lockoutTimer > 0) {
-      setErr(`Sistem terkunci. Terminasi: ${lockoutTimer} detik.`);
+      setErr(`Terminal terkunci. Silakan coba dalam ${lockoutTimer}s.`);
       return;
     }
     setIsLoading(true); setErr('');
@@ -963,65 +948,65 @@ const AdminLogin: React.FC<{ onLogin: () => void }> = ({ onLogin }) => {
       setAttempts(newAttempts);
       if (newAttempts >= 3) {
         setLockoutTimer(30); 
-        setErr('❌ BLOKIR: Batas upaya akses terlampaui (30s).');
+        setErr('❌ Otorisasi ditolak. Akses diblokir sementara (30s).');
       } else {
-        setErr(`❌ Kredensial tidak valid. (Sisa upaya: ${3 - newAttempts})`);
+        setErr(`❌ Kredensial tidak valid. (Sisa: ${3 - newAttempts})`);
       }
     }
     setIsLoading(false);
   };
 
   return (
-    <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center p-4 relative overflow-hidden w-full selection:bg-cyan-500/30">
-      <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,_var(--tw-gradient-stops))] from-slate-900 via-slate-950 to-slate-950"></div>
-      <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/carbon-fibre.png')] opacity-5 mix-blend-overlay"></div>
-      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[300px] h-[300px] md:w-[600px] md:h-[600px] bg-cyan-900/10 rounded-full blur-[100px] pointer-events-none border border-cyan-500/5"></div>
+    <div className="min-h-screen bg-[#050B14] flex flex-col items-center justify-center p-4 relative overflow-hidden w-full radiology-bg">
+      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[400px] h-[400px] bg-cyan-600/10 rounded-full blur-[100px] pointer-events-none"></div>
 
-      <div className="w-full max-w-md bg-slate-900/60 backdrop-blur-3xl border border-cyan-500/20 p-6 md:p-10 rounded-[2rem] shadow-[0_0_50px_rgba(6,182,212,0.1)] relative z-10 animate-in slide-in-from-bottom-8 fade-in duration-700">
-        <div className="flex flex-col items-center mb-8">
-          <div className="relative mb-5">
-            <div className="w-20 h-20 md:w-24 md:h-24 bg-slate-950 border border-cyan-500/50 rounded-[1.5rem] flex items-center justify-center shadow-[0_0_30px_rgba(6,182,212,0.3)] p-3 overflow-hidden">
-              <img src="/axalogo.png" alt="ABSENSI DEPT. RKG" className="w-full h-full object-contain drop-shadow-md brightness-150 grayscale contrast-125" onError={(e) => { e.currentTarget.style.display = 'none'; e.currentTarget.nextElementSibling?.classList.remove('hidden'); }} />
-              <ShieldCheck className="w-10 h-10 md:w-12 md:h-12 text-cyan-400 hidden" />
+      <div className="w-full max-w-md bg-[#0A1628]/90 backdrop-blur-3xl border border-cyan-500/20 p-8 md:p-10 rounded-3xl shadow-[0_20px_60px_rgba(0,0,0,0.8)] relative z-10 animate-in slide-in-from-bottom-8 fade-in duration-700">
+        <div className="flex flex-col items-center mb-10">
+          <div className="relative mb-6">
+            <div className="w-24 h-24 bg-[#050B14] border-2 border-cyan-500/50 rounded-2xl flex items-center justify-center shadow-[0_0_40px_rgba(6,182,212,0.4)] p-4 overflow-hidden transform rotate-45">
+              <div className="-rotate-45 w-full h-full">
+                 <img src="/axalogo.png" alt="RKG" className="w-full h-full object-contain filter drop-shadow-[0_0_8px_rgba(6,182,212,0.8)]" onError={(e) => { e.currentTarget.style.display = 'none'; e.currentTarget.nextElementSibling?.classList.remove('hidden'); }} />
+                 <ShieldCheck className="w-full h-full text-cyan-400 hidden" />
+              </div>
             </div>
-            <div className="absolute -bottom-2 -right-2 w-10 h-10 bg-slate-950 rounded-full border-[2px] border-cyan-500/50 flex items-center justify-center shadow-lg">
+            <div className="absolute -bottom-2 -right-2 w-10 h-10 bg-[#0A1628] rounded-full border-2 border-cyan-500/50 flex items-center justify-center shadow-[0_0_15px_rgba(6,182,212,0.5)]">
               <Lock className="w-4 h-4 text-cyan-400" />
             </div>
           </div>
-          <h2 className="text-2xl md:text-3xl font-black text-white tracking-widest uppercase">Admin Core</h2>
-          <p className="text-cyan-500/70 text-xs md:text-sm mt-1.5 font-mono tracking-widest uppercase opacity-80">Secured Access Protocol</p>
+          <h2 className="text-2xl md:text-3xl font-black text-cyan-50 tracking-[0.2em] uppercase">RKG Admin</h2>
+          <p className="text-cyan-500/80 text-[10px] md:text-xs mt-2 uppercase tracking-[0.3em] font-mono">Terminal Keamanan Pusat</p>
         </div>
 
-        <form onSubmit={handleLogin} className="space-y-5">
+        <form onSubmit={handleLogin} className="space-y-6">
           {err && (
-            <div className="p-4 bg-rose-950/40 border border-rose-500/30 text-rose-400 text-xs font-mono tracking-wider rounded-2xl flex items-start gap-3 animate-in shake duration-300">
-              <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
-              <p className="leading-tight uppercase">{err}</p>
+            <div className="p-4 bg-rose-950/40 border border-rose-500/40 text-rose-300 text-xs font-mono rounded-xl flex items-start gap-3 animate-in shake duration-300 uppercase tracking-wider">
+              <AlertCircle className="w-5 h-5 shrink-0" />
+              <p className="leading-tight mt-0.5">{err}</p>
             </div>
           )}
 
           <div className="space-y-2">
-            <label className="text-[10px] text-cyan-500/70 font-mono font-bold uppercase tracking-widest ml-1">ID Pengguna</label>
-            <div className="relative flex items-center bg-black/40 border border-cyan-500/20 rounded-2xl overflow-hidden focus-within:border-cyan-400 focus-within:ring-1 focus-within:ring-cyan-400 transition-all duration-300 shadow-inner">
-              <div className="pl-4 pr-3 text-cyan-500/50"><User className="w-5 h-5"/></div>
-              <input type="text" value={user} onChange={e=>setUser(e.target.value)} disabled={lockoutTimer > 0 || isLoading} className="w-full bg-transparent py-4 pr-4 text-white font-mono outline-none placeholder-slate-700 disabled:opacity-50 text-sm" placeholder="Input ID Admin" required />
+            <label className="text-[9px] text-cyan-500/80 font-bold uppercase tracking-[0.2em] ml-1">ID Pengguna</label>
+            <div className="relative flex items-center bg-[#050B14] border border-cyan-500/30 rounded-xl overflow-hidden focus-within:border-cyan-400 transition-all duration-300 shadow-[inset_0_2px_10px_rgba(0,0,0,0.5)]">
+              <div className="pl-4 pr-3 text-cyan-600"><User className="w-4 h-4"/></div>
+              <input type="text" value={user} onChange={e=>setUser(e.target.value)} disabled={lockoutTimer > 0 || isLoading} className="w-full bg-transparent py-4 pr-4 text-cyan-50 font-mono outline-none placeholder-cyan-900/50 disabled:opacity-50 text-sm" placeholder="Ketik ID Admin..." required />
             </div>
           </div>
 
           <div className="space-y-2">
-            <label className="text-[10px] text-cyan-500/70 font-mono font-bold uppercase tracking-widest ml-1">Kunci Akses</label>
-            <div className="relative flex items-center bg-black/40 border border-cyan-500/20 rounded-2xl overflow-hidden focus-within:border-cyan-400 focus-within:ring-1 focus-within:ring-cyan-400 transition-all duration-300 shadow-inner">
-              <div className="pl-4 pr-3 text-cyan-500/50"><Key className="w-5 h-5"/></div>
-              <input type={showPass ? 'text' : 'password'} value={pass} onChange={e=>setPass(e.target.value)} disabled={lockoutTimer > 0 || isLoading} className="w-full bg-transparent py-4 pr-12 text-white font-mono outline-none placeholder-slate-700 disabled:opacity-50 text-sm tracking-widest" placeholder="••••••••" required />
-              <button type="button" onClick={() => setShowPass(!showPass)} className="absolute right-4 text-cyan-500/50 hover:text-cyan-400 transition-colors">
-                {showPass ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+            <label className="text-[9px] text-cyan-500/80 font-bold uppercase tracking-[0.2em] ml-1">Kode Akses</label>
+            <div className="relative flex items-center bg-[#050B14] border border-cyan-500/30 rounded-xl overflow-hidden focus-within:border-cyan-400 transition-all duration-300 shadow-[inset_0_2px_10px_rgba(0,0,0,0.5)]">
+              <div className="pl-4 pr-3 text-cyan-600"><Key className="w-4 h-4"/></div>
+              <input type={showPass ? 'text' : 'password'} value={pass} onChange={e=>setPass(e.target.value)} disabled={lockoutTimer > 0 || isLoading} className="w-full bg-transparent py-4 pr-12 text-cyan-50 font-mono outline-none placeholder-cyan-900/50 disabled:opacity-50 text-sm" placeholder="••••••••" required />
+              <button type="button" onClick={() => setShowPass(!showPass)} className="absolute right-4 text-cyan-600 hover:text-cyan-400 transition-colors">
+                {showPass ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
               </button>
             </div>
           </div>
 
-          <button type="submit" disabled={lockoutTimer > 0 || isLoading} className="w-full py-4 mt-6 bg-cyan-950/40 hover:bg-cyan-900/60 border border-cyan-500/50 text-cyan-300 disabled:border-slate-700 disabled:text-slate-600 disabled:cursor-not-allowed font-bold tracking-widest uppercase rounded-2xl transition-all duration-300 shadow-[0_0_20px_rgba(6,182,212,0.1)] hover:shadow-[0_0_30px_rgba(6,182,212,0.3)] flex justify-center items-center gap-2 group active:scale-95 text-xs md:text-sm">
+          <button type="submit" disabled={lockoutTimer > 0 || isLoading} className="w-full py-4 mt-8 bg-cyan-600 hover:bg-cyan-500 disabled:bg-cyan-900 disabled:text-cyan-700 disabled:cursor-not-allowed text-white font-black tracking-[0.2em] uppercase text-xs rounded-xl transition-all duration-300 shadow-[0_0_20px_rgba(6,182,212,0.3)] hover:shadow-[0_0_30px_rgba(6,182,212,0.6)] flex justify-center items-center gap-3 active:scale-95 border border-cyan-400/50">
             {isLoading ? <Loader2 className="w-5 h-5 animate-spin" /> : (
-               <>Otorisasi <ChevronRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" /></>
+               <>Otorisasi Akses <ChevronRight className="w-4 h-4" /></>
             )}
           </button>
         </form>
@@ -1030,128 +1015,129 @@ const AdminLogin: React.FC<{ onLogin: () => void }> = ({ onLogin }) => {
   );
 };
 
-// ==========================================
-// COMPONENT: ADMIN DASHBOARD (Poin 2 & Poin 4)
-// ==========================================
 const AdminDashboardHome: React.FC = () => {
   const { logs, students, clusters } = useAppContext();
   
-  // Poin 2: Filter Range Tanggal dan Cluster
-  const [startDate, setStartDate] = useState(new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().split('T')[0]); // Default awal bulan ini
+  // Date Range and Filters
+  const [startDate, setStartDate] = useState(new Date().toISOString().split('T')[0]);
   const [endDate, setEndDate] = useState(new Date().toISOString().split('T')[0]);
   const [selectedCluster, setSelectedCluster] = useState('All');
 
-  const parsedStart = startOfDay(parseISO(startDate));
-  const parsedEnd = endOfDay(parseISO(endDate));
+  // Parse dates safely
+  const start = startOfDay(new Date(startDate));
+  const end = endOfDay(new Date(endDate));
 
-  // Filter logs berdasarkan range tanggal dan cluster
-  const filteredLogs = logs.filter(log => {
-    const logDate = new Date(log.timestamp);
-    const inDateRange = isWithinInterval(logDate, { start: parsedStart, end: parsedEnd });
+  // Filter Logs
+  const filteredLogs = logs.filter(l => {
+    const logDate = new Date(l.timestamp);
+    const inDateRange = logDate >= start && logDate <= end;
     
-    const student = students.find(s => s.nim === log.nim);
-    const inCluster = selectedCluster === 'All' || student?.clusterId === selectedCluster;
-    
-    return inDateRange && inCluster;
+    let matchCluster = true;
+    if (selectedCluster !== 'All') {
+       const clusterName = clusters.find(c => c.id === selectedCluster)?.name;
+       matchCluster = l.clusterName === clusterName;
+    }
+    return inDateRange && matchCluster;
   });
 
-  // Kalkulasi Status Hari Ini (Berdasarkan filter Cluster)
-  const todayStr = new Date().toISOString().split('T')[0];
-  const todayLogs = filteredLogs.filter(l => l.timestamp.startsWith(todayStr));
+  // Basic Stats
+  const totalLogs = filteredLogs.length;
+  const onTime = filteredLogs.filter(l => l.status === 'Hadir').length;
+  const late = filteredLogs.filter(l => l.status === 'Terlambat').length;
   
-  const targetStudents = selectedCluster === 'All' ? students : students.filter(s => s.clusterId === selectedCluster);
-  const totalStudents = targetStudents.length;
-  
-  const uniqueAttendeesToday = new Set(todayLogs.map(l => l.nim)).size;
-  const onTimeToday = todayLogs.filter(l => l.status === 'Hadir').length;
-  const lateToday = todayLogs.filter(l => l.status === 'Terlambat').length;
-  
-  // Poin 2: "Jumlah Tidak Absen Di Hari Ini"
-  const notAttendedToday = Math.max(0, totalStudents - uniqueAttendeesToday);
+  // Calculate Absent
+  const filteredStudents = selectedCluster === 'All' ? students : students.filter(s => s.clusterId === selectedCluster);
+  const totalExpectedStudents = filteredStudents.length;
+  const uniqueAttendees = new Set(filteredLogs.map(l => l.nim)).size;
+  // Note: Absent calculation across a date range is tricky. We'll simplify to:
+  // Expected = Total Students * number of days in range. But for simplicity and UI expectation, 
+  // we just show "Siswa yang belum absen sama sekali di rentang ini"
+  const totalAbsent = Math.max(0, totalExpectedStudents - uniqueAttendees);
 
-  // Data for Area Chart (Trend over time)
-  const logsByDate = filteredLogs.reduce((acc, log) => {
-    const date = log.timestamp.split('T')[0];
-    if(!acc[date]) acc[date] = { date, Hadir: 0, Terlambat: 0 };
-    acc[date][log.status]++;
-    return acc;
-  }, {} as Record<string, any>);
-  const areaData = Object.values(logsByDate).sort((a: any, b: any) => a.date.localeCompare(b.date));
-
-  // Data for Composed Chart (Cluster Comparison)
-  const clusterStats = clusters.map(cluster => {
-     const clusterStudents = students.filter(s => s.clusterId === cluster.id).map(s => s.nim);
-     const cLogs = filteredLogs.filter(l => clusterStudents.includes(l.nim));
-     return {
-        name: cluster.name,
-        Hadir: cLogs.filter(l => l.status === 'Hadir').length,
-        Terlambat: cLogs.filter(l => l.status === 'Terlambat').length,
-        Total: cLogs.length
-     };
+  // Chart 1: Daily Trend (Area Chart)
+  const dailyDataMap: Record<string, { date: string; Hadir: number; Terlambat: number }> = {};
+  filteredLogs.forEach(log => {
+     const dateStr = new Date(log.timestamp).toLocaleDateString('id-ID', {day: 'numeric', month: 'short'});
+     if (!dailyDataMap[dateStr]) dailyDataMap[dateStr] = { date: dateStr, Hadir: 0, Terlambat: 0 };
+     if (log.status === 'Hadir') dailyDataMap[dateStr].Hadir++;
+     else if (log.status === 'Terlambat') dailyDataMap[dateStr].Terlambat++;
   });
+  const trendData = Object.values(dailyDataMap);
+
+  // Chart 2: Session Distribution (Bar)
+  const sessionCounts = filteredLogs.reduce((acc, log) => { acc[log.sessionName] = (acc[log.sessionName] || 0) + 1; return acc; }, {} as Record<string, number>);
+  const barData = Object.entries(sessionCounts).map(([name, count]) => ({ name, Total: count }));
+  
+  // Chart 3: Pie Chart Overall
+  const pieData = [
+     { name: 'Tepat Waktu', value: onTime, color: '#10b981' }, 
+     { name: 'Terlambat', value: late, color: '#f59e0b' },
+     { name: 'Tidak Absen', value: totalAbsent, color: '#f43f5e' }
+  ].filter(d => d.value > 0);
 
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
       
-      {/* HEADER & FILTERS */}
-      <div className="flex flex-col lg:flex-row justify-between items-start lg:items-end gap-4 bg-slate-900/40 p-5 rounded-[2rem] border border-cyan-500/10">
-        <div>
-          <h2 className="text-2xl md:text-3xl font-black text-white tracking-widest uppercase">Data Analitik</h2>
-          <p className="text-cyan-500/70 text-xs md:text-sm font-mono mt-1">Pemantauan matriks kehadiran terpadu.</p>
-        </div>
-        
-        <div className="flex flex-col sm:flex-row gap-3 w-full lg:w-auto">
-           <div className="flex items-center bg-black/40 border border-cyan-500/20 rounded-xl overflow-hidden px-3 py-2 shadow-inner">
-              <Calendar className="w-4 h-4 text-cyan-500/50 mr-2"/>
-              <input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} className="bg-transparent text-xs text-white font-mono outline-none" />
-              <span className="text-cyan-500/50 mx-2">-</span>
-              <input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} className="bg-transparent text-xs text-white font-mono outline-none" />
-           </div>
-           
-           <div className="flex items-center bg-black/40 border border-cyan-500/20 rounded-xl overflow-hidden px-3 py-2 shadow-inner">
-              <Layers className="w-4 h-4 text-cyan-500/50 mr-2"/>
-              <select value={selectedCluster} onChange={e => setSelectedCluster(e.target.value)} className="bg-transparent text-xs text-white font-mono outline-none w-full min-w-[120px] appearance-none cursor-pointer">
-                 <option value="All">Semua Cluster</option>
-                 {clusters.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-              </select>
-           </div>
-        </div>
+      {/* FILTER SECTION */}
+      <div className="bg-[#0A1628]/80 backdrop-blur-md border border-cyan-500/20 p-5 rounded-[1.5rem] flex flex-col md:flex-row gap-4 justify-between items-end shadow-lg">
+         <div>
+            <h2 className="text-xl md:text-2xl font-black text-cyan-50 tracking-widest uppercase">Dashboard Analisis</h2>
+            <p className="text-cyan-500/70 text-xs font-mono uppercase mt-1">Pemantauan Presensi Radiologi</p>
+         </div>
+         <div className="flex flex-col md:flex-row gap-3 w-full md:w-auto">
+            <div className="flex flex-col gap-1">
+               <label className="text-[9px] text-cyan-500 uppercase tracking-widest font-bold">Mulai Tanggal</label>
+               <input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} className="bg-[#050B14] border border-cyan-500/30 text-cyan-50 text-xs font-mono p-2.5 rounded-lg outline-none focus:border-cyan-400" />
+            </div>
+            <div className="flex flex-col gap-1">
+               <label className="text-[9px] text-cyan-500 uppercase tracking-widest font-bold">Hingga Tanggal</label>
+               <input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} className="bg-[#050B14] border border-cyan-500/30 text-cyan-50 text-xs font-mono p-2.5 rounded-lg outline-none focus:border-cyan-400" />
+            </div>
+            <div className="flex flex-col gap-1">
+               <label className="text-[9px] text-cyan-500 uppercase tracking-widest font-bold">Filter Kelompok (Cluster)</label>
+               <select value={selectedCluster} onChange={e => setSelectedCluster(e.target.value)} className="bg-[#050B14] border border-cyan-500/30 text-cyan-50 text-xs font-bold uppercase p-2.5 rounded-lg outline-none focus:border-cyan-400 min-w-[150px]">
+                  <option value="All">Semua Cluster</option>
+                  {clusters.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+               </select>
+            </div>
+         </div>
       </div>
 
-      {/* METRICS CARDS */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6">
+      {/* STATS WIDGETS */}
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4 md:gap-5">
         {[
-          { title: 'Subjek Terdaftar', val: totalStudents, icon: Users, color: 'text-blue-400', border: 'border-blue-500/30' },
-          { title: 'Hadir (Hari Ini)', val: onTimeToday, icon: CheckCircle2, color: 'text-emerald-400', border: 'border-emerald-500/30' },
-          { title: 'Terlambat (Hari Ini)', val: lateToday, icon: Clock, color: 'text-amber-400', border: 'border-amber-500/30' },
-          { title: 'Belum Absen (Hari Ini)', val: notAttendedToday, icon: UserMinus, color: 'text-rose-400', border: 'border-rose-500/30' } // Poin 2: Ganti Upstash Redis dgn Total Tidak Absen
+          { title: 'Total Rekam Absen', val: totalLogs, icon: ActivitySquare, color: 'text-cyan-400', bg: 'bg-cyan-500/10', border: 'border-cyan-500/30' },
+          { title: 'Tepat Waktu', val: onTime, icon: CheckCircle2, color: 'text-emerald-400', bg: 'bg-emerald-500/10', border: 'border-emerald-500/30' },
+          { title: 'Terlambat Hadir', val: late, icon: Clock, color: 'text-amber-400', bg: 'bg-amber-500/10', border: 'border-amber-500/30' },
+          { title: 'Data Kosong (Alpha)', val: totalAbsent, icon: UserX, color: 'text-rose-400', bg: 'bg-rose-500/10', border: 'border-rose-500/30' }
         ].map((stat, i) => (
-          <div key={i} className={cn("bg-slate-900/60 border p-5 rounded-[1.5rem] flex items-center justify-between transition-all duration-300 hover:bg-slate-800/80 shadow-[0_0_15px_rgba(0,0,0,0.2)]", stat.border)}>
+          <div key={i} className={`bg-[#0A1628]/60 backdrop-blur-md border ${stat.border} p-5 rounded-[1.5rem] flex items-center justify-between transition-all duration-300 hover:bg-[#0A1628] hover:-translate-y-1 shadow-lg`}>
             <div>
-               <p className="text-slate-400 text-[10px] md:text-xs font-mono uppercase tracking-widest mb-1.5">{stat.title}</p>
-               <h3 className="text-2xl md:text-3xl font-black text-white font-mono">{stat.val}</h3>
+               <p className="text-cyan-500/70 text-[9px] font-bold uppercase tracking-[0.2em] mb-2">{stat.title}</p>
+               <h3 className="text-3xl font-black text-white font-mono">{stat.val}</h3>
             </div>
-            <div className="w-12 h-12 rounded-xl flex items-center justify-center bg-black/40 shadow-inner border border-white/5"><stat.icon className={cn("w-6 h-6", stat.color)} /></div>
+            <div className={cn("w-12 h-12 rounded-xl flex items-center justify-center shadow-inner border border-white/5", stat.bg)}>
+               <stat.icon className={cn("w-6 h-6", stat.color)} />
+            </div>
           </div>
         ))}
       </div>
 
-      {/* Poin 4: Cloud Diagnostic UI (GBR 2) telah dihilangkan sepenuhnya dari blok ini agar rapi. */}
-
-      {/* ADVANCED CHARTS (Poin 2) */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 min-h-[350px] md:min-h-[400px]">
-        {/* Trend Area Chart */}
-        <div className="bg-slate-900/60 border border-cyan-500/20 p-6 rounded-[2rem] flex flex-col shadow-[0_0_30px_rgba(6,182,212,0.05)] relative overflow-hidden">
-          <div className="absolute top-0 right-0 p-4 opacity-10 pointer-events-none"><ActivitySquare className="w-32 h-32 text-cyan-500"/></div>
-          <h3 className="text-sm font-bold text-cyan-100 mb-6 tracking-widest uppercase font-mono border-b border-cyan-500/20 pb-4">Tren Kehadiran (Rentang Waktu)</h3>
-          <div className="flex-1 w-full min-h-[250px] z-10">
-            {areaData.length > 0 ? (
+      {/* CHARTS SECTION */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-5 min-h-[350px]">
+        
+        {/* TREND CHART */}
+        <div className="lg:col-span-2 bg-[#0A1628]/60 backdrop-blur-md border border-cyan-500/20 p-6 rounded-[1.5rem] flex flex-col shadow-lg relative overflow-hidden">
+          <div className="absolute top-0 right-0 w-32 h-32 bg-cyan-600/10 rounded-bl-[100px] pointer-events-none"></div>
+          <h3 className="text-sm font-black text-cyan-50 mb-6 tracking-widest uppercase flex items-center gap-2"><Activity className="w-4 h-4 text-cyan-400"/> Tren Frekuensi Harian</h3>
+          <div className="flex-1 w-full min-h-[250px] relative z-10">
+            {trendData.length > 0 ? (
               <ResponsiveContainer width="100%" height="100%">
-                <AreaChart data={areaData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                <AreaChart data={trendData} margin={{ top: 0, right: 0, left: -20, bottom: 0 }}>
                   <defs>
                     <linearGradient id="colorHadir" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="#10b981" stopOpacity={0.8}/>
-                      <stop offset="95%" stopColor="#10b981" stopOpacity={0}/>
+                      <stop offset="5%" stopColor="#06b6d4" stopOpacity={0.8}/>
+                      <stop offset="95%" stopColor="#06b6d4" stopOpacity={0}/>
                     </linearGradient>
                     <linearGradient id="colorTelat" x1="0" y1="0" x2="0" y2="1">
                       <stop offset="5%" stopColor="#f59e0b" stopOpacity={0.8}/>
@@ -1159,61 +1145,150 @@ const AdminDashboardHome: React.FC = () => {
                     </linearGradient>
                   </defs>
                   <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" vertical={false} />
-                  <XAxis dataKey="date" stroke="#64748b" fontSize={10} tickLine={false} axisLine={false} tickFormatter={(val) => val.substring(5)} />
+                  <XAxis dataKey="date" stroke="#64748b" fontSize={10} tickLine={false} axisLine={false} />
                   <YAxis stroke="#64748b" fontSize={10} tickLine={false} axisLine={false} />
-                  <Tooltip cursor={{stroke: '#334155', strokeWidth: 1}} contentStyle={{backgroundColor: '#020617', borderColor: '#06b6d4', color: '#f8fafc', borderRadius: '1rem', fontSize: '12px', fontFamily: 'monospace'}} />
-                  <Legend iconType="circle" wrapperStyle={{fontSize: '11px', fontFamily: 'monospace', paddingTop: '10px'}}/>
-                  <Area type="monotone" dataKey="Hadir" stroke="#10b981" fillOpacity={1} fill="url(#colorHadir)" />
-                  <Area type="monotone" dataKey="Terlambat" stroke="#f59e0b" fillOpacity={1} fill="url(#colorTelat)" />
+                  <Tooltip cursor={{stroke: '#334155', strokeWidth: 2, fill: 'transparent'}} contentStyle={{backgroundColor: '#050B14', borderColor: '#06b6d4', color: '#f8fafc', borderRadius: '0.75rem', fontSize: '12px'}} />
+                  <Area type="monotone" dataKey="Hadir" stroke="#06b6d4" strokeWidth={3} fillOpacity={1} fill="url(#colorHadir)" />
+                  <Area type="monotone" dataKey="Terlambat" stroke="#f59e0b" strokeWidth={3} fillOpacity={1} fill="url(#colorTelat)" />
                 </AreaChart>
               </ResponsiveContainer>
-            ) : <div className="h-full flex items-center justify-center text-slate-500 font-mono text-xs uppercase tracking-widest">Data Tidak Tersedia</div>}
+            ) : <div className="h-full flex items-center justify-center text-cyan-800 font-mono text-xs uppercase">Grafik Kosong (Tidak ada data)</div>}
+          </div>
+        </div>
+
+        {/* PIE CHART */}
+        <div className="bg-[#0A1628]/60 backdrop-blur-md border border-cyan-500/20 p-6 rounded-[1.5rem] flex flex-col shadow-lg">
+          <h3 className="text-sm font-black text-cyan-50 mb-6 tracking-widest uppercase">Komposisi Presensi</h3>
+          <div className="flex-1 w-full min-h-[250px]">
+             {pieData.length > 0 ? (
+                <ResponsiveContainer width="100%" height="100%">
+                  <PieChart>
+                    <Pie data={pieData} cx="50%" cy="50%" innerRadius="65%" outerRadius="85%" paddingAngle={5} dataKey="value">
+                      {pieData.map((entry, index) => <Cell key={`cell-${index}`} fill={entry.color} stroke="rgba(0,0,0,0.5)" strokeWidth={2}/>)}
+                    </Pie>
+                    <Tooltip contentStyle={{backgroundColor: '#050B14', borderColor: '#1e293b', color: '#f8fafc', borderRadius: '0.75rem', fontSize: '12px'}} itemStyle={{color: '#fff'}} />
+                  </PieChart>
+                </ResponsiveContainer>
+             ) : <div className="h-full flex items-center justify-center text-cyan-800 font-mono text-xs uppercase">Grafik Kosong</div>}
+          </div>
+          
+          {/* Custom Legend */}
+          <div className="flex justify-center gap-4 mt-2">
+             {pieData.map(d => (
+                <div key={d.name} className="flex items-center gap-1.5 text-[9px] font-bold uppercase tracking-wider text-slate-300">
+                   <div className="w-2.5 h-2.5 rounded-full" style={{backgroundColor: d.color}}></div>
+                   {d.name}
+                </div>
+             ))}
           </div>
         </div>
         
-        {/* Cluster Comparison Composed Chart */}
-        <div className="bg-slate-900/60 border border-cyan-500/20 p-6 rounded-[2rem] flex flex-col shadow-[0_0_30px_rgba(6,182,212,0.05)] relative overflow-hidden">
-          <div className="absolute top-0 right-0 p-4 opacity-10 pointer-events-none"><Layers className="w-32 h-32 text-purple-500"/></div>
-          <h3 className="text-sm font-bold text-cyan-100 mb-6 tracking-widest uppercase font-mono border-b border-cyan-500/20 pb-4">Komparasi Per Cluster</h3>
-          <div className="flex-1 w-full min-h-[250px] z-10">
-             {clusterStats.length > 0 ? (
-                <ResponsiveContainer width="100%" height="100%">
-                  <ComposedChart data={clusterStats} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" vertical={false} />
-                    <XAxis dataKey="name" stroke="#64748b" fontSize={10} tickLine={false} axisLine={false} />
-                    <YAxis stroke="#64748b" fontSize={10} tickLine={false} axisLine={false} />
-                    <Tooltip cursor={{fill: '#1e293b', opacity: 0.4}} contentStyle={{backgroundColor: '#020617', borderColor: '#06b6d4', color: '#f8fafc', borderRadius: '1rem', fontSize: '12px', fontFamily: 'monospace'}} />
-                    <Legend iconType="circle" wrapperStyle={{fontSize: '11px', fontFamily: 'monospace', paddingTop: '10px'}}/>
-                    <Bar dataKey="Hadir" stackId="a" fill="#0ea5e9" radius={[0, 0, 4, 4]} barSize={30} />
-                    <Bar dataKey="Terlambat" stackId="a" fill="#8b5cf6" radius={[4, 4, 0, 0]} />
-                    <Line type="monotone" dataKey="Total" stroke="#f43f5e" strokeWidth={2} dot={{ r: 4, fill: '#f43f5e' }} />
-                  </ComposedChart>
-                </ResponsiveContainer>
-             ) : <div className="h-full flex items-center justify-center text-slate-500 font-mono text-xs uppercase tracking-widest">Data Tidak Tersedia</div>}
+        {/* BAR CHART BY SESSION */}
+        <div className="lg:col-span-3 bg-[#0A1628]/60 backdrop-blur-md border border-cyan-500/20 p-6 rounded-[1.5rem] flex flex-col shadow-lg">
+          <h3 className="text-sm font-black text-cyan-50 mb-6 tracking-widest uppercase">Distribusi per Sesi Shift</h3>
+          <div className="flex-1 w-full h-[250px]">
+            {barData.length > 0 ? (
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={barData} margin={{ top: 0, right: 0, left: -20, bottom: 0 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" vertical={false} />
+                  <XAxis dataKey="name" stroke="#64748b" fontSize={10} tickLine={false} axisLine={false} />
+                  <YAxis stroke="#64748b" fontSize={10} tickLine={false} axisLine={false} />
+                  <Tooltip cursor={{fill: '#1e293b', opacity: 0.4}} contentStyle={{backgroundColor: '#050B14', borderColor: '#06b6d4', color: '#f8fafc', borderRadius: '0.75rem', fontSize: '12px'}} />
+                  <Bar dataKey="Total" fill="#8b5cf6" radius={[4, 4, 0, 0]} barSize={40} />
+                </BarChart>
+              </ResponsiveContainer>
+            ) : <div className="h-full flex items-center justify-center text-cyan-800 font-mono text-xs uppercase">Grafik Kosong</div>}
           </div>
         </div>
+
       </div>
     </div>
   );
 };
 
-// ==========================================
-// COMPONENT: ADMIN STUDENTS (Poin 1, Kategori Cluster & XLSX)
-// ==========================================
+const AdminClusters: React.FC = () => {
+  const { clusters, addCluster, updateCluster, deleteCluster } = useAppContext();
+  const [isAdding, setIsAdding] = useState(false);
+  const [newC, setNewC] = useState('');
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editName, setEditName] = useState('');
+
+  const handleAdd = (e: React.FormEvent) => {
+    e.preventDefault();
+    if(newC.trim()) addCluster(newC);
+    setIsAdding(false); setNewC('');
+  };
+
+  const handleUpdate = (e: React.FormEvent) => {
+     e.preventDefault();
+     if(editingId && editName.trim()) updateCluster(editingId, editName);
+     setEditingId(null); setEditName('');
+  }
+
+  return (
+    <div className="space-y-6 animate-in fade-in duration-500">
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+        <div>
+          <h2 className="text-2xl md:text-3xl font-black text-cyan-50 tracking-widest uppercase">Manajemen Cluster</h2>
+          <p className="text-cyan-500/70 text-xs md:text-sm font-mono uppercase mt-1">Kelola Pengelompokan Angkatan / Divisi</p>
+        </div>
+        <button onClick={() => setIsAdding(!isAdding)} className="flex items-center gap-2 px-5 py-3 bg-cyan-600/20 text-cyan-400 hover:bg-cyan-500/30 border border-cyan-500/50 rounded-xl transition-all duration-300 font-black uppercase tracking-widest text-xs shadow-[0_0_15px_rgba(6,182,212,0.2)]">
+          <Plus className="w-4 h-4" /> Tambah Cluster Baru
+        </button>
+      </div>
+
+      {isAdding && (
+        <form onSubmit={handleAdd} className="bg-[#0A1628]/80 backdrop-blur-md border border-cyan-500/30 p-5 md:p-6 rounded-2xl flex flex-col md:flex-row gap-4 items-end shadow-xl animate-in slide-in-from-top-4">
+          <div className="flex-1 space-y-1.5 w-full">
+            <label className="text-[10px] md:text-xs text-cyan-500 font-bold uppercase tracking-widest ml-1">Nama Cluster / Kelompok</label>
+            <input required type="text" value={newC} onChange={e=>setNewC(e.target.value)} className="w-full bg-[#050B14] border border-cyan-500/30 rounded-xl px-4 py-3.5 text-white outline-none focus:border-cyan-400 transition-colors text-sm font-mono" placeholder="Contoh: Cluster I 2025" />
+          </div>
+          <button type="submit" className="w-full md:w-auto px-8 py-3.5 bg-cyan-600 hover:bg-cyan-500 text-white font-black uppercase tracking-widest text-xs rounded-xl transition-all duration-300 shadow-lg active:scale-95">Simpan</button>
+        </form>
+      )}
+
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+         {clusters.map(c => (
+            <div key={c.id} className="bg-[#0A1628]/60 backdrop-blur-md border border-cyan-500/20 p-5 rounded-2xl flex items-center justify-between group hover:border-cyan-500/50 transition-all duration-300 shadow-lg">
+               {editingId === c.id ? (
+                  <form onSubmit={handleUpdate} className="flex-1 flex gap-2">
+                     <input autoFocus type="text" value={editName} onChange={e=>setEditName(e.target.value)} className="w-full bg-[#050B14] border border-cyan-500/50 rounded-lg px-3 py-2 text-white outline-none text-sm font-mono" />
+                     <button type="submit" className="bg-emerald-500/20 text-emerald-400 p-2 rounded-lg border border-emerald-500/30"><CheckCircle2 className="w-4 h-4"/></button>
+                     <button type="button" onClick={()=>setEditingId(null)} className="bg-rose-500/20 text-rose-400 p-2 rounded-lg border border-rose-500/30"><X className="w-4 h-4"/></button>
+                  </form>
+               ) : (
+                  <>
+                     <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 bg-cyan-950/50 rounded-xl flex items-center justify-center border border-cyan-500/30"><Network className="w-5 h-5 text-cyan-400" /></div>
+                        <h3 className="font-bold text-white text-base tracking-wide">{c.name}</h3>
+                     </div>
+                     <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <button onClick={()=>{setEditingId(c.id); setEditName(c.name);}} className="p-2 bg-blue-500/10 hover:bg-blue-500/20 text-blue-400 border border-blue-500/20 rounded-lg"><Edit className="w-4 h-4"/></button>
+                        <button onClick={()=>{if(confirm(`Hapus Cluster ${c.name}? Data siswa terkait akan kehilangan referensi.`)) deleteCluster(c.id);}} className="p-2 bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/20 rounded-lg"><Trash2 className="w-4 h-4"/></button>
+                     </div>
+                  </>
+               )}
+            </div>
+         ))}
+         {clusters.length === 0 && <div className="col-span-full p-8 text-center border-2 border-dashed border-cyan-900 rounded-2xl text-cyan-700 font-mono text-sm uppercase">Belum Ada Cluster Terdaftar</div>}
+      </div>
+    </div>
+  );
+};
+
 const AdminStudents: React.FC = () => {
-  const { students, clusters, addStudent, updateStudent, bulkAddStudents, deleteStudent } = useAppContext();
+  const { students, addStudent, updateStudent, bulkAddStudents, deleteStudent, clusters } = useAppContext();
   const [isAdding, setIsAdding] = useState(false);
   const [newS, setNewS] = useState({ name: '', nim: '', password: '', clusterId: '' });
   const [editingStudent, setEditingStudent] = useState<Student | null>(null);
-  
   const [search, setSearch] = useState('');
-  const [filterCluster, setFilterCluster] = useState('All');
+  const [selectedClusterForBulk, setSelectedClusterForBulk] = useState('');
   
   const [selectedStudentForKTM, setSelectedStudentForKTM] = useState<Student | null>(null);
 
   const handleAdd = (e: React.FormEvent) => {
     e.preventDefault();
-    addStudent({ ...newS, password: newS.password || `${newS.nim}123`, clusterId: newS.clusterId || undefined });
+    addStudent({ ...newS, password: newS.password || `${newS.nim}123` });
     setIsAdding(false);
     setNewS({ name: '', nim: '', password: '', clusterId: '' });
   };
@@ -1221,265 +1296,260 @@ const AdminStudents: React.FC = () => {
   const handleUpdate = (e: React.FormEvent) => {
     e.preventDefault();
     if(editingStudent) {
-       updateStudent(editingStudent.id, { 
-          name: editingStudent.name, 
-          nim: editingStudent.nim, 
-          password: editingStudent.password,
-          clusterId: editingStudent.clusterId || undefined
-       });
+       updateStudent(editingStudent.id, { name: editingStudent.name, nim: editingStudent.nim, password: editingStudent.password, clusterId: editingStudent.clusterId });
        setEditingStudent(null);
     }
   };
 
   const handleUnlinkDevice = (id: string, name: string) => {
-     if(confirm(`Yakin memutus tautan instrumen untuk subjek ${name}?`)) {
+     if(confirm(`Konfirmasi Pelepasan Otoritas Perangkat untuk ${name}?`)) {
         updateStudent(id, { deviceId: null });
      }
   };
 
-  // Poin 1 & 2: Bulk Upload Format Excel (.XLSX)
+  // UPDATED: EXCEL (XLSX) BULK UPLOAD SUPPORT
   const handleBulkUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    
-    try {
-      const XLSX: any = await loadXLSX();
-      const reader = new FileReader();
-      
-      reader.onload = (event) => {
-        try {
-          const data = event.target?.result;
-          const workbook = XLSX.read(data, { type: 'binary' });
-          const sheetName = workbook.SheetNames[0];
-          const worksheet = workbook.Sheets[sheetName];
-          const json: any[] = XLSX.utils.sheet_to_json(worksheet);
-          
-          const newSt: Omit<Student, 'id'>[] = [];
-          json.forEach(row => {
-            // Asumsi penamaan header pada excel
-            const name = row['Nama'] || row['NAMA'] || row['name'];
-            const nim = String(row['NIM'] || row['nim']);
-            const clusterName = row['Cluster'] || row['CLUSTER'] || row['Kategori'];
-            
-            let clusterId = undefined;
-            if (clusterName) {
-              const foundCluster = clusters.find(c => c.name.toLowerCase() === String(clusterName).toLowerCase());
-              if (foundCluster) clusterId = foundCluster.id;
-            }
 
-            if (name && nim) {
-               newSt.push({ name: String(name), nim, password: `${nim}123`, clusterId });
-            }
-          });
-          
-          if (newSt.length > 0) {
-            bulkAddStudents(newSt);
-            alert(`Berhasil menginjeksi ${newSt.length} data subjek ke database.`);
-          } else {
-            alert('Gagal mendeteksi kolom yang valid (Pastikan ada header "Nama" dan "NIM" dalam Excel Anda).');
-          }
-        } catch (err) {
-          console.error(err);
-          alert('Format file korup atau tidak didukung.');
-        }
-      };
-      reader.readAsBinaryString(file);
-    } catch (err) {
-      console.error(err);
-      alert('Gagal memuat parser XLSX. Pastikan koneksi internet berjalan.');
-    } finally {
-      e.target.value = ''; // Reset input agar bisa memuat file yang sama
+    if (!selectedClusterForBulk) {
+       alert("Pilih Cluster (Kelompok) terlebih dahulu sebelum upload file Excel.");
+       e.target.value = ''; // reset input
+       return;
     }
+
+    try {
+      const data = await file.arrayBuffer();
+      const workbook = XLSX.read(data);
+      const worksheet = workbook.Sheets[workbook.SheetNames[0]];
+      // Expecting standard columns, row 1 as header. (Nama, NIM)
+      const jsonData: any[] = XLSX.utils.sheet_to_json(worksheet);
+      
+      const newSt: Omit<Student, 'id'>[] = [];
+      jsonData.forEach(row => {
+         // Flexible matching for typical column names in Indonesia
+         const name = row['Nama'] || row['NAMA'] || row['nama'] || row['Nama Lengkap'] || row['Name'];
+         const nim = row['NIM'] || row['nim'] || row['Nomor Induk'];
+         
+         if (name && nim) {
+            newSt.push({ 
+               name: String(name).trim(), 
+               nim: String(nim).trim(), 
+               password: `${String(nim).trim()}123`,
+               clusterId: selectedClusterForBulk
+            });
+         }
+      });
+
+      if (newSt.length > 0) {
+        bulkAddStudents(newSt);
+        alert(`Berhasil mengimpor ${newSt.length} entitas ke dalam sistem.`);
+      } else {
+        alert('Gagal mendeteksi data. Pastikan format kolom memiliki header "Nama" dan "NIM".');
+      }
+    } catch (err) {
+       console.error("Bulk Upload Error:", err);
+       alert("Terjadi kesalahan saat membaca file .xlsx");
+    }
+    
+    e.target.value = ''; // reset input
   };
 
-  const filtered = students.filter(s => {
-     const matchSearch = s.name.toLowerCase().includes(search.toLowerCase()) || s.nim.includes(search);
-     const matchCluster = filterCluster === 'All' || s.clusterId === filterCluster;
-     return matchSearch && matchCluster;
-  });
+  const filtered = students.filter(s => s.name.toLowerCase().includes(search.toLowerCase()) || s.nim.includes(search));
 
   return (
     <div className="space-y-6 animate-in fade-in duration-500 h-full flex flex-col w-full relative">
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-slate-900/40 p-5 rounded-[2rem] border border-cyan-500/10">
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div>
-          <h2 className="text-2xl md:text-3xl font-black text-white tracking-widest uppercase">Data Subjek</h2>
-          <p className="text-cyan-500/70 text-xs md:text-sm font-mono mt-1">Registrasi dan Manajemen Identitas Biometrik KTM</p>
+          <h2 className="text-2xl md:text-3xl font-black text-cyan-50 tracking-widest uppercase">Database Entitas (MHS)</h2>
+          <p className="text-cyan-500/70 text-xs md:text-sm font-mono mt-1 uppercase">Manajemen Akses & Kartu RFID/QR Optik</p>
         </div>
-        <div className="flex flex-col sm:flex-row gap-2 md:gap-3 w-full md:w-auto">
-           <label className="flex flex-1 md:flex-none justify-center items-center gap-2 px-5 py-3 bg-purple-900/40 text-purple-300 hover:bg-purple-800/60 border border-purple-500/30 rounded-xl transition-all duration-300 font-bold cursor-pointer active:scale-95 shadow-sm uppercase tracking-widest text-xs">
-              <Upload className="w-4 h-4" /> Inject Data (XLSX)
-              <input type="file" accept=".xlsx, .xls, .csv" className="hidden" onChange={handleBulkUpload} />
+        
+        <div className="flex flex-col sm:flex-row gap-3 w-full md:w-auto bg-[#0A1628]/80 p-2 rounded-2xl border border-cyan-500/20 shadow-lg">
+           
+           <div className="flex items-center bg-[#050B14] border border-cyan-500/30 rounded-xl px-2 h-11">
+              <select value={selectedClusterForBulk} onChange={e=>setSelectedClusterForBulk(e.target.value)} className="bg-transparent text-cyan-50 text-xs font-bold uppercase outline-none w-32 cursor-pointer appearance-none px-2">
+                 <option value="" disabled>PILIH CLUSTER (IMPORT)</option>
+                 {clusters.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+              </select>
+           </div>
+           
+           <label className="flex flex-1 md:flex-none justify-center items-center gap-2 px-5 py-2.5 bg-purple-600/20 text-purple-400 hover:bg-purple-600/40 border border-purple-500/50 rounded-xl transition-all duration-300 font-black uppercase text-[10px] md:text-xs cursor-pointer active:scale-95 shadow-[0_0_10px_rgba(147,51,234,0.3)]">
+              <Upload className="w-4 h-4" /> Import XLSX
+              <input type="file" accept=".xlsx, .xls" className="hidden" onChange={handleBulkUpload} />
            </label>
-           <button onClick={() => setIsAdding(!isAdding)} className="flex flex-1 md:flex-none justify-center items-center gap-2 px-5 py-3 bg-cyan-900/40 text-cyan-300 hover:bg-cyan-800/60 border border-cyan-500/30 rounded-xl transition-all duration-300 font-bold active:scale-95 shadow-sm uppercase tracking-widest text-xs">
-             <Plus className="w-4 h-4" /> Registrasi Manual
+           
+           <button onClick={() => setIsAdding(!isAdding)} className="flex flex-1 md:flex-none justify-center items-center gap-2 px-5 py-2.5 bg-cyan-600/20 text-cyan-400 hover:bg-cyan-600/40 border border-cyan-500/50 rounded-xl transition-all duration-300 font-black uppercase text-[10px] md:text-xs active:scale-95 shadow-[0_0_10px_rgba(6,182,212,0.3)]">
+             <Plus className="w-4 h-4" /> Input Manual
            </button>
         </div>
       </div>
 
-      {/* FILTERING AREA */}
-      <div className="flex flex-col md:flex-row gap-3 md:gap-4">
-        <div className="relative flex-1">
-           <SearchIcon className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-cyan-500/50" />
-           <input type="text" placeholder="Cari Identitas / NIM..." value={search} onChange={e=>setSearch(e.target.value)} className="w-full bg-slate-900/60 border border-cyan-500/20 rounded-xl pl-10 pr-4 py-3.5 text-white font-mono outline-none focus:border-cyan-400 transition-colors shadow-inner text-sm placeholder-slate-600" />
-        </div>
-        <select value={filterCluster} onChange={e=>setFilterCluster(e.target.value)} className="bg-slate-900/60 border border-cyan-500/20 rounded-xl px-5 py-3.5 text-white font-mono outline-none focus:border-cyan-400 transition-colors shadow-inner w-full md:w-56 cursor-pointer appearance-none text-sm">
-          <option value="All">Semua Cluster</option>
-          {clusters.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-        </select>
-      </div>
-
       {isAdding && (
-        <form onSubmit={handleAdd} className="bg-slate-900/80 backdrop-blur-md border border-cyan-500/30 p-5 md:p-6 rounded-[1.5rem] grid grid-cols-1 md:grid-cols-5 gap-4 items-end animate-in slide-in-from-top-4 shadow-[0_0_30px_rgba(6,182,212,0.1)]">
+        <form onSubmit={handleAdd} className="bg-[#0A1628]/90 backdrop-blur-md border border-cyan-500/50 p-5 md:p-6 rounded-[1.5rem] grid grid-cols-1 md:grid-cols-5 gap-4 items-end animate-in slide-in-from-top-4 shadow-[0_10px_30px_rgba(0,0,0,0.5)]">
           <div className="space-y-1.5 md:col-span-2">
-            <label className="text-[10px] md:text-xs text-cyan-500/70 font-mono font-bold uppercase tracking-widest ml-1">Nama Lengkap</label>
-            <input required type="text" value={newS.name} onChange={e=>setNewS({...newS, name: e.target.value})} className="w-full bg-black/40 border border-cyan-500/20 rounded-xl px-4 py-3 text-white outline-none focus:border-cyan-400 font-mono text-sm" placeholder="Input Nama..." />
+            <label className="text-[9px] md:text-[10px] text-cyan-500 font-bold uppercase tracking-widest ml-1">Nama Entitas</label>
+            <input required type="text" value={newS.name} onChange={e=>setNewS({...newS, name: e.target.value})} className="w-full bg-[#050B14] border border-cyan-500/30 rounded-xl px-4 py-3 text-cyan-50 outline-none focus:border-cyan-400 font-mono text-sm" placeholder="Nama Lengkap..." />
           </div>
           <div className="space-y-1.5">
-            <label className="text-[10px] md:text-xs text-cyan-500/70 font-mono font-bold uppercase tracking-widest ml-1">NIM</label>
-            <input required type="text" value={newS.nim} onChange={e=>setNewS({...newS, nim: e.target.value})} className="w-full bg-black/40 border border-cyan-500/20 rounded-xl px-4 py-3 text-white outline-none focus:border-cyan-400 font-mono text-sm" placeholder="Input NIM..." />
+            <label className="text-[9px] md:text-[10px] text-cyan-500 font-bold uppercase tracking-widest ml-1">ID Unik (NIM)</label>
+            <input required type="text" value={newS.nim} onChange={e=>setNewS({...newS, nim: e.target.value})} className="w-full bg-[#050B14] border border-cyan-500/30 rounded-xl px-4 py-3 text-cyan-50 outline-none focus:border-cyan-400 font-mono text-sm" placeholder="NIM..." />
           </div>
           <div className="space-y-1.5">
-            <label className="text-[10px] md:text-xs text-cyan-500/70 font-mono font-bold uppercase tracking-widest ml-1">Cluster</label>
-            <select value={newS.clusterId} onChange={e=>setNewS({...newS, clusterId: e.target.value})} className="w-full bg-black/40 border border-cyan-500/20 rounded-xl px-4 py-3 text-white outline-none focus:border-cyan-400 font-mono text-sm appearance-none cursor-pointer">
-               <option value="">-- Kosong --</option>
+            <label className="text-[9px] md:text-[10px] text-cyan-500 font-bold uppercase tracking-widest ml-1">Cluster</label>
+            <select required value={newS.clusterId} onChange={e=>setNewS({...newS, clusterId: e.target.value})} className="w-full bg-[#050B14] border border-cyan-500/30 rounded-xl px-4 py-3 text-cyan-50 outline-none focus:border-cyan-400 font-bold text-xs uppercase appearance-none cursor-pointer">
+               <option value="" disabled>Pilih Cluster</option>
                {clusters.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
             </select>
           </div>
-          <button type="submit" className="w-full py-3 bg-cyan-950/50 hover:bg-cyan-900 border border-cyan-500/50 text-cyan-300 font-bold rounded-xl transition-all duration-300 shadow-lg active:scale-95 uppercase tracking-widest text-xs">Simpan Data</button>
+          <button type="submit" className="w-full py-3 bg-cyan-600 hover:bg-cyan-500 text-white font-black uppercase tracking-widest text-xs rounded-xl transition-all duration-300 shadow-[0_0_15px_rgba(6,182,212,0.4)] active:scale-95">Registrasi</button>
         </form>
       )}
 
-      <div className="flex-1 bg-slate-900/60 backdrop-blur-md border border-cyan-500/20 rounded-[1.5rem] overflow-hidden flex flex-col shadow-[0_0_20px_rgba(0,0,0,0.5)] relative">
+      <div className="relative w-full max-w-md">
+         <SearchIcon className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-cyan-600" />
+         <input type="text" placeholder="Pencarian Data..." value={search} onChange={e=>setSearch(e.target.value)} className="w-full bg-[#0A1628]/80 border border-cyan-500/30 rounded-2xl pl-11 pr-4 py-3.5 text-cyan-50 outline-none focus:border-cyan-400 transition-colors shadow-inner font-mono text-sm" />
+      </div>
+
+      <div className="flex-1 bg-[#0A1628]/60 backdrop-blur-md border border-cyan-500/20 rounded-[1.5rem] overflow-hidden flex flex-col shadow-[0_15px_40px_rgba(0,0,0,0.5)] relative">
         <div className="overflow-x-auto">
-          <table className="w-full text-left border-collapse min-w-[900px]">
+          <table className="w-full text-left border-collapse min-w-[800px]">
             <thead>
-              <tr className="bg-black/40 border-b border-cyan-500/20 text-cyan-500/70 text-xs tracking-widest uppercase font-mono">
-                <th className="p-4 md:p-5 whitespace-nowrap font-bold">NIM</th>
-                <th className="p-4 md:p-5 whitespace-nowrap font-bold">Nama Subjek</th>
-                <th className="p-4 md:p-5 whitespace-nowrap font-bold">Cluster</th>
-                <th className="p-4 md:p-5 whitespace-nowrap font-bold">Kredensial</th>
-                <th className="p-4 md:p-5 text-center whitespace-nowrap font-bold">Status Instrumen</th>
-                <th className="p-4 md:p-5 text-right whitespace-nowrap font-bold">Manajemen</th>
+              <tr className="bg-[#050B14]/80 border-b border-cyan-500/20 text-cyan-500 text-[10px] tracking-[0.2em] uppercase font-black">
+                <th className="p-4 md:p-5 whitespace-nowrap">ID Unik (NIM)</th>
+                <th className="p-4 md:p-5 whitespace-nowrap">Nama Entitas</th>
+                <th className="p-4 md:p-5 whitespace-nowrap">Cluster Kategori</th>
+                <th className="p-4 md:p-5 text-center whitespace-nowrap">Otorisasi Hardware</th>
+                <th className="p-4 md:p-5 text-right whitespace-nowrap">Manajemen</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-cyan-500/10">
-              {filtered.map(st => {
-                const clusterName = clusters.find(c => c.id === st.clusterId)?.name || '-';
-                return (
-                <tr key={st.id} className="hover:bg-cyan-950/30 transition-colors duration-200 text-slate-200 group">
-                  <td className="p-4 md:p-5 font-mono text-sm text-cyan-100">{st.nim}</td>
-                  <td className="p-4 md:p-5 font-bold text-sm md:text-base tracking-wide">{st.name}</td>
-                  <td className="p-4 md:p-5 font-mono text-xs text-purple-300">{clusterName}</td>
-                  <td className="p-4 md:p-5"><span className="text-[10px] md:text-xs bg-black/60 px-2.5 py-1.5 rounded-md border border-cyan-500/20 font-mono text-cyan-500">{st.password}</span></td>
+            <tbody className="divide-y divide-cyan-900/30">
+              {filtered.map(st => (
+                <tr key={st.id} className="hover:bg-cyan-900/20 transition-colors duration-200 text-cyan-50 group">
+                  <td className="p-4 md:p-5 font-mono text-sm tracking-wider">{st.nim}</td>
+                  <td className="p-4 md:p-5 font-bold text-sm uppercase">{st.name}</td>
+                  <td className="p-4 md:p-5">
+                     <span className="text-[10px] uppercase font-bold tracking-widest text-cyan-300 bg-cyan-950/50 border border-cyan-500/30 px-3 py-1.5 rounded-md shadow-sm">
+                        {clusters.find(c => c.id === st.clusterId)?.name || 'UNASSIGNED'}
+                     </span>
+                  </td>
                   <td className="p-4 md:p-5 text-center">
                     {st.deviceId ? (
-                      <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-emerald-950/40 text-emerald-400 text-[10px] md:text-xs font-mono tracking-widest border border-emerald-500/30 shadow-sm"><CheckCircle2 className="w-3.5 h-3.5"/> TERTAUT</span>
+                      <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-950/50 text-emerald-400 text-[10px] font-black uppercase tracking-widest border border-emerald-500/30 shadow-[0_0_10px_rgba(16,185,129,0.2)]"><CheckCircle2 className="w-3.5 h-3.5"/> Tersinkron</span>
                     ) : (
-                      <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-slate-900 text-slate-500 text-[10px] md:text-xs font-mono tracking-widest border border-slate-700 shadow-sm">BEBAS</span>
+                      <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-900 text-slate-500 text-[10px] font-black uppercase tracking-widest border border-white/10">Kosong</span>
                     )}
                   </td>
-                  <td className="p-4 md:p-5 text-right flex justify-end gap-2 md:gap-3">
+                  <td className="p-4 md:p-5 text-right flex justify-end gap-2">
                     {st.deviceId && (
-                      <button onClick={() => handleUnlinkDevice(st.id, st.name)} title="Unlink Instrumen" className="p-2 md:p-2.5 text-amber-400 hover:text-white rounded-xl transition-all duration-300 border border-amber-500/30 bg-amber-950/40 hover:bg-amber-700 shadow-sm hover:shadow-lg active:scale-95">
+                      <button onClick={() => handleUnlinkDevice(st.id, st.name)} title="Lepas Otoritas Perangkat" className="p-2 md:p-2.5 text-amber-500 hover:text-amber-300 rounded-xl transition-all duration-300 border border-amber-500/30 bg-amber-950/40 hover:bg-amber-900 hover:-translate-y-0.5 active:scale-95 shadow-sm">
                          <RefreshCcw className="w-4 h-4" />
                       </button>
                     )}
-                    <button onClick={() => setEditingStudent(st)} title="Modifikasi Data" className="p-2 md:p-2.5 text-blue-400 hover:text-white rounded-xl transition-all duration-300 border border-blue-500/30 bg-blue-950/40 hover:bg-blue-700 shadow-sm hover:shadow-lg active:scale-95">
+                    <button onClick={() => setEditingStudent(st)} title="Modifikasi Data" className="p-2 md:p-2.5 text-blue-500 hover:text-blue-300 rounded-xl transition-all duration-300 border border-blue-500/30 bg-blue-950/40 hover:bg-blue-900 hover:-translate-y-0.5 active:scale-95 shadow-sm">
                        <Settings className="w-4 h-4" />
                     </button>
-                    <button onClick={() => setSelectedStudentForKTM(st)} title="Render KTM" className="px-3 md:px-4 py-2 md:py-2.5 text-[10px] md:text-xs font-mono tracking-widest font-bold text-cyan-300 bg-cyan-950/40 border border-cyan-500/30 hover:bg-cyan-700 hover:text-white rounded-xl transition-all duration-300 flex items-center gap-2 shadow-sm hover:shadow-lg active:scale-95 uppercase">
-                      <CreditCard className="w-4 h-4"/> <span className="hidden md:inline">KTM</span>
+                    <button onClick={() => setSelectedStudentForKTM(st)} title="Cetak ID Optik (KTM)" className="px-3 py-2 text-[10px] font-black uppercase tracking-widest text-cyan-400 bg-cyan-950/50 border border-cyan-500/40 hover:bg-cyan-600 hover:text-white rounded-xl transition-all duration-300 flex items-center gap-2 hover:-translate-y-0.5 active:scale-95 shadow-[0_0_10px_rgba(6,182,212,0.2)]">
+                      <ScanFace className="w-4 h-4"/> Cetak KTM
                     </button>
-                    <button onClick={() => deleteStudent(st.id)} title="Hapus Permanen" className="p-2 md:p-2.5 text-slate-500 hover:text-white hover:bg-rose-900 rounded-xl transition-all duration-300 border border-transparent hover:border-rose-500/50 hover:shadow-[0_0_15px_rgba(244,63,94,0.5)] active:scale-95">
+                    <button onClick={() => {if(confirm(`Hapus permanen entitas ${st.name}?`)) deleteStudent(st.id);}} title="Terminasi" className="p-2 md:p-2.5 text-rose-500 hover:text-white hover:bg-rose-600 rounded-xl transition-all duration-300 border border-rose-500/30 bg-rose-950/40 hover:-translate-y-0.5 active:scale-95 shadow-sm">
                       <Trash2 className="w-4 h-4" />
                     </button>
                   </td>
                 </tr>
-              )})}
-              {filtered.length === 0 && <tr><td colSpan={6} className="p-10 text-center text-cyan-500/50 font-mono tracking-widest uppercase">Database Kosong / Tidak Ditemukan.</td></tr>}
+              ))}
+              {filtered.length === 0 && <tr><td colSpan={5} className="p-12 text-center text-cyan-800 font-mono text-sm uppercase tracking-widest">Database Entitas Kosong / Tidak Ditemukan.</td></tr>}
             </tbody>
           </table>
         </div>
       </div>
 
+      {/* EDIT MODAL */}
       {editingStudent && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/90 backdrop-blur-md p-4 animate-in fade-in zoom-in-95 duration-200">
-           <form onSubmit={handleUpdate} className="bg-slate-900/90 border border-cyan-500/30 p-6 md:p-8 rounded-[2rem] w-full max-w-md shadow-[0_0_50px_rgba(6,182,212,0.15)] relative">
-              <div className="flex justify-between items-center mb-6 md:mb-8">
-                 <h3 className="text-xl md:text-2xl font-black text-white tracking-widest uppercase">Modifikasi Data</h3>
-                 <button type="button" onClick={() => setEditingStudent(null)} className="p-2 bg-white/5 hover:bg-rose-900/60 hover:text-rose-400 rounded-full transition-colors text-slate-400 border border-transparent hover:border-rose-500/30"><X className="w-5 h-5"/></button>
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/90 backdrop-blur-xl p-4 animate-in fade-in zoom-in-95 duration-200">
+           <form onSubmit={handleUpdate} className="bg-[#0A1628] border border-cyan-500/40 p-6 md:p-8 rounded-3xl w-full max-w-md shadow-[0_0_50px_rgba(6,182,212,0.3)] relative radiology-bg">
+              <div className="flex justify-between items-center mb-8">
+                 <h3 className="text-xl md:text-2xl font-black text-cyan-50 tracking-widest uppercase">Modifikasi Entitas</h3>
+                 <button type="button" onClick={() => setEditingStudent(null)} className="p-2 bg-rose-950/50 hover:bg-rose-500 hover:text-white border border-rose-500/30 rounded-xl transition-colors text-rose-400"><X className="w-5 h-5"/></button>
               </div>
-              <div className="space-y-4 md:space-y-5">
+              <div className="space-y-5">
                  <div className="space-y-1.5">
-                    <label className="text-[10px] md:text-xs text-cyan-500/70 font-mono font-bold uppercase tracking-widest ml-1">Nama Lengkap</label>
-                    <input required type="text" value={editingStudent.name} onChange={e=>setEditingStudent({...editingStudent, name: e.target.value})} className="w-full bg-black/50 border border-cyan-500/20 rounded-xl px-4 py-3.5 text-white font-mono outline-none focus:border-cyan-400 transition-colors shadow-inner text-sm" />
+                    <label className="text-[10px] text-cyan-500 font-bold uppercase tracking-widest ml-1">Nama Lengkap</label>
+                    <input required type="text" value={editingStudent.name} onChange={e=>setEditingStudent({...editingStudent, name: e.target.value})} className="w-full bg-[#050B14] border border-cyan-500/30 rounded-xl px-4 py-3.5 text-cyan-50 outline-none focus:border-cyan-400 font-mono text-sm shadow-inner" />
                  </div>
                  <div className="space-y-1.5">
-                    <label className="text-[10px] md:text-xs text-cyan-500/70 font-mono font-bold uppercase tracking-widest ml-1">NIM</label>
-                    <input required type="text" value={editingStudent.nim} onChange={e=>setEditingStudent({...editingStudent, nim: e.target.value})} className="w-full bg-black/50 border border-cyan-500/20 rounded-xl px-4 py-3.5 text-white font-mono outline-none focus:border-cyan-400 transition-colors shadow-inner text-sm" />
+                    <label className="text-[10px] text-cyan-500 font-bold uppercase tracking-widest ml-1">NIM</label>
+                    <input required type="text" value={editingStudent.nim} onChange={e=>setEditingStudent({...editingStudent, nim: e.target.value})} className="w-full bg-[#050B14] border border-cyan-500/30 rounded-xl px-4 py-3.5 text-cyan-50 outline-none focus:border-cyan-400 font-mono text-sm shadow-inner" />
                  </div>
                  <div className="space-y-1.5">
-                    <label className="text-[10px] md:text-xs text-cyan-500/70 font-mono font-bold uppercase tracking-widest ml-1">Cluster</label>
-                    <select value={editingStudent.clusterId || ''} onChange={e=>setEditingStudent({...editingStudent, clusterId: e.target.value})} className="w-full bg-black/50 border border-cyan-500/20 rounded-xl px-4 py-3.5 text-white font-mono outline-none focus:border-cyan-400 transition-colors shadow-inner text-sm appearance-none cursor-pointer">
-                       <option value="">-- Kosong --</option>
+                    <label className="text-[10px] text-cyan-500 font-bold uppercase tracking-widest ml-1">Ubah Sandi</label>
+                    <input required type="text" value={editingStudent.password || ''} onChange={e=>setEditingStudent({...editingStudent, password: e.target.value})} className="w-full bg-[#050B14] border border-cyan-500/30 rounded-xl px-4 py-3.5 text-cyan-50 outline-none focus:border-cyan-400 font-mono text-sm shadow-inner" />
+                 </div>
+                 <div className="space-y-1.5">
+                    <label className="text-[10px] text-cyan-500 font-bold uppercase tracking-widest ml-1">Pindah Cluster</label>
+                    <select required value={editingStudent.clusterId || ''} onChange={e=>setEditingStudent({...editingStudent, clusterId: e.target.value})} className="w-full bg-[#050B14] border border-cyan-500/30 rounded-xl px-4 py-3.5 text-cyan-50 outline-none focus:border-cyan-400 font-bold text-xs uppercase appearance-none cursor-pointer">
+                       <option value="" disabled>Pilih Cluster</option>
                        {clusters.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
                     </select>
                  </div>
-                 <div className="space-y-1.5">
-                    <label className="text-[10px] md:text-xs text-cyan-500/70 font-mono font-bold uppercase tracking-widest ml-1">Kredensial / Password</label>
-                    <input required type="text" value={editingStudent.password || ''} onChange={e=>setEditingStudent({...editingStudent, password: e.target.value})} className="w-full bg-black/50 border border-cyan-500/20 rounded-xl px-4 py-3.5 text-white font-mono outline-none focus:border-cyan-400 transition-colors shadow-inner text-sm" />
-                 </div>
-                 <button type="submit" className="w-full py-4 mt-4 bg-cyan-950/60 hover:bg-cyan-900/80 border border-cyan-500/50 text-cyan-300 font-bold uppercase tracking-widest rounded-2xl transition-all duration-300 shadow-[0_0_20px_rgba(6,182,212,0.1)] active:scale-95 text-xs">
-                    Injeksi Perubahan Database
+                 <button type="submit" className="w-full py-4 mt-6 bg-cyan-600 hover:bg-cyan-500 text-white font-black tracking-widest uppercase text-xs rounded-2xl transition-all duration-300 shadow-[0_10px_20px_rgba(6,182,212,0.4)] active:scale-95 border border-cyan-400/50">
+                    Timpa Database Sistem
                  </button>
               </div>
            </form>
         </div>
       )}
 
+      {/* KTM PRINT MODAL */}
       {selectedStudentForKTM && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/90 backdrop-blur-md p-4 animate-in fade-in zoom-in-95 duration-200">
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/95 backdrop-blur-xl p-4 animate-in fade-in zoom-in-95 duration-200">
           <style>{`
             @media print {
               body * { visibility: hidden; }
-              #ktm-print-area, #ktm-print-area * { visibility: visible; }
-              #ktm-print-area { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); margin: 0; }
+              #ktm-print-area, #ktm-print-area * { visibility: visible !important; }
+              #ktm-print-area { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); margin: 0; background-color: #050B14; }
             }
           `}</style>
-          <div className="bg-slate-900 border border-cyan-500/30 p-6 md:p-8 rounded-[2rem] w-full max-w-[450px] shadow-[0_0_50px_rgba(6,182,212,0.15)] relative z-50">
+          <div className="bg-[#0A1628] border border-cyan-500/30 p-6 md:p-8 rounded-[2rem] w-full max-w-[450px] shadow-[0_0_50px_rgba(6,182,212,0.3)] relative z-50">
             <div className="flex justify-between items-center mb-6">
-              <h3 className="text-xl md:text-2xl font-black text-white tracking-widest uppercase">Preview KTM Cetak</h3>
-              <button onClick={() => setSelectedStudentForKTM(null)} className="p-2 bg-white/5 hover:bg-rose-900/60 hover:text-rose-400 rounded-full transition-colors text-white border border-transparent hover:border-rose-500/30"><X className="w-5 h-5"/></button>
+              <h3 className="text-lg font-black text-cyan-50 tracking-widest uppercase">Visualisasi Optik KTM</h3>
+              <button onClick={() => setSelectedStudentForKTM(null)} className="p-2 bg-rose-950/50 hover:bg-rose-500 hover:text-white border border-rose-500/30 rounded-xl transition-colors text-rose-400"><X className="w-4 h-4"/></button>
             </div>
             
-            {/* Desain KTM bernuansa Sci-Fi Medis */}
-            <div id="ktm-print-area" className="w-[320px] md:w-[340px] h-[500px] md:h-[540px] mx-auto bg-slate-950 rounded-[2rem] p-6 relative overflow-hidden shadow-2xl flex flex-col items-center justify-between border-[2px] border-cyan-500/50">
-               <div className="absolute top-0 left-0 w-full h-[30%] bg-gradient-to-b from-cyan-900/40 to-transparent"></div>
-               <div className="absolute bottom-0 right-0 w-full h-[30%] bg-gradient-to-t from-purple-900/20 to-transparent"></div>
-               <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/carbon-fibre.png')] opacity-10 mix-blend-overlay"></div>
+            <div id="ktm-print-area" className="w-[320px] md:w-[340px] h-[500px] md:h-[540px] mx-auto bg-[#050B14] rounded-[2rem] p-6 relative overflow-hidden shadow-2xl flex flex-col items-center justify-between border-[4px] border-cyan-500/50">
                
-               <div className="text-center relative z-10 w-full mt-2 md:mt-4">
-                 <div className="w-14 h-14 md:w-16 md:h-16 bg-slate-900 border border-cyan-500/50 rounded-2xl flex items-center justify-center mx-auto mb-3 shadow-[0_0_20px_rgba(6,182,212,0.3)] p-2 md:p-2.5 overflow-hidden">
-                   <img src="/axalogo.png" alt="ABSENSI DEPT. RKGo" className="w-full h-full object-contain brightness-150 grayscale contrast-125" onError={(e) => { e.currentTarget.style.display = 'none'; e.currentTarget.nextElementSibling?.classList.remove('hidden'); }} />
+               {/* Cyber/Radiology Graphics for Card */}
+               <div className="absolute top-0 left-0 w-full h-2 bg-cyan-400"></div>
+               <div className="absolute top-[-50px] right-[-50px] w-48 h-48 bg-cyan-600/20 rounded-full blur-[40px]"></div>
+               <div className="absolute bottom-[-50px] left-[-50px] w-48 h-48 bg-purple-600/20 rounded-full blur-[40px]"></div>
+               <div className="absolute inset-0 pointer-events-none bg-[linear-gradient(transparent_95%,rgba(6,182,212,0.1)_100%),linear-gradient(90deg,transparent_95%,rgba(6,182,212,0.1)_100%)] bg-[length:20px_20px]"></div>
+               
+               <div className="text-center relative z-10 w-full mt-4">
+                 <div className="w-16 h-16 bg-[#0A1628] border-2 border-cyan-400 rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-[0_0_20px_rgba(6,182,212,0.5)] p-2">
+                   <img src="/axalogo.png" alt="RKG" className="w-full h-full object-contain filter drop-shadow-[0_0_5px_rgba(6,182,212,0.8)]" onError={(e) => { e.currentTarget.style.display = 'none'; e.currentTarget.nextElementSibling?.classList.remove('hidden'); }} />
+                   <ActivitySquare className="text-cyan-400 w-full h-full hidden" />
                  </div>
-                 <h2 className="text-white font-black tracking-[0.2em] text-base md:text-lg drop-shadow-md">DEPT. RKG</h2>
-                 <p className="text-cyan-400 text-[8px] md:text-[9px] tracking-[0.25em] font-mono mt-1 opacity-90 uppercase">Kartu Tanda Mahasiswa</p>
+                 <h2 className="text-cyan-50 font-black tracking-[0.2em] text-lg drop-shadow-md">DEPT. RKG</h2>
+                 <p className="text-cyan-400 text-[8px] tracking-[0.3em] font-bold uppercase mt-1">Dentomaxillofacial Radiology</p>
+                 <p className="text-cyan-600 text-[7px] tracking-[0.2em] uppercase mt-1">Kartu Akses Sistem</p>
                </div>
 
-               <div className="bg-white p-3 md:p-4 rounded-2xl relative z-10 shadow-[0_0_40px_rgba(6,182,212,0.4)] border-4 border-cyan-500/20">
-                  <img src={`https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${selectedStudentForKTM.nim}&margin=0`} alt="QR Code" className="w-36 h-36 md:w-40 md:h-40" />
+               <div className="bg-white p-3 rounded-2xl relative z-10 shadow-[0_0_30px_rgba(6,182,212,0.6)] border-4 border-[#0A1628]">
+                  <img src={`https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${selectedStudentForKTM.nim}&margin=0`} alt="QR Code" className="w-36 h-36" />
                </div>
 
-               <div className="text-center relative z-10 w-full bg-black/60 p-4 md:p-5 rounded-[1.5rem] backdrop-blur-md border border-cyan-500/30 mb-2 shadow-inner">
-                 <h1 className="text-lg md:text-xl font-black text-white uppercase leading-tight mb-1 truncate px-2 tracking-wide">{selectedStudentForKTM.name}</h1>
-                 <div className="h-1 w-16 bg-gradient-to-r from-cyan-600 to-cyan-300 mx-auto my-2.5 rounded-full"></div>
-                 <p className="text-cyan-300 font-mono text-lg md:text-xl tracking-[0.15em] font-bold">{selectedStudentForKTM.nim}</p>
-                 <p className="text-purple-300/70 font-mono text-[9px] md:text-[10px] tracking-widest uppercase mt-2">{clusters.find(c => c.id === selectedStudentForKTM.clusterId)?.name || 'NO CLUSTER'}</p>
+               <div className="text-center relative z-10 w-full bg-[#0A1628]/80 p-5 rounded-[1.5rem] backdrop-blur-md border border-cyan-500/40 mb-2">
+                 <h1 className="text-sm md:text-base font-black text-white uppercase leading-tight mb-2 truncate px-2 tracking-widest">{selectedStudentForKTM.name}</h1>
+                 <div className="h-[2px] w-16 bg-cyan-500 mx-auto my-2 rounded-full shadow-[0_0_10px_rgba(6,182,212,0.8)]"></div>
+                 <p className="text-cyan-300 font-mono text-lg tracking-[0.2em] font-bold mt-2">{selectedStudentForKTM.nim}</p>
+                 <p className="text-[#050B14] bg-cyan-500 inline-block px-3 py-1 rounded-md text-[8px] font-black uppercase tracking-[0.2em] mt-3">
+                    {clusters.find(c => c.id === selectedStudentForKTM.clusterId)?.name || 'UNKNOWN CLUSTER'}
+                 </p>
                </div>
             </div>
 
-            <button onClick={() => window.print()} className="w-full mt-8 py-4 bg-cyan-950/60 hover:bg-cyan-900/80 border border-cyan-500/50 text-cyan-300 font-black rounded-2xl flex items-center justify-center gap-3 transition-all duration-300 shadow-[0_0_20px_rgba(6,182,212,0.2)] active:scale-95 text-xs uppercase tracking-widest">
-              <Printer className="w-4 h-4" /> Render & Cetak Fisik
+            <button onClick={() => window.print()} className="w-full mt-8 py-4 bg-transparent border-2 border-cyan-500 hover:bg-cyan-500/20 text-cyan-400 font-black tracking-widest uppercase text-xs rounded-2xl flex items-center justify-center gap-3 transition-all duration-300 shadow-[0_0_20px_rgba(6,182,212,0.3)] active:scale-95">
+              <Printer className="w-4 h-4" /> Hardcopy Print Request
             </button>
           </div>
         </div>
@@ -1488,254 +1558,109 @@ const AdminStudents: React.FC = () => {
   );
 };
 
-// ==========================================
-// COMPONENT: ADMIN CLUSTERS (Poin 1: Kategori Cluster)
-// ==========================================
-const AdminClusters: React.FC = () => {
-  const { clusters, addCluster, updateCluster, deleteCluster } = useAppContext();
+const AdminSettings: React.FC = () => {
+  const { sessions, updateSession, addSession, deleteSession } = useAppContext();
   const [isAdding, setIsAdding] = useState(false);
-  const [newCluster, setNewCluster] = useState({ name: '' });
-  const [editingCluster, setEditingCluster] = useState<Cluster | null>(null);
+  const [editingSessId, setEditingSessId] = useState<string | null>(null);
+  
+  const [formSess, setFormSess] = useState({ name: '', startTime: '', endTime: '', toleranceMinutes: 15 });
 
-  const handleAdd = (e: React.FormEvent) => {
-    e.preventDefault();
-    if(newCluster.name.trim() === '') return;
-    addCluster({ name: newCluster.name });
-    setIsAdding(false);
-    setNewCluster({ name: '' });
-  };
-
-  const handleUpdate = (e: React.FormEvent) => {
-    e.preventDefault();
-    if(editingCluster && editingCluster.name.trim() !== '') {
-       updateCluster(editingCluster.id, { name: editingCluster.name });
-       setEditingCluster(null);
+  const handleSave = (e: React.FormEvent) => {
+    e.preventDefault(); 
+    if (editingSessId) {
+       updateSession(editingSessId, { ...formSess });
+    } else {
+       addSession({ ...formSess, isActive: true }); 
     }
+    setIsAdding(false); setEditingSessId(null); 
+    setFormSess({ name: '', startTime: '', endTime: '', toleranceMinutes: 15 });
   };
+
+  const startEdit = (sess: Session) => {
+     setIsAdding(true);
+     setEditingSessId(sess.id);
+     setFormSess({ name: sess.name, startTime: sess.startTime, endTime: sess.endTime, toleranceMinutes: sess.toleranceMinutes });
+  }
+
+  const cancelForm = () => {
+     setIsAdding(false); setEditingSessId(null);
+     setFormSess({ name: '', startTime: '', endTime: '', toleranceMinutes: 15 });
+  }
 
   return (
-    <div className="space-y-6 animate-in fade-in duration-500 h-full flex flex-col w-full relative max-w-4xl mx-auto">
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-slate-900/40 p-5 rounded-[2rem] border border-cyan-500/10">
+    <div className="space-y-6 animate-in fade-in duration-500">
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div>
-          <h2 className="text-2xl md:text-3xl font-black text-white tracking-widest uppercase">Manajemen Cluster</h2>
-          <p className="text-cyan-500/70 text-xs md:text-sm font-mono mt-1">Kelola Kategori / Kelompok Mahasiswa</p>
+           <h2 className="text-2xl md:text-3xl font-black text-cyan-50 tracking-widest uppercase">Konfigurasi Sesi</h2>
+           <p className="text-cyan-500/70 text-xs md:text-sm font-mono mt-1 uppercase">Manajemen Jadwal Shift Radiologi</p>
         </div>
-        <button onClick={() => setIsAdding(!isAdding)} className="flex w-full md:w-auto justify-center items-center gap-2 px-5 py-3 bg-cyan-900/40 text-cyan-300 hover:bg-cyan-800/60 border border-cyan-500/30 rounded-xl transition-all duration-300 font-bold active:scale-95 shadow-sm uppercase tracking-widest text-xs">
-          <Plus className="w-4 h-4" /> Tambah Cluster
+        <button onClick={() => {cancelForm(); setIsAdding(true);}} className="flex items-center gap-2 px-6 py-3 bg-cyan-600/20 text-cyan-400 hover:bg-cyan-500/30 border border-cyan-500/50 rounded-xl transition-all duration-300 font-black uppercase tracking-widest text-xs shadow-[0_0_15px_rgba(6,182,212,0.2)] w-full md:w-auto justify-center">
+           <Plus className="w-4 h-4" /> Alokasi Sesi Baru
         </button>
       </div>
 
       {isAdding && (
-        <form onSubmit={handleAdd} className="bg-slate-900/80 backdrop-blur-md border border-cyan-500/30 p-5 md:p-6 rounded-[1.5rem] flex flex-col md:flex-row gap-4 items-end animate-in slide-in-from-top-4 shadow-[0_0_30px_rgba(6,182,212,0.1)]">
-          <div className="space-y-1.5 flex-1 w-full">
-            <label className="text-[10px] md:text-xs text-cyan-500/70 font-mono font-bold uppercase tracking-widest ml-1">Nama Cluster</label>
-            <input required type="text" value={newCluster.name} onChange={e=>setNewCluster({name: e.target.value})} className="w-full bg-black/40 border border-cyan-500/20 rounded-xl px-4 py-3.5 text-white outline-none focus:border-cyan-400 font-mono text-sm" placeholder="Contoh: Cluster I 2025" />
-          </div>
-          <button type="submit" className="w-full md:w-auto px-8 py-3.5 bg-cyan-950/50 hover:bg-cyan-900 border border-cyan-500/50 text-cyan-300 font-bold rounded-xl transition-all duration-300 shadow-lg active:scale-95 uppercase tracking-widest text-xs whitespace-nowrap">Simpan</button>
-        </form>
-      )}
+        <form onSubmit={handleSave} className="bg-[#0A1628]/90 backdrop-blur-md border border-cyan-500/50 p-6 md:p-8 rounded-3xl grid grid-cols-1 md:grid-cols-5 gap-5 md:gap-6 items-end animate-in slide-in-from-top-4 shadow-[0_15px_40px_rgba(0,0,0,0.5)] relative">
+          
+          <div className="absolute top-4 right-4 cursor-pointer text-cyan-600 hover:text-cyan-400" onClick={cancelForm}><X className="w-5 h-5"/></div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-         {clusters.map(cluster => (
-            <div key={cluster.id} className="bg-slate-900/60 border border-cyan-500/20 p-5 rounded-[1.5rem] flex flex-col justify-between shadow-lg hover:border-cyan-500/50 transition-colors group">
-               {editingCluster?.id === cluster.id ? (
-                  <form onSubmit={handleUpdate} className="flex flex-col gap-3">
-                     <input autoFocus required type="text" value={editingCluster.name} onChange={e=>setEditingCluster({...editingCluster, name: e.target.value})} className="w-full bg-black/60 border border-cyan-400/50 rounded-lg px-3 py-2 text-white outline-none font-mono text-sm" />
-                     <div className="flex gap-2">
-                        <button type="button" onClick={() => setEditingCluster(null)} className="flex-1 py-1.5 bg-slate-800 text-slate-400 rounded border border-slate-700 text-[10px] uppercase font-bold tracking-wider hover:bg-slate-700">Batal</button>
-                        <button type="submit" className="flex-1 py-1.5 bg-cyan-900/60 text-cyan-300 rounded border border-cyan-500/50 text-[10px] uppercase font-bold tracking-wider hover:bg-cyan-800">Save</button>
-                     </div>
-                  </form>
-               ) : (
-                  <>
-                     <div className="flex items-center gap-3 mb-4">
-                        <Layers className="w-6 h-6 text-cyan-500/50" />
-                        <h3 className="text-base font-bold text-white font-mono tracking-wide">{cluster.name}</h3>
-                     </div>
-                     <div className="flex justify-end gap-2 border-t border-cyan-500/10 pt-3">
-                        <button onClick={() => setEditingCluster(cluster)} className="p-1.5 text-blue-400 hover:text-white bg-blue-950/30 hover:bg-blue-800 border border-blue-500/20 rounded transition-colors" title="Edit Kategori">
-                           <Edit className="w-4 h-4"/>
-                        </button>
-                        <button onClick={() => {if(confirm(`Hapus permanen cluster ${cluster.name}?`)) deleteCluster(cluster.id);}} className="p-1.5 text-rose-400 hover:text-white bg-rose-950/30 hover:bg-rose-800 border border-rose-500/20 rounded transition-colors" title="Hapus Kategori">
-                           <Trash2 className="w-4 h-4"/>
-                        </button>
-                     </div>
-                  </>
-               )}
-            </div>
-         ))}
-         {clusters.length === 0 && <div className="col-span-full p-8 text-center text-cyan-500/50 font-mono tracking-widest uppercase">Belum ada cluster terdaftar.</div>}
-      </div>
-    </div>
-  );
-};
-
-const AdminGeofence: React.FC = () => {
-  const { geofence, updateGeofence } = useAppContext();
-  const [lat, setLat] = useState(geofence.lat.toString());
-  const [lng, setLng] = useState(geofence.lng.toString());
-  const [radius, setRadius] = useState(geofence.radius.toString());
-  const [locationName, setLocationName] = useState(geofence.name || 'Kampus Utama');
-
-  const handleSave = (e: React.FormEvent) => {
-    e.preventDefault();
-    updateGeofence({ lat: parseFloat(lat), lng: parseFloat(lng), radius: parseInt(radius), name: locationName });
-    alert('Konfigurasi matriks geospasial berhasil direkam ke Core Database.');
-  };
-
-  const getMyLocation = () => {
-    if (navigator.geolocation) {
-      navigator.geolocation.getCurrentPosition(
-        (pos) => { setLat(pos.coords.latitude.toString()); setLng(pos.coords.longitude.toString()); },
-        () => alert('Sensor GPS tidak memadai. Input manual diperlukan.')
-      );
-    }
-  };
-
-  return (
-    <div className="space-y-6 animate-in fade-in duration-500 max-w-3xl mx-auto">
-      <div className="bg-slate-900/40 p-5 rounded-[2rem] border border-cyan-500/10">
-        <h2 className="text-2xl md:text-3xl font-black text-white tracking-widest uppercase">Parameter Geospasial</h2>
-        <p className="text-cyan-500/70 text-xs md:text-sm font-mono mt-1">Kalibrasi zona radiasi/absensi aktif.</p>
-      </div>
-
-      <form onSubmit={handleSave} className="bg-slate-900/60 backdrop-blur-md border border-cyan-500/20 p-6 md:p-8 rounded-[2rem] space-y-6 md:space-y-8 shadow-[0_0_30px_rgba(6,182,212,0.05)]">
-        <div className="p-4 md:p-5 bg-cyan-950/40 border border-cyan-500/30 rounded-2xl flex items-start gap-3 md:gap-4 shadow-inner">
-          <Navigation className="w-6 h-6 text-cyan-400 mt-0.5 shrink-0 animate-pulse" />
-          <p className="text-xs md:text-sm text-cyan-100/80 leading-relaxed font-mono">Restriksi aktif: Subjek hanya dapat menginisiasi sesi absensi jika koordinat GPS *real-time* berada di dalam <b>Radius Toleransi</b> yang dikalkulasi dari episentrum (Lat/Lng) di bawah.</p>
-        </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-5 md:gap-6">
           <div className="space-y-1.5 md:col-span-2">
-             <label className="text-[10px] md:text-xs text-cyan-500/70 font-mono font-bold uppercase tracking-widest ml-1">Label Episentrum (Display Error)</label>
-             <input required type="text" value={locationName} onChange={e=>setLocationName(e.target.value)} className="w-full bg-black/40 border border-cyan-500/20 rounded-xl px-4 py-3.5 text-white outline-none focus:border-cyan-400 transition-colors shadow-inner font-mono text-sm" placeholder="Contoh: Gedung A Kampus" />
+             <label className="text-[10px] text-cyan-500 font-bold uppercase tracking-widest ml-1">Nama Sesi (Label Shift)</label>
+             <input required type="text" value={formSess.name} onChange={e=>setFormSess({...formSess, name: e.target.value})} className="w-full bg-[#050B14] border border-cyan-500/30 rounded-xl px-4 py-3.5 text-cyan-50 outline-none focus:border-cyan-400 font-mono text-sm" placeholder="e.g. Shift Malam (Cito)" />
           </div>
           <div className="space-y-1.5">
-            <label className="text-[10px] md:text-xs text-cyan-500/70 font-mono font-bold uppercase tracking-widest ml-1">Latitude (Lintang)</label>
-            <input required type="number" step="any" value={lat} onChange={e=>setLat(e.target.value)} className="w-full bg-black/40 border border-cyan-500/20 rounded-xl px-4 py-3.5 text-white outline-none focus:border-cyan-400 transition-colors shadow-inner font-mono text-sm" />
+             <label className="text-[10px] text-cyan-500 font-bold uppercase tracking-widest ml-1">Jam Mulai</label>
+             <input required type="time" value={formSess.startTime} onChange={e=>setFormSess({...formSess, startTime: e.target.value})} className="w-full bg-[#050B14] border border-cyan-500/30 rounded-xl px-4 py-3.5 text-cyan-50 outline-none focus:border-cyan-400 font-mono text-sm" />
           </div>
           <div className="space-y-1.5">
-            <label className="text-[10px] md:text-xs text-cyan-500/70 font-mono font-bold uppercase tracking-widest ml-1">Longitude (Bujur)</label>
-            <input required type="number" step="any" value={lng} onChange={e=>setLng(e.target.value)} className="w-full bg-black/40 border border-cyan-500/20 rounded-xl px-4 py-3.5 text-white outline-none focus:border-cyan-400 transition-colors shadow-inner font-mono text-sm" />
+             <label className="text-[10px] text-cyan-500 font-bold uppercase tracking-widest ml-1">Jam Berakhir</label>
+             <input required type="time" value={formSess.endTime} onChange={e=>setFormSess({...formSess, endTime: e.target.value})} className="w-full bg-[#050B14] border border-cyan-500/30 rounded-xl px-4 py-3.5 text-cyan-50 outline-none focus:border-cyan-400 font-mono text-sm" />
           </div>
-        </div>
-
-        <div className="space-y-1.5">
-           <label className="text-[10px] md:text-xs text-cyan-500/70 font-mono font-bold uppercase tracking-widest ml-1">Radius Maksimal (Meter)</label>
-           <input required type="number" min="10" value={radius} onChange={e=>setRadius(e.target.value)} className="w-full bg-black/40 border border-cyan-500/20 rounded-xl px-4 py-3.5 text-cyan-300 font-bold outline-none focus:border-cyan-400 transition-colors shadow-inner font-mono text-base" />
-           <p className="text-[9px] md:text-[10px] text-slate-500 mt-1.5 ml-1 font-mono uppercase">Rekomendasi keamanan: 500 - 1000 meter.</p>
-        </div>
-
-        <div className="flex flex-col md:flex-row gap-3 md:gap-4 pt-6 border-t border-cyan-500/10">
-          <button type="button" onClick={getMyLocation} className="w-full md:w-auto px-6 py-4 bg-slate-800/50 hover:bg-slate-800 border border-cyan-500/20 text-cyan-100/80 font-bold rounded-xl transition-all duration-300 flex items-center justify-center gap-2 active:scale-95 shadow-sm uppercase tracking-widest text-xs">
-            <MapPin className="w-4 h-4" /> Kalibrasi GPS Saat Ini
+          <div className="space-y-1.5">
+             <label className="text-[10px] text-cyan-500 font-bold uppercase tracking-widest ml-1">Batas Toleransi</label>
+             <div className="relative">
+                <input required type="number" min="0" value={formSess.toleranceMinutes} onChange={e=>setFormSess({...formSess, toleranceMinutes: parseInt(e.target.value)})} className="w-full bg-[#050B14] border border-cyan-500/30 rounded-xl pl-4 pr-12 py-3.5 text-cyan-50 outline-none focus:border-cyan-400 font-mono text-sm" />
+                <span className="absolute right-4 top-1/2 -translate-y-1/2 text-cyan-600 text-xs font-mono font-bold">MIN</span>
+             </div>
+          </div>
+          <button type="submit" className="md:col-span-5 w-full py-4 bg-cyan-600 hover:bg-cyan-500 text-white font-black uppercase tracking-widest text-xs rounded-xl transition-all duration-300 shadow-[0_0_15px_rgba(6,182,212,0.4)] active:scale-95 mt-2">
+             {editingSessId ? 'Terapkan Modifikasi' : 'Simpan Alokasi Sesi'}
           </button>
-          <button type="submit" className="w-full md:flex-1 py-4 bg-cyan-950/60 hover:bg-cyan-900/80 border border-cyan-500/50 text-cyan-300 font-bold rounded-xl transition-all duration-300 shadow-[0_0_20px_rgba(6,182,212,0.1)] active:scale-95 uppercase tracking-widest text-xs">
-            Injeksi & Sinkronisasi
-          </button>
-        </div>
-      </form>
-    </div>
-  );
-};
-
-// ==========================================
-// COMPONENT: ADMIN SETTINGS (Poin 1 CRUD Sesi)
-// ==========================================
-const AdminSettings: React.FC = () => {
-  const { sessions, updateSession, addSession, deleteSession } = useAppContext();
-  const [isAdding, setIsAdding] = useState(false);
-  const [newSess, setNewSess] = useState({ name: '', startTime: '', endTime: '', toleranceMinutes: 15 });
-  const [editingSession, setEditingSession] = useState<Session | null>(null);
-
-  const handleAdd = (e: React.FormEvent) => {
-    e.preventDefault(); addSession({ ...newSess, isActive: true }); setIsAdding(false); setNewSess({ name: '', startTime: '', endTime: '', toleranceMinutes: 15 });
-  };
-
-  const handleUpdate = (e: React.FormEvent) => {
-     e.preventDefault();
-     if(editingSession) {
-        updateSession(editingSession.id, {
-           name: editingSession.name,
-           startTime: editingSession.startTime,
-           endTime: editingSession.endTime,
-           toleranceMinutes: editingSession.toleranceMinutes
-        });
-        setEditingSession(null);
-     }
-  };
-
-  return (
-    <div className="space-y-6 animate-in fade-in duration-500 w-full relative">
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-slate-900/40 p-5 rounded-[2rem] border border-cyan-500/10">
-        <div><h2 className="text-2xl md:text-3xl font-black text-white tracking-widest uppercase">Konfigurasi Sesi</h2><p className="text-cyan-500/70 text-xs md:text-sm font-mono mt-1">Parameter Shift Waktu & Toleransi Keterlambatan</p></div>
-        <button onClick={() => setIsAdding(!isAdding)} className="flex w-full md:w-auto justify-center items-center gap-2 px-5 py-3 bg-cyan-900/40 text-cyan-300 hover:bg-cyan-800/60 border border-cyan-500/30 rounded-xl transition-all duration-300 font-bold active:scale-95 shadow-sm uppercase tracking-widest text-xs"><Plus className="w-4 h-4" /> Inisiasi Sesi Baru</button>
-      </div>
-
-      {isAdding && (
-        <form onSubmit={handleAdd} className="bg-slate-900/80 backdrop-blur-md border border-cyan-500/30 p-5 md:p-6 rounded-[1.5rem] grid grid-cols-1 md:grid-cols-5 gap-4 md:gap-5 items-end animate-in slide-in-from-top-4 shadow-[0_0_30px_rgba(6,182,212,0.1)]">
-          <div className="space-y-1.5"><label className="text-[10px] md:text-xs text-cyan-500/70 font-mono font-bold uppercase tracking-widest ml-1">Label Sesi</label><input required type="text" value={newSess.name} onChange={e=>setNewSess({...newSess, name: e.target.value})} className="w-full bg-black/40 border border-cyan-500/20 rounded-xl px-4 py-3.5 text-white font-mono outline-none focus:border-cyan-400 text-sm" placeholder="e.g. Kuliah Pagi" /></div>
-          <div className="space-y-1.5"><label className="text-[10px] md:text-xs text-cyan-500/70 font-mono font-bold uppercase tracking-widest ml-1">Jam Start</label><input required type="time" value={newSess.startTime} onChange={e=>setNewSess({...newSess, startTime: e.target.value})} className="w-full bg-black/40 border border-cyan-500/20 rounded-xl px-4 py-3.5 text-white font-mono outline-none focus:border-cyan-400 text-sm" /></div>
-          <div className="space-y-1.5"><label className="text-[10px] md:text-xs text-cyan-500/70 font-mono font-bold uppercase tracking-widest ml-1">Jam End</label><input required type="time" value={newSess.endTime} onChange={e=>setNewSess({...newSess, endTime: e.target.value})} className="w-full bg-black/40 border border-cyan-500/20 rounded-xl px-4 py-3.5 text-white font-mono outline-none focus:border-cyan-400 text-sm" /></div>
-          <div className="space-y-1.5"><label className="text-[10px] md:text-xs text-cyan-500/70 font-mono font-bold uppercase tracking-widest ml-1">Toleransi (Menit)</label><input required type="number" min="0" value={newSess.toleranceMinutes} onChange={e=>setNewSess({...newSess, toleranceMinutes: parseInt(e.target.value)})} className="w-full bg-black/40 border border-cyan-500/20 rounded-xl px-4 py-3.5 text-white font-mono outline-none focus:border-cyan-400 text-sm" /></div>
-          <button type="submit" className="w-full py-3.5 bg-cyan-950/60 hover:bg-cyan-900 border border-cyan-500/50 text-cyan-300 font-bold rounded-xl transition-all duration-300 shadow-lg active:scale-95 uppercase tracking-widest text-xs">Simpan Data</button>
         </form>
       )}
 
-      {editingSession && (
-         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/90 backdrop-blur-md p-4 animate-in fade-in zoom-in-95 duration-200">
-            <form onSubmit={handleUpdate} className="bg-slate-900/90 border border-cyan-500/30 p-6 md:p-8 rounded-[2rem] w-full max-w-md shadow-[0_0_50px_rgba(6,182,212,0.15)] relative">
-               <div className="flex justify-between items-center mb-6">
-                  <h3 className="text-xl md:text-2xl font-black text-white tracking-widest uppercase">Modifikasi Sesi</h3>
-                  <button type="button" onClick={() => setEditingSession(null)} className="p-2 bg-white/5 hover:bg-rose-900/60 hover:text-rose-400 rounded-full transition-colors text-slate-400 border border-transparent hover:border-rose-500/30"><X className="w-5 h-5"/></button>
-               </div>
-               <div className="space-y-4">
-                  <div className="space-y-1.5">
-                     <label className="text-[10px] md:text-xs text-cyan-500/70 font-mono font-bold uppercase tracking-widest ml-1">Label Sesi</label>
-                     <input required type="text" value={editingSession.name} onChange={e=>setEditingSession({...editingSession, name: e.target.value})} className="w-full bg-black/50 border border-cyan-500/20 rounded-xl px-4 py-3.5 text-white font-mono outline-none focus:border-cyan-400 text-sm" />
-                  </div>
-                  <div className="grid grid-cols-2 gap-4">
-                     <div className="space-y-1.5">
-                        <label className="text-[10px] md:text-xs text-cyan-500/70 font-mono font-bold uppercase tracking-widest ml-1">Jam Start</label>
-                        <input required type="time" value={editingSession.startTime} onChange={e=>setEditingSession({...editingSession, startTime: e.target.value})} className="w-full bg-black/50 border border-cyan-500/20 rounded-xl px-4 py-3.5 text-white font-mono outline-none focus:border-cyan-400 text-sm" />
-                     </div>
-                     <div className="space-y-1.5">
-                        <label className="text-[10px] md:text-xs text-cyan-500/70 font-mono font-bold uppercase tracking-widest ml-1">Jam End</label>
-                        <input required type="time" value={editingSession.endTime} onChange={e=>setEditingSession({...editingSession, endTime: e.target.value})} className="w-full bg-black/50 border border-cyan-500/20 rounded-xl px-4 py-3.5 text-white font-mono outline-none focus:border-cyan-400 text-sm" />
-                     </div>
-                  </div>
-                  <div className="space-y-1.5">
-                     <label className="text-[10px] md:text-xs text-cyan-500/70 font-mono font-bold uppercase tracking-widest ml-1">Toleransi (Menit)</label>
-                     <input required type="number" min="0" value={editingSession.toleranceMinutes} onChange={e=>setEditingSession({...editingSession, toleranceMinutes: parseInt(e.target.value)})} className="w-full bg-black/50 border border-cyan-500/20 rounded-xl px-4 py-3.5 text-white font-mono outline-none focus:border-cyan-400 text-sm" />
-                  </div>
-                  <button type="submit" className="w-full py-4 mt-4 bg-cyan-950/60 hover:bg-cyan-900/80 border border-cyan-500/50 text-cyan-300 font-bold uppercase tracking-widest rounded-2xl transition-all duration-300 shadow-[0_0_20px_rgba(6,182,212,0.1)] active:scale-95 text-xs">Simpan Perubahan</button>
-               </div>
-            </form>
-         </div>
-      )}
-
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-5">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 md:gap-6">
         {sessions.map(session => (
-          <div key={session.id} className={cn("p-5 md:p-6 rounded-[1.5rem] border transition-all duration-300 shadow-lg group relative overflow-hidden", session.isActive ? "bg-slate-900/60 border-cyan-500/20 hover:border-cyan-400/50 backdrop-blur-md" : "bg-black/40 opacity-70 border-slate-700/50 hover:opacity-100")}>
-            <div className="absolute top-0 left-0 w-1 h-full bg-cyan-500/30"></div>
-            <div className="flex justify-between items-start mb-5 pl-2">
-              <h3 className="text-xl font-black text-white tracking-wider">{session.name}</h3>
+          <div key={session.id} className={cn("p-6 rounded-[2rem] border transition-all duration-300 hover:shadow-lg group relative overflow-hidden", session.isActive ? "bg-[#0A1628]/80 border-cyan-500/30 hover:border-cyan-400/60 backdrop-blur-md shadow-[0_10px_30px_rgba(0,0,0,0.5)]" : "bg-[#050B14]/80 opacity-60 border-cyan-900 hover:opacity-100")}>
+            
+            <div className="absolute top-0 right-0 w-24 h-24 bg-cyan-600/5 rounded-bl-full pointer-events-none"></div>
+
+            <div className="flex justify-between items-start mb-6 relative z-10">
+              <h3 className="text-xl font-black text-cyan-50 uppercase tracking-widest max-w-[60%]">{session.name}</h3>
               <div className="flex gap-2">
-                <button onClick={() => updateSession(session.id, { isActive: !session.isActive })} className={cn("px-2.5 py-1 text-[9px] md:text-[10px] font-mono font-bold uppercase tracking-widest rounded border transition-all duration-300 shadow-sm active:scale-95", session.isActive ? "bg-emerald-950/40 text-emerald-400 border-emerald-500/30 hover:bg-emerald-900/60" : "bg-slate-800 text-slate-400 border-slate-700 hover:bg-slate-700")}>{session.isActive ? 'AKTIF' : 'NONAKTIF'}</button>
+                <button onClick={() => updateSession(session.id, { isActive: !session.isActive })} className={cn("px-4 py-2 text-[9px] font-black uppercase tracking-widest rounded-lg border transition-all duration-300 shadow-sm active:scale-95 flex items-center gap-1", session.isActive ? "bg-emerald-950/50 text-emerald-400 border-emerald-500/40 shadow-[0_0_10px_rgba(16,185,129,0.2)]" : "bg-slate-900/80 text-slate-500 border-slate-700")}>
+                   {session.isActive ? <><Activity className="w-3 h-3"/> Online</> : 'Offline'}
+                </button>
               </div>
             </div>
-            <div className="space-y-3 text-xs md:text-sm text-cyan-100/70 bg-black/40 p-4 rounded-xl border border-cyan-500/10 font-mono pl-3">
-              <div className="flex items-center gap-3"><Clock className="w-4 h-4 text-cyan-500/50"/> Jendela Waktu: <span className="text-cyan-300 font-bold bg-cyan-950/30 px-2 py-0.5 rounded border border-cyan-500/20">{session.startTime} - {session.endTime}</span></div>
-              <div className="flex items-center gap-3"><Activity className="w-4 h-4 text-purple-500/50"/> Batas Deviasi: <span className="text-purple-300 font-bold">{session.toleranceMinutes} min</span></div>
-            </div>
             
-            {/* Action Buttons */}
-            <div className="flex justify-end gap-2 mt-4 pt-3 border-t border-cyan-500/10">
-               <button onClick={() => setEditingSession(session)} className="p-1.5 text-blue-400 hover:text-white bg-blue-950/30 hover:bg-blue-800 border border-blue-500/20 rounded transition-colors" title="Edit Sesi">
-                  <Edit className="w-4 h-4"/>
+            <div className="space-y-4 text-xs font-mono bg-[#050B14] p-5 rounded-2xl border border-cyan-500/20 relative z-10 shadow-inner">
+              <div className="flex justify-between items-center text-cyan-400/80">
+                 <div className="flex items-center gap-3"><Clock className="w-4 h-4 text-cyan-500"/> Jendela Waktu</div>
+                 <span className="text-cyan-50 font-bold bg-[#0A1628] px-3 py-1.5 rounded-lg border border-cyan-500/20">{session.startTime} - {session.endTime}</span>
+              </div>
+              <div className="flex justify-between items-center text-cyan-400/80">
+                 <div className="flex items-center gap-3"><ActivitySquare className="w-4 h-4 text-purple-500"/> Deviasi Maksimal (Telat)</div>
+                 <span className="text-purple-300 font-bold bg-purple-950/40 px-3 py-1.5 rounded-lg border border-purple-500/30">+{session.toleranceMinutes} MIN</span>
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-2 mt-5 relative z-10">
+               <button onClick={() => startEdit(session)} className="flex items-center gap-2 px-4 py-2 text-[10px] font-black uppercase tracking-widest bg-blue-950/50 text-blue-400 hover:bg-blue-600 hover:text-white border border-blue-500/30 rounded-xl transition-all duration-300 active:scale-95">
+                 <Edit className="w-3.5 h-3.5" /> Modifikasi
                </button>
-               <button onClick={() => {if(confirm(`Hapus sesi ${session.name}?`)) deleteSession(session.id);}} className="p-1.5 text-rose-400 hover:text-white bg-rose-950/30 hover:bg-rose-800 border border-rose-500/20 rounded transition-colors" title="Hapus Sesi">
-                  <Trash2 className="w-4 h-4" />
+               <button onClick={() => {if(confirm(`Hapus permanen sesi ${session.name}?`)) deleteSession(session.id);}} className="flex items-center gap-2 px-4 py-2 text-[10px] font-black uppercase tracking-widest bg-rose-950/50 text-rose-400 hover:bg-rose-600 hover:text-white border border-rose-500/30 rounded-xl transition-all duration-300 active:scale-95">
+                 <Trash2 className="w-3.5 h-3.5" /> Hapus
                </button>
             </div>
           </div>
@@ -1746,7 +1671,7 @@ const AdminSettings: React.FC = () => {
 };
 
 const AdminReports: React.FC = () => {
-  const { logs, sessions, clusters, students, deleteLog } = useAppContext();
+  const { logs, sessions, clusters, deleteLog } = useAppContext();
   const [search, setSearch] = useState('');
   const [filterSession, setFilterSession] = useState('All');
   const [filterCluster, setFilterCluster] = useState('All');
@@ -1754,91 +1679,91 @@ const AdminReports: React.FC = () => {
   const [previewImage, setPreviewImage] = useState<string | null>(null);
 
   const filteredLogs = logs.filter(log => {
-    const student = students.find(s => s.nim === log.nim);
     const matchSearch = log.name.toLowerCase().includes(search.toLowerCase()) || log.nim.includes(search);
     const matchSession = filterSession === 'All' || log.sessionName === filterSession;
-    const matchCluster = filterCluster === 'All' || student?.clusterId === filterCluster;
+    const clusterName = clusters.find(c => c.id === filterCluster)?.name;
+    const matchCluster = filterCluster === 'All' || log.clusterName === clusterName;
     return matchSearch && matchSession && matchCluster;
   });
 
   return (
     <div className="space-y-6 animate-in fade-in duration-500 h-full flex flex-col relative w-full">
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-slate-900/40 p-5 rounded-[2rem] border border-cyan-500/10">
-        <div><h2 className="text-2xl md:text-3xl font-black text-white tracking-widest uppercase">Master Log</h2><p className="text-cyan-500/70 text-xs md:text-sm font-mono mt-1">Basis data histori biometrik, waktu, & geospasial.</p></div>
-        {/* Poin 3: Export Excel XLSX */}
-        <button onClick={() => exportToXLSX(filteredLogs, students, clusters)} className="w-full md:w-auto flex items-center justify-center gap-2 px-6 py-3 bg-emerald-950/60 hover:bg-emerald-900/80 border border-emerald-500/50 text-emerald-300 rounded-xl transition-all duration-300 font-bold shadow-[0_0_15px_rgba(16,185,129,0.2)] active:scale-95 whitespace-nowrap uppercase tracking-widest text-xs"><Download className="w-4 h-4" /> Export Report (XLSX)</button>
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+        <div>
+           <h2 className="text-2xl md:text-3xl font-black text-cyan-50 tracking-widest uppercase">Pusat Data Log</h2>
+           <p className="text-cyan-500/70 text-xs md:text-sm font-mono mt-1 uppercase">Histori Audit, Citra Biometrik & Geolokasi</p>
+        </div>
+        <button onClick={() => exportToExcel(filteredLogs)} className="w-full md:w-auto flex items-center justify-center gap-3 px-8 py-3.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white rounded-xl transition-all duration-300 font-black tracking-widest uppercase text-xs shadow-[0_0_20px_rgba(16,185,129,0.4)] active:scale-95">
+           <Download className="w-4 h-4" /> Export Report (XLSX)
+        </button>
       </div>
 
-      <div className="flex flex-col md:flex-row gap-3 md:gap-4">
+      <div className="flex flex-col md:flex-row gap-3 md:gap-4 bg-[#0A1628]/60 p-4 rounded-2xl border border-cyan-500/20 shadow-lg">
         <div className="relative flex-1">
-           <SearchIcon className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-cyan-500/50" />
-           <input type="text" placeholder="Cari ID / NIM..." value={search} onChange={e=>setSearch(e.target.value)} className="w-full bg-slate-900/60 border border-cyan-500/20 rounded-xl pl-10 pr-4 py-3.5 text-white font-mono outline-none focus:border-cyan-400 transition-colors shadow-inner text-sm placeholder-slate-600" />
+           <SearchIcon className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-cyan-600" />
+           <input type="text" placeholder="Pencarian spesifik..." value={search} onChange={e=>setSearch(e.target.value)} className="w-full bg-[#050B14] border border-cyan-500/30 rounded-xl pl-11 pr-4 py-3.5 text-cyan-50 outline-none focus:border-cyan-400 transition-colors shadow-inner font-mono text-sm" />
         </div>
-        <select value={filterCluster} onChange={e=>setFilterCluster(e.target.value)} className="bg-slate-900/60 border border-cyan-500/20 rounded-xl px-5 py-3.5 text-white font-mono outline-none focus:border-cyan-400 transition-colors shadow-inner w-full md:w-48 cursor-pointer appearance-none text-sm">
-          <option value="All">Semua Cluster</option>
+        <select value={filterCluster} onChange={e=>setFilterCluster(e.target.value)} className="bg-[#050B14] border border-cyan-500/30 rounded-xl px-5 py-3.5 text-cyan-50 outline-none focus:border-cyan-400 transition-colors shadow-inner w-full md:w-48 font-bold text-xs uppercase cursor-pointer appearance-none">
+          <option value="All">Filter: Semua Cluster</option>
           {clusters.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
         </select>
-        <select value={filterSession} onChange={e=>setFilterSession(e.target.value)} className="bg-slate-900/60 border border-cyan-500/20 rounded-xl px-5 py-3.5 text-white font-mono outline-none focus:border-cyan-400 transition-colors shadow-inner w-full md:w-48 cursor-pointer appearance-none text-sm">
-          <option value="All">Semua Shift</option>
-          {sessions.map(s => <option key={s.id} value={s.name}>Sesi: {s.name}</option>)}
+        <select value={filterSession} onChange={e=>setFilterSession(e.target.value)} className="bg-[#050B14] border border-cyan-500/30 rounded-xl px-5 py-3.5 text-cyan-50 outline-none focus:border-cyan-400 transition-colors shadow-inner w-full md:w-48 font-bold text-xs uppercase cursor-pointer appearance-none">
+          <option value="All">Filter: Semua Sesi</option>
+          {sessions.map(s => <option key={s.id} value={s.name}>{s.name}</option>)}
         </select>
       </div>
 
-      <div className="flex-1 bg-slate-900/60 backdrop-blur-md border border-cyan-500/20 rounded-[1.5rem] overflow-hidden flex flex-col shadow-[0_0_20px_rgba(0,0,0,0.3)]">
+      <div className="flex-1 bg-[#0A1628]/60 backdrop-blur-md border border-cyan-500/20 rounded-[1.5rem] overflow-hidden flex flex-col shadow-xl">
         <div className="overflow-x-auto">
           <table className="w-full text-left border-collapse min-w-[1000px]">
             <thead>
-              <tr className="bg-black/40 border-b border-cyan-500/20 text-cyan-500/70 text-xs tracking-widest uppercase font-mono">
-                <th className="p-4 md:p-5 font-bold">Biometrik</th>
-                <th className="p-4 md:p-5 font-bold">Data Subjek & Kategori</th>
-                <th className="p-4 md:p-5 font-bold">Timestamp Server</th>
-                <th className="p-4 md:p-5 font-bold">Sesi & Indikator</th>
-                <th className="p-4 md:p-5 font-bold">Radar Geospasial</th>
-                <th className="p-4 md:p-5 text-right font-bold">Aksi</th>
+              <tr className="bg-[#050B14]/80 border-b border-cyan-500/30 text-cyan-500 text-[10px] tracking-[0.2em] uppercase font-black">
+                <th className="p-4 md:p-5">Citra Visual</th>
+                <th className="p-4 md:p-5">Data Entitas</th>
+                <th className="p-4 md:p-5">Waktu Pencatatan (Log)</th>
+                <th className="p-4 md:p-5">Parameter Sesi</th>
+                <th className="p-4 md:p-5">Satelit Geofence</th>
+                <th className="p-4 md:p-5 text-right">Opsi</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-cyan-500/10">
-              {filteredLogs.map(log => {
-                const student = students.find(s => s.nim === log.nim);
-                const clusterName = clusters.find(c => c.id === student?.clusterId)?.name || 'Tanpa Cluster';
-                
-                return (
-                <tr key={log.id} className="hover:bg-cyan-950/30 transition-colors duration-200">
+            <tbody className="divide-y divide-cyan-900/30">
+              {filteredLogs.map(log => (
+                <tr key={log.id} className="hover:bg-cyan-900/20 transition-colors duration-200">
                   <td className="p-4 md:p-5">
-                    <div onClick={() => setPreviewImage(log.photoBase64)} className="w-14 h-14 md:w-16 md:h-16 rounded-xl overflow-hidden border-2 border-cyan-500/30 bg-black relative group cursor-pointer shadow-md hover:shadow-[0_0_15px_rgba(6,182,212,0.5)] hover:border-cyan-400 transition-all duration-300">
-                      <img src={log.photoBase64} alt="Selfie" className="w-full h-full object-cover sepia-[.2] hue-rotate-[180deg]" />
-                      <div className="absolute inset-0 bg-black/60 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity backdrop-blur-sm">
-                        <Maximize className="w-5 h-5 text-cyan-300" />
+                    <div onClick={() => setPreviewImage(log.photoBase64)} className="w-16 h-16 rounded-xl overflow-hidden border-2 border-cyan-500/40 bg-black relative group cursor-pointer shadow-md hover:shadow-[0_0_15px_rgba(6,182,212,0.6)] hover:border-cyan-300 transition-all duration-300">
+                      <img src={log.photoBase64} alt="Selfie" className="w-full h-full object-cover sepia-[.2] hue-rotate-[180deg] saturate-[1.5]" />
+                      <div className="absolute inset-0 bg-[#0A1628]/60 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity backdrop-blur-sm">
+                        <Maximize className="w-5 h-5 text-cyan-400" />
                       </div>
                     </div>
                   </td>
                   <td className="p-4 md:p-5">
-                     <p className="font-bold text-white text-sm md:text-base truncate max-w-[200px] tracking-wide">{log.name}</p>
-                     <p className="text-xs text-cyan-200/60 font-mono mt-0.5">{log.nim}</p>
-                     <p className="text-[9px] text-purple-400/80 font-mono uppercase tracking-widest mt-1.5">{clusterName}</p>
+                     <p className="font-bold text-cyan-50 text-sm uppercase tracking-wide truncate max-w-[200px] mb-1">{log.name}</p>
+                     <p className="text-xs text-cyan-400/80 font-mono tracking-widest">{log.nim}</p>
+                     <p className="text-[9px] mt-2 inline-block px-2 py-0.5 bg-cyan-950 text-cyan-300 rounded border border-cyan-500/20 font-bold uppercase tracking-wider">{log.clusterName || 'Tanpa Cluster'}</p>
                   </td>
                   <td className="p-4 md:p-5">
-                     <p className="text-cyan-100 font-bold font-mono text-base">{new Date(log.timestamp).toLocaleTimeString('id-ID')}</p>
-                     <p className="text-[10px] md:text-xs text-cyan-500/60 font-mono uppercase tracking-widest mt-0.5">{new Date(log.timestamp).toLocaleDateString('id-ID', { weekday: 'short', day: '2-digit', month: 'short' })}</p>
+                     <p className="text-cyan-50 font-black font-mono text-base tracking-wider mb-1 drop-shadow-md">{new Date(log.timestamp).toLocaleTimeString('id-ID')}</p>
+                     <p className="text-[10px] md:text-xs text-cyan-500/80 font-mono uppercase tracking-widest">{new Date(log.timestamp).toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'short' })}</p>
                   </td>
                   <td className="p-4 md:p-5">
-                     <p className="text-slate-200 text-xs md:text-sm font-bold mb-2 tracking-wide uppercase">{log.sessionName}</p>
-                     <span className={cn("px-3 py-1 text-[9px] md:text-[10px] font-mono font-bold uppercase tracking-widest rounded border shadow-sm", log.status === 'Hadir' ? "bg-emerald-950/40 text-emerald-400 border-emerald-500/30" : "bg-amber-950/40 text-amber-400 border-amber-500/30")}>{log.status}</span>
+                     <p className="text-cyan-200 text-xs font-bold uppercase tracking-widest mb-2">{log.sessionName}</p>
+                     <span className={cn("px-3 py-1 text-[9px] font-black uppercase tracking-[0.2em] rounded-md border shadow-sm", log.status === 'Hadir' ? "bg-emerald-950/50 text-emerald-400 border-emerald-500/40 shadow-[0_0_10px_rgba(16,185,129,0.2)]" : "bg-amber-950/50 text-amber-400 border-amber-500/40 shadow-[0_0_10px_rgba(245,158,11,0.2)]")}>{log.status}</span>
                   </td>
                   <td className="p-4 md:p-5">
-                    <a href={`https://www.google.com/maps?q=${log.location.lat},${log.location.lng}`} target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 px-3 py-2 bg-cyan-950/40 hover:bg-cyan-900/60 hover:text-white text-cyan-400 text-[9px] md:text-[10px] font-bold uppercase tracking-widest rounded-lg border border-cyan-500/30 transition-all duration-300 shadow-sm active:scale-95">
-                      <MapPin className="w-3.5 h-3.5" /> Lacak Sinyal GPS
+                    <a href={`https://www.google.com/maps?q=${log.location.lat},${log.location.lng}`} target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 px-3 py-2 bg-cyan-950/50 hover:bg-cyan-600 hover:text-white text-cyan-400 text-[9px] font-black uppercase tracking-[0.2em] rounded-lg border border-cyan-500/40 transition-all duration-300 shadow-sm active:scale-95">
+                      <MapPin className="w-3 h-3" /> Pindai G-Maps
                     </a>
-                    <p className="text-[9px] md:text-[10px] text-cyan-500/50 mt-2 font-mono bg-black/40 inline-block px-2 py-0.5 rounded border border-cyan-500/10">{log.location.lat.toFixed(5)}, {log.location.lng.toFixed(5)}</p>
+                    <p className="text-[9px] text-cyan-600/70 mt-2.5 font-mono uppercase tracking-widest bg-[#050B14] inline-block px-2 py-1 rounded-md border border-cyan-900/50">{log.location.lat.toFixed(5)}, {log.location.lng.toFixed(5)}</p>
                   </td>
                   <td className="p-4 md:p-5 text-right">
-                    <button onClick={() => { if(confirm(`Peringatan: Aksi ini menghapus log absensi secara permanen. Lanjutkan?`)) deleteLog(log.id); }} title="Purge Record" className="p-2.5 text-slate-500 hover:text-rose-400 hover:bg-rose-950/50 rounded-xl transition-all duration-300 border border-transparent hover:border-rose-500/30 active:scale-95">
+                    <button onClick={() => { if(confirm(`Hapus permanen log absensi entitas ${log.name}?`)) deleteLog(log.id); }} title="Terminasi Log" className="p-2.5 text-rose-500 hover:text-white hover:bg-rose-600 rounded-xl transition-all duration-300 border border-transparent hover:border-rose-500/50 hover:shadow-[0_0_15px_rgba(244,63,94,0.4)] active:scale-95">
                       <Trash2 className="w-5 h-5" />
                     </button>
                   </td>
                 </tr>
-              )})}
-              {filteredLogs.length === 0 && <tr><td colSpan={6} className="p-12 text-center text-cyan-500/50 font-mono tracking-widest uppercase text-sm">Tidak ada matriks data pada log.</td></tr>}
+              ))}
+              {filteredLogs.length === 0 && <tr><td colSpan={6} className="p-16 text-center text-cyan-800 font-mono text-sm uppercase tracking-widest">Database Log Kosong / Tidak Ditemukan.</td></tr>}
             </tbody>
           </table>
         </div>
@@ -1846,23 +1771,17 @@ const AdminReports: React.FC = () => {
       
       {/* MODAL FULLSCREEN PREVIEW IMAGE RESPONSIVE */}
       {previewImage && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/95 backdrop-blur-xl p-4 animate-in fade-in zoom-in-95 duration-300" onClick={() => setPreviewImage(null)}>
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-[#050B14]/95 backdrop-blur-2xl p-4 animate-in fade-in zoom-in-95 duration-300" onClick={() => setPreviewImage(null)}>
           <div className="relative max-w-3xl w-full flex flex-col items-center justify-center">
-            <button onClick={() => setPreviewImage(null)} className="absolute -top-14 md:-top-16 right-0 md:-right-8 p-3 bg-white/5 hover:bg-rose-900/50 hover:text-rose-400 rounded-full transition-all duration-300 text-slate-500 border border-transparent hover:border-rose-500/30">
-              <X className="w-6 h-6 md:w-8 md:h-8"/>
+            <button onClick={() => setPreviewImage(null)} className="absolute -top-14 md:-top-16 right-0 md:-right-8 p-3 bg-rose-950/50 hover:bg-rose-500 hover:text-white rounded-xl transition-all duration-300 text-rose-400 shadow-[0_0_15px_rgba(244,63,94,0.2)] active:scale-90 border border-rose-500/30">
+              <X className="w-6 h-6"/>
             </button>
-            <div className="relative w-full overflow-hidden rounded-[2rem] border-[2px] border-cyan-500/50 shadow-[0_0_60px_rgba(6,182,212,0.3)] bg-black p-2">
-                <div className="w-full h-full rounded-[1.5rem] overflow-hidden relative">
-                   <img src={previewImage} alt="Preview Selfie Fullscreen" className="max-w-full max-h-[75vh] md:max-h-[85vh] w-full object-contain mx-auto sepia-[.2] hue-rotate-[180deg]" onClick={e => e.stopPropagation()} />
-                   <div className="absolute inset-0 pointer-events-none bg-[url('https://www.transparenttextures.com/patterns/scan-lines-light.png')] opacity-20 mix-blend-overlay"></div>
-                   {/* Grid UI on preview */}
-                   <div className="absolute inset-0 pointer-events-none border-[1px] border-cyan-500/20">
-                      <div className="absolute top-1/2 w-full h-[1px] bg-cyan-500/20"></div>
-                      <div className="absolute left-1/2 h-full w-[1px] bg-cyan-500/20"></div>
-                   </div>
-                </div>
+            <div className="relative w-full overflow-hidden rounded-[2rem] border-[4px] md:border-[8px] border-cyan-500/30 shadow-[0_0_80px_rgba(6,182,212,0.4)] bg-black">
+                {/* HUD Overlay for fullscreen */}
+                <div className="absolute inset-0 pointer-events-none bg-[linear-gradient(transparent_95%,rgba(6,182,212,0.2)_100%),linear-gradient(90deg,transparent_95%,rgba(6,182,212,0.2)_100%)] bg-[length:40px_40px] mix-blend-screen opacity-50"></div>
+                <img src={previewImage} alt="Preview Selfie Fullscreen" className="max-w-full max-h-[75vh] md:max-h-[85vh] w-full object-contain mx-auto sepia-[.2] hue-rotate-[180deg] saturate-[1.5]" onClick={e => e.stopPropagation()} />
             </div>
-            <p className="mt-5 text-cyan-500/50 text-[10px] md:text-xs font-mono tracking-widest uppercase bg-black/60 px-4 py-2 rounded-full border border-cyan-500/20 shadow-inner">Ketuk area luar untuk terminasi pratinjau</p>
+            <p className="mt-5 text-cyan-400 text-[10px] font-mono tracking-[0.2em] bg-[#0A1628] px-4 py-2 rounded-lg border border-cyan-500/20 uppercase">Ketuk area luar untuk terminasi pratinjau</p>
           </div>
         </div>
       )}
@@ -1870,102 +1789,166 @@ const AdminReports: React.FC = () => {
   );
 };
 
+const AdminGeofence: React.FC = () => {
+  const { geofence, updateGeofence } = useAppContext();
+  const [lat, setLat] = useState(geofence.lat.toString());
+  const [lng, setLng] = useState(geofence.lng.toString());
+  const [radius, setRadius] = useState(geofence.radius.toString());
+  const [locationName, setLocationName] = useState(geofence.name || 'Klinik Radiologi');
+
+  const handleSave = (e: React.FormEvent) => {
+    e.preventDefault();
+    updateGeofence({ lat: parseFloat(lat), lng: parseFloat(lng), radius: parseInt(radius), name: locationName });
+    alert('Konfigurasi spasial berhasil disimpan dan disinkronisasikan ke Server.');
+  };
+
+  const getMyLocation = () => {
+    if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        (pos) => { setLat(pos.coords.latitude.toString()); setLng(pos.coords.longitude.toString()); },
+        () => alert('Sensor GPS gagal mengunci lokasi.')
+      );
+    }
+  };
+
+  return (
+    <div className="space-y-6 animate-in fade-in duration-500 max-w-3xl">
+      <div>
+        <h2 className="text-2xl md:text-3xl font-black text-cyan-50 tracking-widest uppercase">Konfigurasi Geofencing</h2>
+        <p className="text-cyan-500/70 text-xs md:text-sm font-mono mt-1 uppercase">Pemetaan radius keamanan area kerja</p>
+      </div>
+
+      <form onSubmit={handleSave} className="bg-[#0A1628]/80 backdrop-blur-md border border-cyan-500/30 p-6 md:p-8 rounded-[2rem] space-y-6 md:space-y-8 shadow-[0_15px_40px_rgba(0,0,0,0.5)]">
+        <div className="p-5 bg-cyan-950/30 border border-cyan-500/30 rounded-2xl flex items-start gap-4 shadow-inner relative overflow-hidden">
+          <div className="absolute left-0 top-0 w-1 h-full bg-cyan-500"></div>
+          <Navigation className="w-7 h-7 text-cyan-400 mt-1 shrink-0 drop-shadow-[0_0_8px_rgba(6,182,212,0.8)]" />
+          <p className="text-xs text-cyan-100/90 leading-relaxed font-mono uppercase tracking-wide">Radar sistem hanya akan mengizinkan otorisasi kehadiran jika kordinat spasial pengguna (secara realtime) berada dalam zona hijau (<b>Radius Maksimal</b>) dari titik pusat radar di bawah ini.</p>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-5 md:gap-6">
+          <div className="space-y-1.5 md:col-span-2">
+             <label className="text-[10px] text-cyan-500 font-bold uppercase tracking-widest ml-1">Nama Titik Radar (Pesan Kegagalan)</label>
+             <input required type="text" value={locationName} onChange={e=>setLocationName(e.target.value)} className="w-full bg-[#050B14] border border-cyan-500/30 rounded-xl px-4 py-3.5 text-cyan-50 outline-none focus:border-cyan-400 transition-colors shadow-inner text-sm font-mono" placeholder="Contoh: Gedung Klinik Pusat" />
+          </div>
+          <div className="space-y-1.5">
+            <label className="text-[10px] text-cyan-500 font-bold uppercase tracking-widest ml-1">Sumbu Y (Latitude)</label>
+            <input required type="number" step="any" value={lat} onChange={e=>setLat(e.target.value)} className="w-full bg-[#050B14] border border-cyan-500/30 rounded-xl px-4 py-3.5 text-cyan-50 outline-none focus:border-cyan-400 transition-colors shadow-inner font-mono text-sm" />
+          </div>
+          <div className="space-y-1.5">
+            <label className="text-[10px] text-cyan-500 font-bold uppercase tracking-widest ml-1">Sumbu X (Longitude)</label>
+            <input required type="number" step="any" value={lng} onChange={e=>setLng(e.target.value)} className="w-full bg-[#050B14] border border-cyan-500/30 rounded-xl px-4 py-3.5 text-cyan-50 outline-none focus:border-cyan-400 transition-colors shadow-inner font-mono text-sm" />
+          </div>
+        </div>
+
+        <div className="space-y-1.5">
+           <label className="text-[10px] text-cyan-500 font-bold uppercase tracking-widest ml-1">Limitasi Jarak Radar (Meter)</label>
+           <input required type="number" min="10" value={radius} onChange={e=>setRadius(e.target.value)} className="w-full bg-[#050B14] border border-cyan-500/30 rounded-xl px-4 py-4 text-cyan-400 outline-none focus:border-cyan-400 transition-colors shadow-inner font-black text-lg md:text-xl text-center tracking-widest" />
+        </div>
+
+        <div className="flex flex-col md:flex-row gap-3 md:gap-4 pt-8 border-t border-cyan-900/50">
+          <button type="button" onClick={getMyLocation} className="w-full md:w-auto px-6 py-4 bg-[#050B14] hover:bg-cyan-950/40 border border-cyan-500/40 text-cyan-400 font-black tracking-widest uppercase text-xs rounded-xl transition-all duration-300 flex items-center justify-center gap-3 active:scale-95 shadow-sm">
+            <MapPin className="w-4 h-4" /> Kalibrasi Posisi
+          </button>
+          <button type="submit" className="w-full md:flex-1 py-4 bg-cyan-600 hover:bg-cyan-500 text-white font-black tracking-[0.15em] uppercase text-xs rounded-xl transition-all duration-300 shadow-[0_0_20px_rgba(6,182,212,0.4)] active:scale-95 border border-cyan-400/50">
+            Kunci Pengaturan Spasial
+          </button>
+        </div>
+      </form>
+    </div>
+  );
+};
+
+
 const SearchIcon = ({ className }: { className?: string }) => (
   <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
 );
 
 const AdminLayout: React.FC<{ children: React.ReactNode, activeRoute: string, setRoute: (r:string)=>void }> = ({ children, activeRoute, setRoute }) => {
-  const { syncStatus, forceManualSync } = useAppContext();
+  const { syncStatus } = useAppContext();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const handleLogout = () => { localStorage.removeItem('axaxyz_admin_auth'); setRoute('admin-login'); };
 
   const navItems = [
-    { id: 'admin-dashboard', icon: BarChart3, label: 'Data Analitik' },
-    { id: 'admin-students', icon: Database, label: 'Data Subjek / MHS' },
-    { id: 'admin-clusters', icon: Layers, label: 'Manajemen Cluster' },
-    { id: 'admin-reports', icon: FileText, label: 'Master Log Laporan' },
-    { id: 'admin-geofence', icon: Map, label: 'Parameter Geospasial' },
-    { id: 'admin-settings', icon: Settings, label: 'Konfigurasi Sesi' },
+    { id: 'admin-dashboard', icon: ActivitySquare, label: 'Dashboard Analisis' },
+    { id: 'admin-clusters', icon: Network, label: 'Manajemen Cluster' },
+    { id: 'admin-students', icon: Database, label: 'Database Entitas' },
+    { id: 'admin-reports', icon: FileText, label: 'Pusat Data Log' },
+    { id: 'admin-geofence', icon: Map, label: 'Sistem Geofencing' },
+    { id: 'admin-settings', icon: Calendar, label: 'Konfigurasi Sesi' },
   ];
 
   return (
-    <div className="min-h-screen bg-slate-950 flex text-slate-200 font-sans w-full overflow-hidden relative selection:bg-cyan-500/30">
-      
-      {/* RADIOLOGY BACKGROUND */}
-      <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-slate-900 via-slate-950 to-slate-950"></div>
-      <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/carbon-fibre.png')] opacity-5 mix-blend-overlay"></div>
+    <div className="min-h-screen bg-[#050B14] flex text-cyan-50 font-sans w-full overflow-hidden relative radiology-bg">
       
       {/* MOBILE MENU OVERLAY */}
       {isMobileMenuOpen && (
-         <div className="fixed inset-0 bg-black/90 z-40 md:hidden backdrop-blur-md animate-in fade-in duration-300" onClick={() => setIsMobileMenuOpen(false)}></div>
+         <div className="fixed inset-0 bg-[#050B14]/90 z-40 md:hidden backdrop-blur-md animate-in fade-in duration-300" onClick={() => setIsMobileMenuOpen(false)}></div>
       )}
 
       {/* RESPONSIVE SIDEBAR */}
       <aside className={cn(
-         "fixed inset-y-0 left-0 z-50 w-[280px] md:w-72 bg-slate-950/95 md:bg-slate-950/60 border-r border-cyan-500/10 flex flex-col backdrop-blur-2xl transition-transform duration-500 ease-[cubic-bezier(0.16,1,0.3,1)] md:relative md:translate-x-0 shadow-[20px_0_50px_rgba(0,0,0,0.5)] md:shadow-none",
+         "fixed inset-y-0 left-0 z-50 w-[280px] md:w-72 bg-[#0A1628]/95 border-r border-cyan-500/20 flex flex-col backdrop-blur-3xl transition-transform duration-500 ease-[cubic-bezier(0.16,1,0.3,1)] md:relative md:translate-x-0 shadow-[20px_0_50px_rgba(0,0,0,0.8)] md:shadow-none",
          isMobileMenuOpen ? "translate-x-0" : "-translate-x-full"
       )}>
-        <div className="p-6 md:p-8 border-b border-cyan-500/10 flex items-center justify-between bg-black/20">
-          <div className="flex items-center gap-3 md:gap-4">
-             <div className="w-10 h-10 md:w-12 md:h-12 bg-slate-900 rounded-xl md:rounded-2xl flex items-center justify-center shadow-[0_0_15px_rgba(6,182,212,0.3)] overflow-hidden p-1.5 md:p-2 border border-cyan-500/30">
-                <img src="/axalogo.png" alt="ABSENSI DEPT. RKG" className="w-full h-full object-contain brightness-150 grayscale contrast-125" onError={(e) => { e.currentTarget.style.display = 'none'; e.currentTarget.nextElementSibling?.classList.remove('hidden'); }} />
+        <div className="p-6 md:p-8 border-b border-cyan-900/50 flex items-center justify-between">
+          <div className="flex items-center gap-4">
+             <div className="w-12 h-12 bg-[#050B14] border border-cyan-500/50 rounded-xl flex items-center justify-center shadow-[0_0_15px_rgba(6,182,212,0.4)] overflow-hidden p-2">
+                <img src="/axalogo.png" alt="RKG" className="w-full h-full object-contain filter drop-shadow-[0_0_5px_rgba(6,182,212,0.8)]" onError={(e) => { e.currentTarget.style.display = 'none'; e.currentTarget.nextElementSibling?.classList.remove('hidden'); }} />
+                <ActivitySquare className="text-cyan-400 w-full h-full hidden" />
              </div>
-             <div>
-                <h1 className="font-black text-xl md:text-2xl tracking-[0.15em] text-cyan-50 drop-shadow-[0_0_5px_rgba(6,182,212,0.5)]">R.K.G</h1>
-                <p className="text-[8px] md:text-[9px] uppercase tracking-[0.2em] text-cyan-500/80 font-mono mt-0.5">Admin Security Core</p>
+             <div className="flex flex-col">
+                <span className="font-black text-lg md:text-xl tracking-[0.2em] text-cyan-50 uppercase drop-shadow-[0_0_10px_rgba(6,182,212,0.5)]">DEPT. RKG</span>
+                <span className="text-[7px] md:text-[8px] text-cyan-400 font-mono tracking-[0.3em] uppercase mt-1">Security Core Admin</span>
              </div>
           </div>
-          <button className="md:hidden p-2 bg-white/5 hover:bg-white/10 rounded-xl text-slate-400 transition-colors" onClick={() => setIsMobileMenuOpen(false)}>
+          <button className="md:hidden p-2 bg-cyan-950/50 border border-cyan-500/30 rounded-xl text-cyan-400 transition-colors" onClick={() => setIsMobileMenuOpen(false)}>
              <X className="w-5 h-5"/>
           </button>
         </div>
         
-        <nav className="flex-1 p-4 md:p-5 space-y-2 overflow-y-auto custom-scrollbar">
+        <nav className="flex-1 p-4 md:p-5 space-y-3 overflow-y-auto custom-scrollbar">
           {navItems.map(item => (
-            <button key={item.id} onClick={() => { setRoute(item.id); setIsMobileMenuOpen(false); }} className={cn("w-full flex items-center gap-4 px-5 py-3.5 rounded-2xl transition-all duration-300 text-xs font-bold tracking-widest uppercase font-mono active:scale-[0.98]", activeRoute === item.id ? "bg-cyan-950/40 text-cyan-300 border border-cyan-500/40 shadow-[inset_0_0_20px_rgba(6,182,212,0.15)]" : "text-cyan-100/50 hover:bg-white/5 hover:text-cyan-100/90 border border-transparent hover:border-cyan-500/10")}>
-              <item.icon className={cn("w-4 h-4 transition-transform duration-300", activeRoute === item.id && "scale-110 text-cyan-400")} /> {item.label}
+            <button key={item.id} onClick={() => { setRoute(item.id); setIsMobileMenuOpen(false); }} className={cn("w-full flex items-center gap-4 px-5 py-4 rounded-xl transition-all duration-300 text-xs font-black tracking-widest uppercase active:scale-[0.98] border", activeRoute === item.id ? "bg-cyan-950/60 text-cyan-300 border-cyan-500/50 shadow-[inset_0_0_20px_rgba(6,182,212,0.2)] shadow-[0_0_15px_rgba(6,182,212,0.2)]" : "text-cyan-600/70 hover:bg-[#050B14] hover:text-cyan-400 border-transparent hover:border-cyan-900/50")}>
+              <item.icon className={cn("w-5 h-5 transition-transform duration-300", activeRoute === item.id && "scale-110 drop-shadow-[0_0_8px_rgba(6,182,212,0.8)]")} /> {item.label}
             </button>
           ))}
         </nav>
         
-        <div className="p-4 md:p-5 border-t border-cyan-500/10 bg-black/20">
-          <button onClick={handleLogout} className="w-full flex items-center justify-center gap-3 px-5 py-3.5 rounded-2xl text-rose-400/80 bg-rose-950/20 hover:bg-rose-900/60 hover:text-rose-300 transition-all duration-300 text-xs tracking-widest uppercase font-mono font-bold border border-rose-500/20 active:scale-95 shadow-sm hover:border-rose-500/50 hover:shadow-[0_0_15px_rgba(244,63,94,0.3)]"><LogOut className="w-4 h-4" /> Terminasi Akses</button>
+        <div className="p-4 md:p-5 border-t border-cyan-900/50">
+          <button onClick={handleLogout} className="w-full flex items-center justify-center gap-3 px-5 py-4 rounded-xl text-rose-400 bg-rose-950/30 hover:bg-rose-600 hover:text-white transition-all duration-300 text-[10px] font-black uppercase tracking-[0.2em] border border-rose-500/30 active:scale-95 shadow-sm hover:shadow-[0_0_15px_rgba(244,63,94,0.4)]">
+             <LogOut className="w-4 h-4" /> Terminasi Sesi Admin
+          </button>
         </div>
       </aside>
 
-      <main className="flex-1 relative overflow-y-auto w-full h-screen custom-scrollbar bg-slate-950/50">
-        
+      <main className="flex-1 relative overflow-y-auto w-full h-screen custom-scrollbar">
         {/* RESPONSIVE HEADER & STATUS BADGE */}
-        <header className="sticky top-0 p-4 md:p-5 flex justify-between md:justify-end items-center z-30 w-full bg-slate-950/80 backdrop-blur-xl border-b border-cyan-500/10 shadow-lg">
-           <button className="md:hidden p-2.5 bg-slate-900 border border-cyan-500/20 hover:bg-slate-800 rounded-xl text-cyan-400 transition-colors active:scale-95 shadow-sm" onClick={() => setIsMobileMenuOpen(true)}>
+        <header className="sticky top-0 p-4 md:p-6 flex justify-between md:justify-end items-center z-30 w-full bg-[#0A1628]/80 backdrop-blur-xl border-b border-cyan-900/50 shadow-[0_4px_30px_rgba(0,0,0,0.5)]">
+           <button className="md:hidden p-2.5 bg-[#050B14] border border-cyan-500/30 rounded-xl text-cyan-400 transition-colors active:scale-95 shadow-[0_0_10px_rgba(6,182,212,0.2)]" onClick={() => setIsMobileMenuOpen(true)}>
               <Menu className="w-5 h-5" />
            </button>
            
-           <div className="flex items-center gap-3">
-               <button onClick={forceManualSync} className="p-2 md:px-4 md:py-2 bg-slate-900 hover:bg-cyan-950/50 border border-cyan-500/20 hover:border-cyan-500/50 text-cyan-400 rounded-full md:rounded-xl transition-all duration-300 flex items-center gap-2 shadow-sm active:scale-95" title="Force Sync ke Cloud">
-                  <Upload className="w-3.5 h-3.5 md:w-4 md:h-4" />
-                  <span className="hidden md:inline text-[9px] md:text-[10px] font-mono tracking-widest uppercase font-bold">Injeksi Cloud</span>
-               </button>
-               
-               <div className="flex items-center gap-2 px-3 md:px-4 py-2 bg-black/60 border border-cyan-500/20 rounded-full md:rounded-xl text-[9px] md:text-[10px] font-mono font-bold shadow-inner">
-                   {syncStatus === 'syncing' && <><RefreshCcw className="w-3.5 h-3.5 md:w-4 md:h-4 animate-spin text-cyan-400"/> <span className="text-cyan-400 tracking-widest uppercase hidden md:inline">Syncing...</span></>}
-                   {syncStatus === 'synced' && <><CheckCircle2 className="w-3.5 h-3.5 md:w-4 md:h-4 text-emerald-400"/> <span className="text-emerald-400 tracking-widest uppercase hidden md:inline">Cloud Terhubung</span></>}
-                   {syncStatus === 'error' && <><CloudOff className="w-3.5 h-3.5 md:w-4 md:h-4 text-rose-400"/> <span className="text-rose-400 tracking-widest uppercase hidden md:inline">Sync Gagal</span></>}
-                   {syncStatus === 'offline' && <><CloudOff className="w-3.5 h-3.5 md:w-4 md:h-4 text-slate-500"/> <span className="text-slate-500 tracking-widest uppercase hidden md:inline">Mode Lokal</span></>}
-               </div>
+           <div className="flex items-center gap-2.5 px-4 md:px-5 py-2 md:py-2.5 bg-[#050B14] border border-cyan-500/30 rounded-xl text-[9px] md:text-[10px] font-bold shadow-[0_0_20px_rgba(0,0,0,0.5)] transition-all font-mono">
+               {syncStatus === 'syncing' && <><RefreshCcw className="w-3.5 h-3.5 md:w-4 md:h-4 animate-spin text-cyan-400"/> <span className="text-cyan-400 tracking-[0.2em] uppercase">Syncing Cloud...</span></>}
+               {syncStatus === 'synced' && <><Cloud className="w-3.5 h-3.5 md:w-4 md:h-4 text-emerald-400 drop-shadow-[0_0_5px_rgba(16,185,129,0.8)]"/> <span className="text-emerald-400 tracking-[0.2em] uppercase">Database Synced</span></>}
+               {syncStatus === 'error' && <><CloudOff className="w-3.5 h-3.5 md:w-4 md:h-4 text-rose-400"/> <span className="text-rose-400 tracking-[0.2em] uppercase">Sync Error</span></>}
+               {syncStatus === 'offline' && <><ServerCrash className="w-3.5 h-3.5 md:w-4 md:h-4 text-amber-500"/> <span className="text-amber-500 tracking-[0.2em] uppercase">Local Mode</span></>}
            </div>
         </header>
 
-        <div className="absolute top-[10%] right-[-10%] w-[50%] h-[50%] bg-cyan-900/10 rounded-full blur-[120px] pointer-events-none"></div>
+        {/* Global Lighting Effects */}
+        <div className="absolute top-[-10%] right-[-10%] w-[50%] h-[50%] bg-cyan-600/10 rounded-full blur-[120px] pointer-events-none"></div>
+        <div className="absolute bottom-[-10%] left-[-10%] w-[50%] h-[50%] bg-blue-600/10 rounded-full blur-[120px] pointer-events-none"></div>
+        
         <div className="p-4 md:p-8 max-w-7xl mx-auto relative z-10 min-h-full pb-20">{children}</div>
       </main>
       
       {/* GLOBAL SCROLLBAR STYLING */}
       <style>{`
-        .custom-scrollbar::-webkit-scrollbar { width: 6px; height: 6px; }
-        .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
-        .custom-scrollbar::-webkit-scrollbar-thumb { background: rgba(6, 182, 212, 0.2); border-radius: 10px; }
-        .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: rgba(6, 182, 212, 0.4); }
+        .custom-scrollbar::-webkit-scrollbar { width: 4px; height: 4px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: #050B14; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: rgba(6, 182, 212, 0.3); border-radius: 10px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: rgba(6, 182, 212, 0.6); }
       `}</style>
     </div>
   );
@@ -1984,7 +1967,7 @@ export default function App() {
       }
       link.href = '/axalogo.png';
       link.type = 'image/png';
-      document.title = "DEPT. RKG - Absensi Biometrik";
+      document.title = "Sistem Radiologi - DEPT. RKG";
     }
   }, []);
 
@@ -1995,9 +1978,9 @@ export default function App() {
 
   return (
     <AppProvider>
-      <div className="fixed bottom-4 md:bottom-6 right-4 md:right-6 z-[999] flex gap-2 md:gap-3 bg-black/80 backdrop-blur-xl p-2.5 rounded-[1.5rem] border border-cyan-500/20 shadow-[0_0_30px_rgba(0,0,0,0.8)]">
-        <button onClick={() => setRoute('student')} className={cn("px-4 md:px-5 py-2.5 md:py-3 rounded-xl text-[9px] md:text-[10px] font-mono font-bold uppercase tracking-widest transition-all duration-300 active:scale-95 shadow-sm", route === 'student' ? "bg-cyan-900/60 text-cyan-300 border border-cyan-500/50 shadow-[0_0_15px_rgba(6,182,212,0.3)]" : "bg-white/5 text-slate-400 hover:bg-cyan-950/40 hover:text-cyan-300 border border-transparent hover:border-cyan-500/30")}>Portal MHS</button>
-        <button onClick={() => setRoute(typeof window !== 'undefined' && localStorage.getItem('axaxyz_admin_auth') === 'true' ? 'admin-dashboard' : 'admin-login')} className={cn("px-4 md:px-5 py-2.5 md:py-3 rounded-xl text-[9px] md:text-[10px] font-mono font-bold uppercase tracking-widest transition-all duration-300 active:scale-95 shadow-sm", route.startsWith('admin') ? "bg-purple-900/60 text-purple-300 border border-purple-500/50 shadow-[0_0_15px_rgba(168,85,247,0.3)]" : "bg-white/5 text-slate-400 hover:bg-purple-950/40 hover:text-purple-300 border border-transparent hover:border-purple-500/30")}>Admin Core</button>
+      <div className="fixed bottom-4 md:bottom-6 right-4 md:right-6 z-[999] flex gap-2 md:gap-3 bg-[#0A1628]/90 backdrop-blur-xl p-2.5 rounded-2xl border border-cyan-500/30 shadow-[0_20px_50px_rgba(0,0,0,0.8)]">
+        <button onClick={() => setRoute('student')} className={cn("px-4 md:px-6 py-2.5 md:py-3.5 rounded-xl text-[9px] md:text-[10px] font-black uppercase tracking-[0.2em] transition-all duration-300 active:scale-95 shadow-sm border", route === 'student' ? "bg-cyan-600 text-white shadow-[0_0_15px_rgba(6,182,212,0.4)] border-cyan-400" : "bg-[#050B14] text-cyan-600 hover:bg-cyan-950/50 hover:text-cyan-400 border-transparent hover:border-cyan-900/50")}>Terminal MHS</button>
+        <button onClick={() => setRoute(typeof window !== 'undefined' && localStorage.getItem('axaxyz_admin_auth') === 'true' ? 'admin-dashboard' : 'admin-login')} className={cn("px-4 md:px-6 py-2.5 md:py-3.5 rounded-xl text-[9px] md:text-[10px] font-black uppercase tracking-[0.2em] transition-all duration-300 active:scale-95 shadow-sm border", route.startsWith('admin') ? "bg-blue-600 text-white shadow-[0_0_15px_rgba(37,99,235,0.4)] border-blue-400" : "bg-[#050B14] text-cyan-600 hover:bg-cyan-950/50 hover:text-cyan-400 border-transparent hover:border-cyan-900/50")}>Area Admin</button>
       </div>
 
       {route === 'student' && <AttendanceWizard />}
@@ -2013,6 +1996,9 @@ export default function App() {
           {route === 'admin-reports' && <AdminReports />}
         </AdminLayout>
       )}
+
+      {/* PENTING: Hapus tanda komentar di bawah ini saat kode dijalankan di lokal/Vercel */}
+      {/* <SpeedInsights /> */}
     </AppProvider>
   );
 }
