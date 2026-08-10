@@ -12,7 +12,7 @@ const teamData = [
          name: "M. Aksa Arsyad, drg., S.KG", 
          role: "Lead Developer", 
          dept: "Dept. RKG RSIGM UMI", 
-         img: "/public/axaprofil.jpg", 
+         img: "/axaprofil.jpg", 
          ig: "https://www.instagram.com/axaaxyz_01" 
       },
       { 
