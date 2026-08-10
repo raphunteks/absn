@@ -16,6 +16,7 @@ import { format, startOfDay, endOfDay } from 'date-fns';
 
 // ==========================================
 // DYNAMIC SCRIPT LOADER UNTUK EXCEL (XLSX)
+// Mengatasi masalah modul eksternal esbuild di Canvas
 // ==========================================
 const loadXlsx = async () => {
   if ((window as any).XLSX) return (window as any).XLSX;
@@ -29,7 +30,7 @@ const loadXlsx = async () => {
 };
 
 // ==========================================
-// UPSTASH REDIS CLOUD CLIENT
+// UPSTASH REDIS CLOUD CLIENT (REST API POST)
 // ==========================================
 class Redis {
   url: string;
@@ -70,6 +71,7 @@ class Redis {
         return data.result; 
       }
     } catch (e) { 
+      console.error(`Redis GET Error [${key}]:`, e);
       return null; 
     }
   }
@@ -87,6 +89,7 @@ class Redis {
       if (data.error) throw new Error(data.error);
       return data;
     } catch (e) {
+      console.error(`Redis SET Error [${key}]:`, e);
       throw e;
     }
   }
@@ -133,6 +136,7 @@ const exportToExcel = async (logs: Log[]) => {
     XLSX.utils.book_append_sheet(workbook, worksheet, "Riwayat Absensi");
     XLSX.writeFile(workbook, `Radiology_Absensi_Report_${new Date().toISOString().split('T')[0]}.xlsx`);
   } catch (error) {
+    console.error("Failed to export Excel", error);
     alert("Gagal memuat modul Excel. Periksa koneksi internet Anda.");
   }
 };
@@ -260,6 +264,7 @@ const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
       await CloudStore.set(key, JSON.stringify(data));
       setSyncStatus('synced');
     } catch (e) {
+      console.error(`Sync Engine Error [${key}]:`, e);
       setSyncStatus('error');
     }
   };
@@ -280,6 +285,7 @@ const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
       setSyncStatus('synced');
       alert("✅ Sistem Radiologi tersinkronisasi paksa ke Cloud Database!");
     } catch (e: any) {
+      console.error(e);
       setSyncStatus('error');
       alert("❌ Error saat sinkronisasi: " + e.message);
     }
@@ -971,27 +977,16 @@ const AttendanceWizard: React.FC = () => {
         {step < 5 && (
           <div className="mb-8 md:mb-16 max-w-2xl mx-auto w-full px-2 relative z-20">
             <div className="flex justify-between relative">
-              <div className="absolute top-1/2 -translate-y-1/2 left-0 w-full h-[2px] bg-slate-800/80"></div>
+              <div className="absolute top-1/2 -translate-y-1/2 left-0 w-full h-[2px] bg-cyan-950"></div>
               <div className="absolute top-1/2 -translate-y-1/2 left-0 h-[2px] bg-cyan-400 transition-all duration-700 ease-in-out shadow-[0_0_10px_rgba(6,182,212,0.8)]" style={{ width: `${((step - 1) / (steps.length - 1)) * 100}%` }}></div>
               {steps.map((label, idx) => {
-                const isActive = step === idx + 1; 
-                const isPassed = step > idx + 1;
+                const isActive = step === idx + 1; const isPassed = step > idx + 1;
                 return (
                   <div key={label} className="relative z-10 flex flex-col items-center gap-3">
-                    <div className={cn(
-                      "w-10 h-10 md:w-12 md:h-12 rounded-full flex items-center justify-center text-xs md:text-sm font-black border-[3px] transition-all duration-500 bg-[#050B14]", 
-                      isActive ? "border-cyan-400 text-cyan-400 shadow-[0_0_20px_rgba(6,182,212,0.6)] scale-110" : 
-                      isPassed ? "border-cyan-600 text-cyan-500" : 
-                      "border-slate-800 text-slate-600"
-                    )}>
-                      {isPassed ? <CheckCircle2 className="w-5 h-5 md:w-6 md:h-6" /> : idx + 1}
+                    <div className={cn("w-10 h-10 md:w-12 md:h-12 rounded-full flex items-center justify-center text-xs md:text-sm font-black border-2 transition-all duration-500 bg-[#050B14]", isActive ? "border-cyan-400 text-cyan-400 shadow-[0_0_20px_rgba(6,182,212,0.6)] scale-110" : isPassed ? "border-cyan-600 text-cyan-500" : "border-cyan-900 text-cyan-800")}>
+                      <div>{isPassed ? <CheckCircle2 className="w-5 h-5 md:w-6 md:h-6" /> : idx + 1}</div>
                     </div>
-                    <span className={cn(
-                      "text-[9px] md:text-[10px] font-bold absolute -bottom-8 w-max tracking-widest uppercase", 
-                      isActive ? "text-cyan-400 drop-shadow-[0_0_5px_rgba(6,182,212,0.8)]" : 
-                      isPassed ? "text-cyan-600" : 
-                      "text-slate-600"
-                    )}>{label}</span>
+                    <span className={cn("text-[9px] md:text-[10px] font-mono absolute -bottom-7 w-max tracking-widest uppercase", isActive ? "text-cyan-400 font-bold" : isPassed ? "text-cyan-600" : "text-cyan-900")}>{label}</span>
                   </div>
                 );
               })}
@@ -1168,9 +1163,6 @@ const AdminDashboardHome: React.FC = () => {
   const filteredStudents = selectedCluster === 'All' ? students : students.filter(s => s.clusterId === selectedCluster);
   const totalExpectedStudents = filteredStudents.length;
   const uniqueAttendees = new Set(filteredLogs.map(l => l.nim)).size;
-  // Note: Absent calculation across a date range is tricky. We'll simplify to:
-  // Expected = Total Students * number of days in range. But for simplicity and UI expectation, 
-  // we just show "Siswa yang belum absen sama sekali di rentang ini"
   const totalAbsent = Math.max(0, totalExpectedStudents - uniqueAttendees);
 
   // Chart 1: Daily Trend (Area Chart)
@@ -2039,6 +2031,9 @@ export default function App() {
           {route === 'admin-management' && <AdminManagement />}
         </AdminLayout>
       )}
+
+      {/* PENTING: Hapus tanda komentar di bawah ini saat kode dijalankan di lokal/Vercel */}
+      {/* <SpeedInsights /> */}
     </AppProvider>
   );
 }
