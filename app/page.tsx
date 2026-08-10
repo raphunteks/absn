@@ -278,8 +278,8 @@ const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
         <div className="relative mb-6">
           <div className="absolute inset-0 bg-cyan-500/20 blur-3xl rounded-full"></div>
           <div className="w-20 h-20 bg-gradient-to-br from-cyan-400 to-purple-600 rounded-3xl flex items-center justify-center shadow-lg animate-[pulse_2s_ease-in-out_infinite] relative z-10 overflow-hidden p-3">
-             <img src="/axalogo.png" alt="AXAXYZ Logo" className="w-full h-full object-contain drop-shadow-md" onError={(e) => { e.currentTarget.style.display = 'none'; e.currentTarget.nextElementSibling?.classList.remove('hidden'); }} />
-             <span className="font-bold text-white text-3xl hidden">A.</span>
+             <img src="/axalogo.png" alt="ABSENSI DEPT. RKG" className="w-full h-full object-contain drop-shadow-md" onError={(e) => { e.currentTarget.style.display = 'none'; e.currentTarget.nextElementSibling?.classList.remove('hidden'); }} />
+             <span className="font-bold text-white text-3xl hidden">RKG</span>
           </div>
         </div>
         <Loader2 className="w-8 h-8 text-cyan-400 animate-spin mb-4" />
@@ -750,10 +750,10 @@ const AttendanceWizard: React.FC = () => {
       <header className="w-full p-4 md:p-6 flex justify-between items-center relative z-10 border-b border-white/5 bg-slate-950/80 backdrop-blur-xl">
         <div className="flex items-center gap-3">
           <div className="w-10 h-10 md:w-12 md:h-12 bg-gradient-to-br from-cyan-400 to-purple-600 rounded-xl flex items-center justify-center shadow-lg overflow-hidden p-1.5 md:p-2 transition-transform duration-300 hover:scale-105 cursor-pointer">
-             <img src="/axalogo.png" alt="AXAXYZ Logo" className="w-full h-full object-contain drop-shadow-md" onError={(e) => { e.currentTarget.style.display = 'none'; e.currentTarget.nextElementSibling?.classList.remove('hidden'); }} />
+             <img src="/axalogo.png" alt="ABSENSI DEPT. RKG" className="w-full h-full object-contain drop-shadow-md" onError={(e) => { e.currentTarget.style.display = 'none'; e.currentTarget.nextElementSibling?.classList.remove('hidden'); }} />
              <span className="font-bold text-white text-xl hidden">A.</span>
           </div>
-          <span className="font-black text-lg md:text-2xl tracking-[0.15em] text-transparent bg-clip-text bg-gradient-to-r from-white to-slate-400">AXAXYZ</span>
+          <span className="font-black text-lg md:text-2xl tracking-[0.15em] text-transparent bg-clip-text bg-gradient-to-r from-white to-slate-400">ABSENSI DEPT. RKG</span>
         </div>
         <div className="text-[10px] md:text-xs font-bold px-4 py-2 bg-white/5 border border-white/10 rounded-full text-cyan-300 tracking-widest shadow-sm">PORTAL MHS</div>
       </header>
@@ -848,14 +848,14 @@ const AdminLogin: React.FC<{ onLogin: () => void }> = ({ onLogin }) => {
         <div className="flex flex-col items-center mb-8">
           <div className="relative mb-5">
             <div className="w-20 h-20 md:w-24 md:h-24 bg-gradient-to-br from-cyan-400 to-purple-600 rounded-[1.5rem] flex items-center justify-center shadow-[0_0_30px_rgba(6,182,212,0.3)] p-3 overflow-hidden">
-              <img src="/axalogo.png" alt="AXAXYZ Logo" className="w-full h-full object-contain drop-shadow-md" onError={(e) => { e.currentTarget.style.display = 'none'; e.currentTarget.nextElementSibling?.classList.remove('hidden'); }} />
+              <img src="/axalogo.png" alt="ABSENSI DEPT. RKG" className="w-full h-full object-contain drop-shadow-md" onError={(e) => { e.currentTarget.style.display = 'none'; e.currentTarget.nextElementSibling?.classList.remove('hidden'); }} />
               <ShieldCheck className="w-10 h-10 md:w-12 md:h-12 text-white hidden" />
             </div>
             <div className="absolute -bottom-2 -right-2 w-10 h-10 bg-slate-900 rounded-full border-[3px] border-slate-800 flex items-center justify-center shadow-lg">
               <Lock className="w-4 h-4 text-cyan-400" />
             </div>
           </div>
-          <h2 className="text-2xl md:text-3xl font-black text-white tracking-wide">AXAXYZ Admin</h2>
+          <h2 className="text-2xl md:text-3xl font-black text-white tracking-wide">DEPT. RKG Admin</h2>
           <p className="text-slate-400 text-xs md:text-sm mt-1.5 uppercase tracking-widest font-bold opacity-80">Enterprise Security Portal</p>
         </div>
 
@@ -1203,10 +1203,10 @@ const AdminStudents: React.FC = () => {
                
                <div className="text-center relative z-10 w-full mt-2 md:mt-4">
                  <div className="w-14 h-14 md:w-16 md:h-16 bg-white rounded-2xl flex items-center justify-center mx-auto mb-3 shadow-[0_10px_30px_rgba(0,0,0,0.4)] p-2 md:p-2.5 overflow-hidden">
-                   <img src="/axalogo.png" alt="AXAXYZ Logo" className="w-full h-full object-contain" onError={(e) => { e.currentTarget.style.display = 'none'; e.currentTarget.nextElementSibling?.classList.remove('hidden'); }} />
+                   <img src="/axalogo.png" alt="ABSENSI DEPT. RKGo" className="w-full h-full object-contain" onError={(e) => { e.currentTarget.style.display = 'none'; e.currentTarget.nextElementSibling?.classList.remove('hidden'); }} />
                    <span className="font-black text-slate-900 text-3xl hidden">A.</span>
                  </div>
-                 <h2 className="text-white font-black tracking-widest text-base md:text-lg drop-shadow-md">AXAXYZ UNIVERSITY</h2>
+                 <h2 className="text-white font-black tracking-widest text-base md:text-lg drop-shadow-md">DEPT. RKG</h2>
                  <p className="text-cyan-200 text-[9px] md:text-[10px] tracking-[0.2em] font-bold uppercase mt-1 md:mt-1.5 opacity-90">Kartu Tanda Mahasiswa</p>
                </div>
 
@@ -1479,10 +1479,10 @@ const AdminLayout: React.FC<{ children: React.ReactNode, activeRoute: string, se
         <div className="p-6 md:p-8 border-b border-white/10 flex items-center justify-between">
           <div className="flex items-center gap-3 md:gap-4">
              <div className="w-10 h-10 md:w-12 md:h-12 bg-gradient-to-br from-cyan-400 to-purple-600 rounded-xl md:rounded-2xl flex items-center justify-center shadow-lg overflow-hidden p-1.5 md:p-2 border border-white/10">
-                <img src="/axalogo.png" alt="AXAXYZ Logo" className="w-full h-full object-contain drop-shadow-md" onError={(e) => { e.currentTarget.style.display = 'none'; e.currentTarget.nextElementSibling?.classList.remove('hidden'); }} />
+                <img src="/axalogo.png" alt="ABSENSI DEPT. RKG" className="w-full h-full object-contain drop-shadow-md" onError={(e) => { e.currentTarget.style.display = 'none'; e.currentTarget.nextElementSibling?.classList.remove('hidden'); }} />
                 <span className="font-black text-white text-xl hidden">A.</span>
              </div>
-             <div><h1 className="font-black text-xl md:text-2xl tracking-[0.15em] text-transparent bg-clip-text bg-gradient-to-r from-white to-slate-400">AXAXYZ</h1><p className="text-[9px] md:text-[10px] uppercase tracking-widest text-cyan-400 font-bold mt-0.5">Admin Security</p></div>
+             <div><h1 className="font-black text-xl md:text-2xl tracking-[0.15em] text-transparent bg-clip-text bg-gradient-to-r from-white to-slate-400">ABSENSI DEPT. RKG</h1><p className="text-[9px] md:text-[10px] uppercase tracking-widest text-cyan-400 font-bold mt-0.5">Admin Security</p></div>
           </div>
           <button className="md:hidden p-2 bg-white/5 hover:bg-white/10 rounded-xl text-slate-400 transition-colors" onClick={() => setIsMobileMenuOpen(false)}>
              <X className="w-5 h-5"/>
@@ -1546,7 +1546,7 @@ export default function App() {
       }
       link.href = '/axalogo.png';
       link.type = 'image/png';
-      document.title = "AXAXYZ - Portal Kehadiran Pintar";
+      document.title = "ABSENSI DEPT. RKG - Portal Kehadiran";
     }
   }, []);
 
