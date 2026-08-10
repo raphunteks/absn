@@ -577,9 +577,15 @@ const TimeCheck: React.FC<{ onComplete: (data: { sessionName: string; status: 'H
       const [endH, endM] = session.endTime.split(':').map(Number);
       const startTotal = startH * 60 + startM;
       const endTotal = endH * 60 + endM;
-      if (currentMinutes >= startTotal && currentMinutes <= endTotal) {
-        const isLate = currentMinutes > (startTotal + session.toleranceMinutes);
-        return { session, status: isLate ? 'Terlambat' : 'Hadir' };
+      
+      // LOGIKA UPGRADE: Toleransi terlambat ditambahkan DARI JAM BERAKHIR
+      const endWithTolerance = endTotal + session.toleranceMinutes;
+      
+      // Jika waktu saat ini berada di dalam rentang awal hingga batas akhir + toleransi
+      if (currentMinutes >= startTotal && currentMinutes <= endWithTolerance) {
+        // Terlambat dihitung jika waktu absen sudah LEWAT DARI jam berakhir normal
+        const isLate = currentMinutes > endTotal;
+        return { session, status: isLate ? 'Terlambat' : 'Hadir', endTotal, endWithTolerance };
       }
     }
     return null;
@@ -607,7 +613,7 @@ const TimeCheck: React.FC<{ onComplete: (data: { sessionName: string; status: 'H
                 <p className="text-cyan-50 font-black text-lg md:text-xl tracking-wide">{activeSession.session.name}</p>
                 <p className="text-xs md:text-sm text-cyan-400/80 font-mono mt-1">{activeSession.session.startTime} - {activeSession.session.endTime}</p>
                 <p className="text-[10px] md:text-xs text-slate-500 mt-2 font-mono uppercase">
-                  Batas Waktu: {activeSession.session.startTime.split(':')[0]}:{String(parseInt(activeSession.session.startTime.split(':')[1]) + activeSession.session.toleranceMinutes).padStart(2, '0')}
+                  Batas Hadir: {activeSession.session.endTime} | Tutup Sesi: {Math.floor(activeSession.endWithTolerance / 60).toString().padStart(2, '0')}:{(activeSession.endWithTolerance % 60).toString().padStart(2, '0')}
                 </p>
               </div>
               <span className={cn("px-4 py-2 text-xs font-black uppercase tracking-widest rounded-xl shadow-lg border", activeSession.status === 'Hadir' ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/30" : "bg-amber-500/10 text-amber-400 border-amber-500/30")}>
@@ -624,7 +630,7 @@ const TimeCheck: React.FC<{ onComplete: (data: { sessionName: string; status: 'H
               <AlertCircle className="w-12 h-12 animate-pulse drop-shadow-[0_0_15px_rgba(244,63,94,0.5)]" />
               <div>
                  <p className="font-black text-lg uppercase tracking-widest text-rose-200">Belum Waktunya</p>
-                 <p className="text-xs mt-2 font-mono text-rose-400/80">Saat ini tidak ada jadwal absensi yang sedang aktif.</p>
+                 <p className="text-xs mt-2 font-mono text-rose-400/80">Saat ini tidak ada jadwal absensi yang sedang aktif (atau sesi telah tertutup).</p>
               </div>
             </div>
           </div>
@@ -1332,13 +1338,17 @@ const AdminDashboardHome: React.FC = () => {
   const [selectedCluster, setSelectedCluster] = useState('All');
 
   // Parse dates safely
-  const start = startOfDay(new Date(startDate));
-  const end = endOfDay(new Date(endDate));
+  const startObj = startOfDay(new Date(startDate));
+  const endObj = endOfDay(new Date(endDate));
 
-  // Filter Logs
+  // Dynamic Total Days Calculation for robust Alpha metrics
+  const diffTime = Math.abs(endObj.getTime() - startObj.getTime());
+  const totalDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) || 1;
+
+  // Filter Logs based on Date & Cluster
   const filteredLogs = logs.filter(l => {
     const logDate = new Date(l.timestamp);
-    const inDateRange = logDate >= start && logDate <= end;
+    const inDateRange = logDate >= startObj && logDate <= endObj;
     
     let matchCluster = true;
     if (selectedCluster !== 'All') {
@@ -1348,16 +1358,28 @@ const AdminDashboardHome: React.FC = () => {
     return inDateRange && matchCluster;
   });
 
+  const filteredStudents = selectedCluster === 'All' ? students : students.filter(s => s.clusterId === selectedCluster);
+
+  // Student Stats Detail Calculation (For Table)
+  const studentStats = filteredStudents.map(student => {
+     const studentLogs = filteredLogs.filter(l => l.nim === student.nim);
+     const hadir = studentLogs.filter(l => l.status === 'Hadir').length;
+     const terlambat = studentLogs.filter(l => l.status === 'Terlambat').length;
+     // Alpha based on total selected days
+     const alpha = Math.max(0, totalDays - (hadir + terlambat));
+     
+     return { ...student, hadir, terlambat, alpha };
+  });
+
   // Basic Stats
   const totalLogs = filteredLogs.length;
   const onTime = filteredLogs.filter(l => l.status === 'Hadir').length;
   const late = filteredLogs.filter(l => l.status === 'Terlambat').length;
   
-  // Calculate Absent
-  const filteredStudents = selectedCluster === 'All' ? students : students.filter(s => s.clusterId === selectedCluster);
-  const totalExpectedStudents = filteredStudents.length;
-  const uniqueAttendees = new Set(filteredLogs.map(l => l.nim)).size;
-  const totalAbsent = Math.max(0, totalExpectedStudents - uniqueAttendees);
+  // Calculate Absent robustly
+  const totalExpectedAttendance = filteredStudents.length * totalDays;
+  const totalActualAttendance = totalLogs;
+  const totalAbsent = Math.max(0, totalExpectedAttendance - totalActualAttendance);
 
   // Chart 1: Daily Trend (Area Chart)
   const dailyDataMap: Record<string, { date: string; Hadir: number; Terlambat: number }> = {};
@@ -1368,12 +1390,8 @@ const AdminDashboardHome: React.FC = () => {
      else if (log.status === 'Terlambat') dailyDataMap[dateStr].Terlambat++;
   });
   const trendData = Object.values(dailyDataMap);
-
-  // Chart 2: Session Distribution (Bar)
-  const sessionCounts = filteredLogs.reduce((acc, log) => { acc[log.sessionName] = (acc[log.sessionName] || 0) + 1; return acc; }, {} as Record<string, number>);
-  const barData = Object.entries(sessionCounts).map(([name, count]) => ({ name, Total: count }));
   
-  // Chart 3: Pie Chart Overall
+  // Chart 2: Pie Chart Overall
   const pieData = [
      { name: 'Tepat Waktu', value: onTime, color: '#10b981' }, 
      { name: 'Terlambat', value: late, color: '#f59e0b' },
@@ -1488,21 +1506,55 @@ const AdminDashboardHome: React.FC = () => {
           </div>
         </div>
         
-        {/* BAR CHART BY SESSION */}
-        <div className="lg:col-span-3 bg-[#0A1628]/60 backdrop-blur-md border border-cyan-500/20 p-6 rounded-[1.5rem] flex flex-col shadow-lg">
-          <h3 className="text-sm font-black text-cyan-50 mb-6 tracking-widest uppercase">Kehadiran Berdasarkan Jadwal/Shift</h3>
-          <div className="flex-1 w-full h-[250px]">
-            {barData.length > 0 ? (
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={barData} margin={{ top: 0, right: 0, left: -20, bottom: 0 }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" vertical={false} />
-                  <XAxis dataKey="name" stroke="#64748b" fontSize={10} tickLine={false} axisLine={false} />
-                  <YAxis stroke="#64748b" fontSize={10} tickLine={false} axisLine={false} />
-                  <Tooltip cursor={{fill: '#1e293b', opacity: 0.4}} contentStyle={{backgroundColor: '#050B14', borderColor: '#06b6d4', color: '#f8fafc', borderRadius: '0.75rem', fontSize: '12px'}} />
-                  <Bar dataKey="Total" fill="#8b5cf6" radius={[4, 4, 0, 0]} barSize={40} />
-                </BarChart>
-              </ResponsiveContainer>
-            ) : <div className="h-full flex items-center justify-center text-cyan-800 font-mono text-xs uppercase">Grafik Kosong</div>}
+        {/* REKAPITULASI KEHADIRAN MAHASISWA (REPLACING BAR CHART BY SESSION) */}
+        <div className="lg:col-span-3 bg-[#0A1628]/60 backdrop-blur-md border border-cyan-500/20 p-6 rounded-[1.5rem] flex flex-col shadow-lg relative overflow-hidden">
+          <div className="absolute top-0 right-0 w-64 h-64 bg-cyan-600/5 rounded-bl-[100px] pointer-events-none"></div>
+          
+          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 relative z-10 gap-3">
+             <h3 className="text-sm font-black text-cyan-50 tracking-widest uppercase">Rincian Kehadiran Mahasiswa</h3>
+             <div className="text-[10px] text-cyan-400 bg-cyan-950/50 px-3 py-1.5 rounded-lg border border-cyan-500/30 font-mono font-bold tracking-widest uppercase">
+                {studentStats.length} Entitas Mahasiswa
+             </div>
+          </div>
+          
+          <div className="flex-1 w-full overflow-x-auto relative z-10 custom-scrollbar">
+             <table className="w-full text-left border-collapse min-w-[800px]">
+                <thead>
+                   <tr className="bg-[#050B14]/80 border-b border-cyan-500/30 text-cyan-500 text-[10px] tracking-[0.2em] uppercase font-black">
+                      <th className="p-4">NIM</th>
+                      <th className="p-4">Nama Mahasiswa</th>
+                      <th className="p-4">Kelompok</th>
+                      <th className="p-4 text-center">Tepat Waktu</th>
+                      <th className="p-4 text-center">Terlambat</th>
+                      <th className="p-4 text-center">Tidak Hadir (Alpha)</th>
+                   </tr>
+                </thead>
+                <tbody className="divide-y divide-cyan-900/30">
+                   {studentStats.map((st, idx) => (
+                      <tr key={st.id || idx} className="hover:bg-cyan-900/20 transition-colors duration-200 text-cyan-50 group">
+                         <td className="p-4 font-mono text-sm tracking-wider">{st.nim}</td>
+                         <td className="p-4 font-bold text-sm uppercase">{st.name}</td>
+                         <td className="p-4">
+                            <span className="text-[9px] uppercase font-bold tracking-widest text-cyan-300 bg-cyan-950/50 border border-cyan-500/30 px-2 py-1 rounded-md shadow-sm">
+                               {clusters.find(c => c.id === st.clusterId)?.name || 'TANPA KELOMPOK'}
+                            </span>
+                         </td>
+                         <td className="p-4 text-center">
+                            <span className="inline-flex items-center justify-center w-8 h-8 rounded-full bg-emerald-500/10 text-emerald-400 font-bold text-sm border border-emerald-500/30 group-hover:bg-emerald-500/20">{st.hadir}</span>
+                         </td>
+                         <td className="p-4 text-center">
+                            <span className="inline-flex items-center justify-center w-8 h-8 rounded-full bg-amber-500/10 text-amber-400 font-bold text-sm border border-amber-500/30 group-hover:bg-amber-500/20">{st.terlambat}</span>
+                         </td>
+                         <td className="p-4 text-center">
+                            <span className="inline-flex items-center justify-center w-8 h-8 rounded-full bg-rose-500/10 text-rose-400 font-bold text-sm border border-rose-500/30 group-hover:bg-rose-500/20">{st.alpha}</span>
+                         </td>
+                      </tr>
+                   ))}
+                   {studentStats.length === 0 && (
+                      <tr><td colSpan={6} className="p-12 text-center text-cyan-800 font-mono text-sm uppercase tracking-widest">Tidak ada data mahasiswa untuk filter ini.</td></tr>
+                   )}
+                </tbody>
+             </table>
           </div>
         </div>
 
@@ -2111,7 +2163,7 @@ const AdminSettings: React.FC = () => {
              <input required type="time" value={formSess.endTime} onChange={e=>setFormSess({...formSess, endTime: e.target.value})} className="w-full bg-[#050B14] border border-cyan-500/30 rounded-xl px-4 py-3.5 text-cyan-50 outline-none focus:border-cyan-400 font-mono text-sm" />
           </div>
           <div className="space-y-1.5">
-             <label className="text-[10px] text-cyan-500 font-bold uppercase tracking-widest ml-1">Batas Keterlambatan</label>
+             <label className="text-[10px] text-cyan-500 font-bold uppercase tracking-widest ml-1">Toleransi Tutup Sesi (+ Dari Jam Berakhir)</label>
              <div className="relative">
                 <input required type="number" min="0" value={formSess.toleranceMinutes} onChange={e=>setFormSess({...formSess, toleranceMinutes: parseInt(e.target.value)})} className="w-full bg-[#050B14] border border-cyan-500/30 rounded-xl pl-4 pr-12 py-3.5 text-cyan-50 outline-none focus:border-cyan-400 font-mono text-sm" />
                 <span className="absolute right-4 top-1/2 -translate-y-1/2 text-cyan-600 text-xs font-mono font-bold">MENIT</span>
@@ -2140,11 +2192,11 @@ const AdminSettings: React.FC = () => {
             
             <div className="space-y-4 text-xs font-mono bg-[#050B14] p-5 rounded-2xl border border-cyan-500/20 relative z-10 shadow-inner">
               <div className="flex justify-between items-center text-cyan-400/80">
-                 <div className="flex items-center gap-3"><Clock className="w-4 h-4 text-cyan-500"/> Jam Absen</div>
+                 <div className="flex items-center gap-3"><Clock className="w-4 h-4 text-cyan-500"/> Jam Tepat Waktu</div>
                  <span className="text-cyan-50 font-bold bg-[#0A1628] px-3 py-1.5 rounded-lg border border-cyan-500/20">{session.startTime} - {session.endTime}</span>
               </div>
               <div className="flex justify-between items-center text-cyan-400/80">
-                 <div className="flex items-center gap-3"><ActivitySquare className="w-4 h-4 text-purple-500"/> Toleransi Terlambat</div>
+                 <div className="flex items-center gap-3"><ActivitySquare className="w-4 h-4 text-purple-500"/> Toleransi (Tutup Sesi)</div>
                  <span className="text-purple-300 font-bold bg-purple-950/40 px-3 py-1.5 rounded-lg border border-purple-500/30">+{session.toleranceMinutes} Menit</span>
               </div>
             </div>
