@@ -9,7 +9,6 @@ import {
   ServerCrash, Maximize, Menu, Network, Edit, Calendar, UserX, ScanFace, ActivitySquare
 } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, LineChart, Line, AreaChart, Area } from 'recharts';
-import * as XLSX from 'xlsx';
 
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
@@ -102,26 +101,23 @@ const calculateDistance = (lat1: number, lon1: number, lat2: number, lon2: numbe
   return R * c; 
 };
 
-// EXPORT TO XLSX
-const exportToExcel = (logs: Log[]) => {
-  const dataToExport = logs.map(log => ({
-    'ID Log': log.id,
-    'NIM': log.nim,
-    'Nama Mahasiswa': log.name,
-    'Cluster': log.clusterName || 'Tanpa Cluster',
-    'Tanggal': new Date(log.timestamp).toLocaleDateString('id-ID'),
-    'Waktu': new Date(log.timestamp).toLocaleTimeString('id-ID'),
-    'Sesi': log.sessionName,
-    'Status': log.status,
-    'Latitude': log.location.lat,
-    'Longitude': log.location.lng,
-    'Link G-Maps': `https://www.google.com/maps?q=${log.location.lat},${log.location.lng}`
-  }));
-
-  const worksheet = XLSX.utils.json_to_sheet(dataToExport);
-  const workbook = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(workbook, worksheet, "Riwayat Absensi");
-  XLSX.writeFile(workbook, `Radiology_Absensi_Report_${new Date().toISOString().split('T')[0]}.xlsx`);
+// EXPORT TO CSV
+const exportToCSV = (logs: Log[]) => {
+  const headers = ['ID Log,NIM,Nama Mahasiswa,Cluster,Tanggal,Waktu,Sesi,Status,Latitude,Longitude,Link G-Maps'];
+  const rows = logs.map(log => {
+    const date = new Date(log.timestamp).toLocaleDateString('id-ID');
+    const time = new Date(log.timestamp).toLocaleTimeString('id-ID');
+    const mapsLink = `https://www.google.com/maps?q=${log.location.lat},${log.location.lng}`;
+    return `${log.id},${log.nim},${log.name},${log.clusterName || 'Tanpa Cluster'},${date},${time},${log.sessionName},${log.status},${log.location.lat},${log.location.lng},${mapsLink}`;
+  });
+  const csvContent = "data:text/csv;charset=utf-8," + [headers, ...rows].join('\n');
+  const encodedUri = encodeURI(csvContent);
+  const link = document.createElement("a");
+  link.setAttribute("href", encodedUri);
+  link.setAttribute("download", `Radiology_Absensi_Report_${new Date().toISOString().split('T')[0]}.csv`);
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
 };
 
 const redis = Redis.fromEnv();
@@ -1307,37 +1303,37 @@ const AdminStudents: React.FC = () => {
      }
   };
 
-  // UPDATED: EXCEL (XLSX) BULK UPLOAD SUPPORT
+  // CSV BULK UPLOAD SUPPORT
   const handleBulkUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
     if (!selectedClusterForBulk) {
-       alert("Pilih Cluster (Kelompok) terlebih dahulu sebelum upload file Excel.");
-       e.target.value = ''; // reset input
+       alert("Pilih Cluster (Kelompok) terlebih dahulu sebelum upload file CSV.");
+       e.target.value = ''; 
        return;
     }
 
-    try {
-      const data = await file.arrayBuffer();
-      const workbook = XLSX.read(data);
-      const worksheet = workbook.Sheets[workbook.SheetNames[0]];
-      // Expecting standard columns, row 1 as header. (Nama, NIM)
-      const jsonData: any[] = XLSX.utils.sheet_to_json(worksheet);
-      
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const text = event.target?.result as string;
+      const lines = text.split('\n');
       const newSt: Omit<Student, 'id'>[] = [];
-      jsonData.forEach(row => {
-         // Flexible matching for typical column names in Indonesia
-         const name = row['Nama'] || row['NAMA'] || row['nama'] || row['Nama Lengkap'] || row['Name'];
-         const nim = row['NIM'] || row['nim'] || row['Nomor Induk'];
-         
-         if (name && nim) {
-            newSt.push({ 
-               name: String(name).trim(), 
-               nim: String(nim).trim(), 
-               password: `${String(nim).trim()}123`,
-               clusterId: selectedClusterForBulk
-            });
+      
+      lines.forEach((line, index) => {
+         if (index === 0) return; // Skip header row
+         const parts = line.split(/[,;\t]/);
+         if (parts.length >= 2) {
+            const name = parts[0].trim();
+            const nim = parts[1].trim();
+            if (name && nim) {
+               newSt.push({ 
+                  name, 
+                  nim, 
+                  password: `${nim}123`,
+                  clusterId: selectedClusterForBulk
+               });
+            }
          }
       });
 
@@ -1345,13 +1341,10 @@ const AdminStudents: React.FC = () => {
         bulkAddStudents(newSt);
         alert(`Berhasil mengimpor ${newSt.length} entitas ke dalam sistem.`);
       } else {
-        alert('Gagal mendeteksi data. Pastikan format kolom memiliki header "Nama" dan "NIM".');
+        alert('Gagal mendeteksi data. Pastikan file dalam format CSV yang valid (Nama, NIM).');
       }
-    } catch (err) {
-       console.error("Bulk Upload Error:", err);
-       alert("Terjadi kesalahan saat membaca file .xlsx");
-    }
-    
+    };
+    reader.readAsText(file);
     e.target.value = ''; // reset input
   };
 
@@ -1375,8 +1368,8 @@ const AdminStudents: React.FC = () => {
            </div>
            
            <label className="flex flex-1 md:flex-none justify-center items-center gap-2 px-5 py-2.5 bg-purple-600/20 text-purple-400 hover:bg-purple-600/40 border border-purple-500/50 rounded-xl transition-all duration-300 font-black uppercase text-[10px] md:text-xs cursor-pointer active:scale-95 shadow-[0_0_10px_rgba(147,51,234,0.3)]">
-              <Upload className="w-4 h-4" /> Import XLSX
-              <input type="file" accept=".xlsx, .xls" className="hidden" onChange={handleBulkUpload} />
+              <Upload className="w-4 h-4" /> Import CSV
+              <input type="file" accept=".csv, .txt" className="hidden" onChange={handleBulkUpload} />
            </label>
            
            <button onClick={() => setIsAdding(!isAdding)} className="flex flex-1 md:flex-none justify-center items-center gap-2 px-5 py-2.5 bg-cyan-600/20 text-cyan-400 hover:bg-cyan-600/40 border border-cyan-500/50 rounded-xl transition-all duration-300 font-black uppercase text-[10px] md:text-xs active:scale-95 shadow-[0_0_10px_rgba(6,182,212,0.3)]">
@@ -1693,8 +1686,8 @@ const AdminReports: React.FC = () => {
            <h2 className="text-2xl md:text-3xl font-black text-cyan-50 tracking-widest uppercase">Pusat Data Log</h2>
            <p className="text-cyan-500/70 text-xs md:text-sm font-mono mt-1 uppercase">Histori Audit, Citra Biometrik & Geolokasi</p>
         </div>
-        <button onClick={() => exportToExcel(filteredLogs)} className="w-full md:w-auto flex items-center justify-center gap-3 px-8 py-3.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white rounded-xl transition-all duration-300 font-black tracking-widest uppercase text-xs shadow-[0_0_20px_rgba(16,185,129,0.4)] active:scale-95">
-           <Download className="w-4 h-4" /> Export Report (XLSX)
+        <button onClick={() => exportToCSV(filteredLogs)} className="w-full md:w-auto flex items-center justify-center gap-3 px-8 py-3.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white rounded-xl transition-all duration-300 font-black tracking-widest uppercase text-xs shadow-[0_0_20px_rgba(16,185,129,0.4)] active:scale-95">
+           <Download className="w-4 h-4" /> Export Report (CSV)
         </button>
       </div>
 
