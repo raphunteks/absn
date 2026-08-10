@@ -8,14 +8,26 @@ import {
   Printer, X, CreditCard, Eye, EyeOff, Lock, ShieldCheck, Loader2, User, Cloud, CloudOff,
   ServerCrash, Maximize, Menu, Network, Edit, Calendar, UserX, ScanFace, ActivitySquare
 } from 'lucide-react';
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, LineChart, Line, AreaChart, Area } from 'recharts';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, AreaChart, Area } from 'recharts';
 
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
-import { format, subDays, isWithinInterval, startOfDay, endOfDay } from 'date-fns';
+import { format, startOfDay, endOfDay } from 'date-fns';
 
-// PENTING: Hapus tanda komentar di bawah ini saat di-deploy ke Vercel agar Speed Insights berjalan.
-// import { SpeedInsights } from "@vercel/speed-insights/next";
+// ==========================================
+// DYNAMIC SCRIPT LOADER UNTUK EXCEL (XLSX)
+// Mengatasi masalah modul eksternal esbuild di Canvas
+// ==========================================
+const loadXlsx = async () => {
+  if ((window as any).XLSX) return (window as any).XLSX;
+  return new Promise((resolve, reject) => {
+    const script = document.createElement('script');
+    script.src = 'https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js';
+    script.onload = () => resolve((window as any).XLSX);
+    script.onerror = reject;
+    document.head.appendChild(script);
+  });
+};
 
 // ==========================================
 // UPSTASH REDIS CLOUD CLIENT (REST API POST)
@@ -101,23 +113,32 @@ const calculateDistance = (lat1: number, lon1: number, lat2: number, lon2: numbe
   return R * c; 
 };
 
-// EXPORT TO CSV
-const exportToCSV = (logs: Log[]) => {
-  const headers = ['ID Log,NIM,Nama Mahasiswa,Cluster,Tanggal,Waktu,Sesi,Status,Latitude,Longitude,Link G-Maps'];
-  const rows = logs.map(log => {
-    const date = new Date(log.timestamp).toLocaleDateString('id-ID');
-    const time = new Date(log.timestamp).toLocaleTimeString('id-ID');
-    const mapsLink = `https://www.google.com/maps?q=${log.location.lat},${log.location.lng}`;
-    return `${log.id},${log.nim},${log.name},${log.clusterName || 'Tanpa Cluster'},${date},${time},${log.sessionName},${log.status},${log.location.lat},${log.location.lng},${mapsLink}`;
-  });
-  const csvContent = "data:text/csv;charset=utf-8," + [headers, ...rows].join('\n');
-  const encodedUri = encodeURI(csvContent);
-  const link = document.createElement("a");
-  link.setAttribute("href", encodedUri);
-  link.setAttribute("download", `Radiology_Absensi_Report_${new Date().toISOString().split('T')[0]}.csv`);
-  document.body.appendChild(link);
-  link.click();
-  document.body.removeChild(link);
+// EXPORT TO EXCEL DYNAMICALLY
+const exportToExcel = async (logs: Log[]) => {
+  try {
+    const XLSX = await loadXlsx();
+    const dataToExport = logs.map(log => ({
+      'ID Log': log.id,
+      'NIM': log.nim,
+      'Nama Mahasiswa': log.name,
+      'Cluster': log.clusterName || 'Tanpa Cluster',
+      'Tanggal': new Date(log.timestamp).toLocaleDateString('id-ID'),
+      'Waktu': new Date(log.timestamp).toLocaleTimeString('id-ID'),
+      'Sesi': log.sessionName,
+      'Status': log.status,
+      'Latitude': log.location.lat,
+      'Longitude': log.location.lng,
+      'Link G-Maps': `https://www.google.com/maps?q=${log.location.lat},${log.location.lng}`
+    }));
+
+    const worksheet = XLSX.utils.json_to_sheet(dataToExport);
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, "Riwayat Absensi");
+    XLSX.writeFile(workbook, `Radiology_Absensi_Report_${new Date().toISOString().split('T')[0]}.xlsx`);
+  } catch (error) {
+    console.error("Failed to export Excel", error);
+    alert("Gagal memuat modul Excel. Periksa koneksi internet Anda.");
+  }
 };
 
 const redis = Redis.fromEnv();
@@ -287,6 +308,7 @@ const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const updateGeofence = (data: Geofence) => saveGeofence(data);
 
   const studentLogout = () => {
+     if(!confirm('Apakah Anda yakin ingin mengeluarkan perangkat ini dari sesi mahasiswa Anda?')) return;
      const ownerNim = localStorage.getItem('axaxyz_device_owner');
      if (ownerNim) {
         const student = students.find(s => s.nim === ownerNim);
@@ -300,7 +322,7 @@ const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
 
   if (isAppLoading) {
     return (
-      <div className="min-h-screen bg-[#050B14] flex flex-col items-center justify-center p-4 radiology-bg">
+      <div className="min-h-screen bg-[#020617] flex flex-col items-center justify-center p-4 radiology-bg">
         <div className="relative mb-6">
           <div className="absolute inset-0 bg-cyan-500/30 blur-[50px] rounded-full animate-pulse"></div>
           <div className="w-24 h-24 bg-[#0A1628] border border-cyan-500/50 rounded-3xl flex items-center justify-center shadow-[0_0_30px_rgba(6,182,212,0.4)] relative z-10 overflow-hidden p-4">
@@ -365,14 +387,14 @@ const TimeCheck: React.FC<{ onComplete: (data: { sessionName: string; status: 'H
         <div className="absolute inset-0 bg-cyan-600/30 blur-[40px] rounded-full"></div>
         <Clock className="w-20 h-20 md:w-24 md:h-24 text-cyan-400 relative z-10 drop-shadow-[0_0_20px_rgba(6,182,212,0.8)]" />
       </div>
-      <div className="text-center space-y-2">
+      <div className="text-center space-y-2 relative z-10">
         <h2 className="text-4xl md:text-5xl font-black text-white tracking-widest drop-shadow-md font-mono">
           {format(currentTime, 'HH:mm:ss')}
         </h2>
         <p className="text-sm md:text-base text-cyan-400/70 font-medium uppercase tracking-widest">{currentTime.toLocaleDateString('id-ID', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</p>
       </div>
 
-      <div className="w-full max-w-md bg-[#0A1628]/80 backdrop-blur-xl border border-cyan-500/20 p-5 md:p-6 rounded-3xl shadow-[0_20px_50px_rgba(0,0,0,0.5)] transition-all duration-300">
+      <div className="w-full max-w-md bg-[#0A1628]/80 backdrop-blur-xl border border-cyan-500/20 p-5 md:p-6 rounded-3xl shadow-[0_20px_50px_rgba(0,0,0,0.5)] transition-all duration-300 relative z-10">
         {activeSession ? (
           <div className="space-y-6">
             <div className="flex items-center justify-between p-4 bg-[#050B14]/80 border border-cyan-500/10 rounded-2xl relative overflow-hidden">
@@ -441,7 +463,7 @@ const LocationCheck: React.FC<{ onComplete: (loc: {lat: number, lng: number}) =>
 
   return (
     <div className="flex flex-col items-center justify-center p-4 md:p-8 space-y-6 max-w-md mx-auto animate-in slide-in-from-right duration-500 w-full">
-      <div className="w-32 h-32 bg-[#0A1628] rounded-full flex items-center justify-center border-2 border-cyan-500/20 relative overflow-hidden shadow-[0_0_40px_rgba(6,182,212,0.15)]">
+      <div className="w-32 h-32 bg-[#0A1628] rounded-full flex items-center justify-center border-2 border-cyan-500/20 relative overflow-hidden shadow-[0_0_40px_rgba(6,182,212,0.15)] z-10">
         {status === 'loading' && <div className="absolute inset-0 border-[6px] border-cyan-500/20 border-t-cyan-500 rounded-full animate-spin"></div>}
         {status === 'loading' && <div className="absolute inset-0 bg-cyan-500/10 rounded-full animate-pulse opacity-50"></div>}
         
@@ -451,7 +473,7 @@ const LocationCheck: React.FC<{ onComplete: (loc: {lat: number, lng: number}) =>
         <Navigation className={cn("w-12 h-12 relative z-10 transition-colors duration-500", status === 'error' ? 'text-rose-400 drop-shadow-[0_0_15px_rgba(244,63,94,0.8)]' : 'text-cyan-400 drop-shadow-[0_0_15px_rgba(6,182,212,0.8)]')} />
       </div>
 
-      <div className="text-center space-y-2 w-full bg-[#0A1628]/80 backdrop-blur-xl border border-cyan-500/20 p-6 md:p-8 rounded-3xl shadow-[0_20px_50px_rgba(0,0,0,0.5)] transition-all duration-300">
+      <div className="text-center space-y-2 w-full bg-[#0A1628]/80 backdrop-blur-xl border border-cyan-500/20 p-6 md:p-8 rounded-3xl shadow-[0_20px_50px_rgba(0,0,0,0.5)] transition-all duration-300 relative z-10">
         <h3 className="text-2xl font-black text-white tracking-widest uppercase">Pemindaian Spasial</h3>
         {status === 'loading' && <p className="text-cyan-400/60 font-mono text-xs uppercase tracking-widest mt-2">Menyelaraskan koordinat satelit...</p>}
         
@@ -482,19 +504,60 @@ const LocationCheck: React.FC<{ onComplete: (loc: {lat: number, lng: number}) =>
   );
 };
 
-const QRScanner: React.FC<{ onComplete: (data: {nim: string, name: string, deviceId: string, clusterName?: string}) => void }> = ({ onComplete }) => {
-  const { students, updateStudent, clusters } = useAppContext();
+const QRScanner: React.FC<{ activeSessionName: string, onComplete: (data: {nim: string, name: string, deviceId: string, clusterName?: string}) => void }> = ({ activeSessionName, onComplete }) => {
+  const { students, updateStudent, clusters, logs } = useAppContext();
   const [nimInput, setNimInput] = useState('');
   const [passInput, setPassInput] = useState('');
   const [error, setError] = useState('');
   const [isScanning, setIsScanning] = useState(false);
+  const [isAutoLoggingIn, setIsAutoLoggingIn] = useState(true);
   
   const qrScannerRef = useRef<any>(null);
+
+  // AUTO LOGIN MECHANISM & 1x ATTENDANCE PREVENTION
+  useEffect(() => {
+     const checkAutoLogin = () => {
+        const ownerNim = localStorage.getItem('axaxyz_device_owner');
+        const finalDeviceId = localStorage.getItem('axaxyz_device_id');
+        
+        if (ownerNim && finalDeviceId && students.length > 0) {
+           const foundStudent = students.find(s => s.nim === ownerNim);
+           if (foundStudent && foundStudent.deviceId === finalDeviceId) {
+              const today = new Date().toISOString().split('T')[0];
+              const alreadyAttended = logs.some(l => l.nim === ownerNim && l.sessionName === activeSessionName && l.timestamp.startsWith(today));
+              
+              if (alreadyAttended) {
+                 setError(`⚠️ Entitas ${foundStudent.name} telah tercatat hadir pada sesi ini hari ini.`);
+                 setIsAutoLoggingIn(false);
+                 return;
+              }
+
+              // Auto-proceed
+              const clusterName = foundStudent.clusterId ? clusters.find(c => c.id === foundStudent.clusterId)?.name : '';
+              onComplete({ nim: ownerNim, name: foundStudent.name, deviceId: finalDeviceId, clusterName });
+              return;
+           }
+        }
+        setIsAutoLoggingIn(false);
+     };
+
+     // Slight delay to allow state hydration
+     const timer = setTimeout(checkAutoLogin, 800);
+     return () => clearTimeout(timer);
+  }, [students, logs, activeSessionName, clusters, onComplete]);
+
 
   const handleVerify = (scannedNim?: string) => {
     setError('');
     const targetNim = scannedNim || nimInput;
     if (!targetNim) { setError('Masukkan atau pindai identitas NIM.'); return; }
+
+    const today = new Date().toISOString().split('T')[0];
+    const alreadyAttended = logs.some(l => l.nim === targetNim && l.sessionName === activeSessionName && l.timestamp.startsWith(today));
+    if (alreadyAttended) {
+      setError('⚠️ Akses Ditolak: Anda sudah melakukan absensi untuk sesi ini hari ini.');
+      return;
+    }
 
     let studentName = 'Entitas Tidak Dikenal';
     let clusterName = '';
@@ -590,9 +653,18 @@ const QRScanner: React.FC<{ onComplete: (data: {nim: string, name: string, devic
     setIsScanning(false);
   };
 
+  if (isAutoLoggingIn) {
+     return (
+        <div className="flex flex-col items-center justify-center p-8 space-y-6 w-full max-w-md mx-auto z-10 relative">
+           <Loader2 className="w-12 h-12 text-cyan-400 animate-spin drop-shadow-[0_0_15px_rgba(6,182,212,0.8)]" />
+           <p className="text-cyan-300 font-mono uppercase tracking-widest text-xs animate-pulse text-center">Menyelaraskan Hardware & Biometrik...</p>
+        </div>
+     );
+  }
+
   return (
     <div className="flex flex-col items-center justify-center p-4 md:p-8 space-y-6 max-w-md mx-auto animate-in slide-in-from-right duration-500 w-full">
-      <div className="w-full bg-[#0A1628]/80 backdrop-blur-xl border border-cyan-500/20 p-6 md:p-8 rounded-3xl shadow-[0_20px_50px_rgba(0,0,0,0.5)] transition-all duration-300">
+      <div className="w-full bg-[#0A1628]/80 backdrop-blur-xl border border-cyan-500/20 p-6 md:p-8 rounded-3xl shadow-[0_20px_50px_rgba(0,0,0,0.5)] transition-all duration-300 z-10 relative">
         <div className="text-center mb-8">
           <div className="w-20 h-20 bg-[#050B14] border border-cyan-500/50 rounded-2xl flex items-center justify-center mx-auto mb-5 shadow-[0_0_30px_rgba(6,182,212,0.3)]">
             {isScanning ? <Camera className="w-10 h-10 text-cyan-400 animate-pulse drop-shadow-[0_0_10px_rgba(6,182,212,0.8)]" /> : <QrCode className="w-10 h-10 text-cyan-400 drop-shadow-[0_0_10px_rgba(6,182,212,0.8)]" />}
@@ -665,7 +737,7 @@ const QRScanner: React.FC<{ onComplete: (data: {nim: string, name: string, devic
           </div>
         )}
       </div>
-      <p className="text-[9px] text-cyan-600/60 text-center max-w-xs uppercase tracking-[0.2em] font-mono">
+      <p className="text-[9px] text-cyan-600/60 text-center max-w-xs uppercase tracking-[0.2em] font-mono z-10 relative">
         Dilindungi Oleh Security Device Fingerprinting
       </p>
 
@@ -716,6 +788,7 @@ const SelfieCapture: React.FC<{ onComplete: (base64: string) => void }> = ({ onC
       const ctx = canvas.getContext('2d');
       if (ctx) {
         // PERBAIKAN MIRRORING: Hanya draw image tanpa scale(-1, 1) agar foto asli
+        // Filter warna telah dihapus sepenuhnya sesuai permintaan
         ctx.drawImage(videoRef.current, 0, 0, canvas.width, canvas.height);
         setImage(canvas.toDataURL('image/jpeg', 0.8));
       }
@@ -723,7 +796,7 @@ const SelfieCapture: React.FC<{ onComplete: (base64: string) => void }> = ({ onC
   }, []);
 
   return (
-    <div className="flex flex-col items-center justify-center p-4 md:p-6 space-y-6 w-full max-w-md mx-auto animate-in slide-in-from-right duration-500">
+    <div className="flex flex-col items-center justify-center p-4 md:p-6 space-y-6 w-full max-w-md mx-auto animate-in slide-in-from-right duration-500 z-10 relative">
       <div className="text-center">
         <h3 className="text-2xl md:text-3xl font-black text-white tracking-widest uppercase">Pemindaian Biometrik</h3>
         <p className="text-cyan-500/70 text-xs font-mono uppercase tracking-wide mt-2">Posisikan struktur wajah pada area frame X-Ray</p>
@@ -737,20 +810,18 @@ const SelfieCapture: React.FC<{ onComplete: (base64: string) => void }> = ({ onC
             autoPlay
             playsInline
             muted
-            // UX Viewfinder tetap ter-mirror sebagai cermin
-            className="w-full h-full object-cover transform scale-x-[-1] opacity-90 sepia-[.2] hue-rotate-[180deg] saturate-[1.5]"
+            // Filter warna telah dihapus, murni menampilkan UI frame saja
+            className="w-full h-full object-cover transform scale-x-[-1]"
           />
         ) : (
-          // Hasil Foto TIDAK TER-MIRROR lagi (scale-x dihapus)
-          <img src={image} alt="Biometric" className="w-full h-full object-cover sepia-[.2] hue-rotate-[180deg] saturate-[1.5]" />
+          <img src={image} alt="Biometric" className="w-full h-full object-cover" />
         )}
         
-        {/* Overlay X-Ray Style Grid */}
-        <div className="absolute inset-0 pointer-events-none bg-[linear-gradient(transparent_95%,rgba(6,182,212,0.2)_100%),linear-gradient(90deg,transparent_95%,rgba(6,182,212,0.2)_100%)] bg-[length:40px_40px]"></div>
+        {/* Overlay X-Ray Style Grid Tanpa Mengubah Warna Orang */}
+        <div className="absolute inset-0 pointer-events-none bg-[linear-gradient(transparent_95%,rgba(6,182,212,0.1)_100%),linear-gradient(90deg,transparent_95%,rgba(6,182,212,0.1)_100%)] bg-[length:40px_40px]"></div>
 
         {!image && (
           <div className="absolute inset-0 pointer-events-none flex items-center justify-center">
-             <div className="absolute inset-0 bg-[#0A1628]/40 mix-blend-multiply"></div>
              
              {/* Face Tracking HUD */}
              <div className="relative w-56 h-72">
@@ -795,7 +866,7 @@ const SelfieCapture: React.FC<{ onComplete: (base64: string) => void }> = ({ onC
 };
 
 const SuccessScreen: React.FC<{ reset: () => void }> = ({ reset }) => (
-  <div className="flex flex-col items-center justify-center p-8 space-y-8 text-center animate-in zoom-in duration-500 w-full">
+  <div className="flex flex-col items-center justify-center p-8 space-y-8 text-center animate-in zoom-in duration-500 w-full z-10 relative">
     <div className="relative">
       <div className="absolute inset-0 bg-emerald-500/20 blur-[50px] rounded-full"></div>
       <div className="w-36 h-36 bg-[#050B14] border border-emerald-500/50 rounded-full flex items-center justify-center relative z-10 animate-bounce shadow-[0_0_40px_rgba(16,185,129,0.3)]">
@@ -820,25 +891,37 @@ const AttendanceWizard: React.FC = () => {
   const [data, setData] = useState<Partial<Log>>({});
   const [linkedNim, setLinkedNim] = useState<string | null>(null);
 
+  const activeSessionRef = useRef<string>('');
+
   useEffect(() => {
      setLinkedNim(localStorage.getItem('axaxyz_device_owner'));
   }, []);
 
-  const reset = () => { setStep(1); setData({}); };
+  const reset = () => { setStep(1); setData({}); activeSessionRef.current = ''; };
   const steps = ['Kronologi', 'Spasial', 'Kredensial', 'Biometrik'];
 
   return (
-    <div className="min-h-screen bg-[#050B14] flex flex-col font-sans text-slate-100 overflow-hidden relative radiology-bg">
+    <div className="min-h-screen flex flex-col font-sans text-slate-100 overflow-hidden relative radiology-bg">
       {/* Radiology Dark Theme Global Styling */}
       <style>{`
         .radiology-bg {
+           background-color: #020617;
            background-image: 
-              radial-gradient(circle at 15% 50%, rgba(6, 182, 212, 0.05), transparent 25%),
-              radial-gradient(circle at 85% 30%, rgba(59, 130, 246, 0.05), transparent 25%);
+              radial-gradient(circle at 15% 50%, rgba(6, 182, 212, 0.08), transparent 25%),
+              radial-gradient(circle at 85% 30%, rgba(59, 130, 246, 0.08), transparent 25%),
+              linear-gradient(rgba(6, 182, 212, 0.03) 1px, transparent 1px),
+              linear-gradient(90deg, rgba(6, 182, 212, 0.03) 1px, transparent 1px);
+           background-size: 100% 100%, 100% 100%, 30px 30px, 30px 30px;
+           background-position: 0 0, 0 0, 0 0, 0 0;
+           animation: pulse-bg 10s ease-in-out infinite alternate;
+        }
+        @keyframes pulse-bg {
+           0% { background-color: #020617; }
+           100% { background-color: #050b14; }
         }
       `}</style>
       
-      <header className="w-full p-4 md:p-6 flex justify-between items-center relative z-10 border-b border-cyan-500/20 bg-[#0A1628]/80 backdrop-blur-xl shadow-[0_4px_30px_rgba(0,0,0,0.5)]">
+      <header className="w-full p-4 md:p-6 flex justify-between items-center relative z-20 border-b border-cyan-500/20 bg-[#0A1628]/80 backdrop-blur-xl shadow-[0_4px_30px_rgba(0,0,0,0.5)]">
         <div className="flex items-center gap-4">
           <div className="w-12 h-12 bg-[#050B14] border border-cyan-500/50 rounded-xl flex items-center justify-center shadow-[0_0_15px_rgba(6,182,212,0.4)] overflow-hidden p-2">
              <img src="/axalogo.png" alt="ABSENSI DEPT. RKG" className="w-full h-full object-contain filter drop-shadow-[0_0_5px_rgba(6,182,212,0.8)]" onError={(e) => { e.currentTarget.style.display = 'none'; e.currentTarget.nextElementSibling?.classList.remove('hidden'); }} />
@@ -869,7 +952,7 @@ const AttendanceWizard: React.FC = () => {
 
       <main className="flex-1 flex flex-col relative z-10 w-full max-w-5xl mx-auto px-4 py-6 md:py-12 overflow-y-auto">
         {step < 5 && (
-          <div className="mb-8 md:mb-16 max-w-2xl mx-auto w-full px-2">
+          <div className="mb-8 md:mb-16 max-w-2xl mx-auto w-full px-2 relative z-20">
             <div className="flex justify-between relative">
               <div className="absolute top-1/2 -translate-y-1/2 left-0 w-full h-[2px] bg-cyan-950"></div>
               <div className="absolute top-1/2 -translate-y-1/2 left-0 h-[2px] bg-cyan-400 transition-all duration-700 ease-in-out shadow-[0_0_10px_rgba(6,182,212,0.8)]" style={{ width: `${((step - 1) / (steps.length - 1)) * 100}%` }}></div>
@@ -888,13 +971,17 @@ const AttendanceWizard: React.FC = () => {
           </div>
         )}
         <div className="flex-1 flex items-center justify-center w-full">
-          {step === 1 && <TimeCheck onComplete={(d) => { setData(prev => ({...prev, ...d})); setStep(2); }} />}
+          {step === 1 && <TimeCheck onComplete={(d) => { activeSessionRef.current = d.sessionName; setData(prev => ({...prev, ...d})); setStep(2); }} />}
           {step === 2 && <LocationCheck onComplete={(d) => { setData(prev => ({...prev, location: d})); setStep(3); }} />}
-          {step === 3 && <QRScanner onComplete={(d) => { setData(prev => ({...prev, ...d})); setStep(4); }} />}
+          {step === 3 && <QRScanner activeSessionName={activeSessionRef.current} onComplete={(d) => { setData(prev => ({...prev, ...d})); setStep(4); }} />}
           {step === 4 && <SelfieCapture onComplete={(photo) => { addLog({ ...data, photoBase64: photo } as Omit<Log, 'id' | 'timestamp'>); setStep(5); }} />}
           {step === 5 && <SuccessScreen reset={reset} />}
         </div>
       </main>
+
+      <footer className="text-center py-4 text-[10px] md:text-xs text-cyan-600/60 font-mono tracking-widest relative z-10 w-full bg-black/20">
+        Copyright © 2026 DEPT. RKG RSIGM UMI— All Rights Reserved. Made with ❤️
+      </footer>
     </div>
   );
 };
@@ -953,7 +1040,7 @@ const AdminLogin: React.FC<{ onLogin: () => void }> = ({ onLogin }) => {
   };
 
   return (
-    <div className="min-h-screen bg-[#050B14] flex flex-col items-center justify-center p-4 relative overflow-hidden w-full radiology-bg">
+    <div className="min-h-screen flex flex-col items-center justify-center p-4 relative overflow-hidden w-full radiology-bg">
       <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[400px] h-[400px] bg-cyan-600/10 rounded-full blur-[100px] pointer-events-none"></div>
 
       <div className="w-full max-w-md bg-[#0A1628]/90 backdrop-blur-3xl border border-cyan-500/20 p-8 md:p-10 rounded-3xl shadow-[0_20px_60px_rgba(0,0,0,0.8)] relative z-10 animate-in slide-in-from-bottom-8 fade-in duration-700">
@@ -1007,6 +1094,10 @@ const AdminLogin: React.FC<{ onLogin: () => void }> = ({ onLogin }) => {
           </button>
         </form>
       </div>
+
+      <footer className="text-center py-4 text-[10px] md:text-xs text-cyan-600/60 font-mono tracking-widest relative z-10 w-full mt-auto">
+        Copyright © 2026 DEPT. RKG RSIGM UMI— All Rights Reserved. Made with ❤️
+      </footer>
     </div>
   );
 };
@@ -1072,7 +1163,7 @@ const AdminDashboardHome: React.FC = () => {
   ].filter(d => d.value > 0);
 
   return (
-    <div className="space-y-6 animate-in fade-in duration-500">
+    <div className="space-y-6 animate-in fade-in duration-500 pb-10">
       
       {/* FILTER SECTION */}
       <div className="bg-[#0A1628]/80 backdrop-blur-md border border-cyan-500/20 p-5 rounded-[1.5rem] flex flex-col md:flex-row gap-4 justify-between items-end shadow-lg">
@@ -1222,7 +1313,7 @@ const AdminClusters: React.FC = () => {
   }
 
   return (
-    <div className="space-y-6 animate-in fade-in duration-500">
+    <div className="space-y-6 animate-in fade-in duration-500 pb-10">
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div>
           <h2 className="text-2xl md:text-3xl font-black text-cyan-50 tracking-widest uppercase">Manajemen Cluster</h2>
@@ -1303,37 +1394,38 @@ const AdminStudents: React.FC = () => {
      }
   };
 
-  // CSV BULK UPLOAD SUPPORT
+  // EXCEL (XLSX) BULK UPLOAD SUPPORT - DYNAMIC LOAD
   const handleBulkUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
     if (!selectedClusterForBulk) {
-       alert("Pilih Cluster (Kelompok) terlebih dahulu sebelum upload file CSV.");
-       e.target.value = ''; 
+       alert("Pilih Cluster (Kelompok) terlebih dahulu sebelum upload file Excel.");
+       e.target.value = ''; // reset input
        return;
     }
 
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      const text = event.target?.result as string;
-      const lines = text.split('\n');
-      const newSt: Omit<Student, 'id'>[] = [];
+    try {
+      const XLSX = await loadXlsx();
+      const data = await file.arrayBuffer();
+      const workbook = XLSX.read(data);
+      const worksheet = workbook.Sheets[workbook.SheetNames[0]];
+      // Expecting standard columns, row 1 as header. (Nama, NIM)
+      const jsonData: any[] = XLSX.utils.sheet_to_json(worksheet);
       
-      lines.forEach((line, index) => {
-         if (index === 0) return; // Skip header row
-         const parts = line.split(/[,;\t]/);
-         if (parts.length >= 2) {
-            const name = parts[0].trim();
-            const nim = parts[1].trim();
-            if (name && nim) {
-               newSt.push({ 
-                  name, 
-                  nim, 
-                  password: `${nim}123`,
-                  clusterId: selectedClusterForBulk
-               });
-            }
+      const newSt: Omit<Student, 'id'>[] = [];
+      jsonData.forEach(row => {
+         // Flexible matching for typical column names in Indonesia
+         const name = row['Nama'] || row['NAMA'] || row['nama'] || row['Nama Lengkap'] || row['Name'];
+         const nim = row['NIM'] || row['nim'] || row['Nomor Induk'];
+         
+         if (name && nim) {
+            newSt.push({ 
+               name: String(name).trim(), 
+               nim: String(nim).trim(), 
+               password: `${String(nim).trim()}123`,
+               clusterId: selectedClusterForBulk
+            });
          }
       });
 
@@ -1341,17 +1433,20 @@ const AdminStudents: React.FC = () => {
         bulkAddStudents(newSt);
         alert(`Berhasil mengimpor ${newSt.length} entitas ke dalam sistem.`);
       } else {
-        alert('Gagal mendeteksi data. Pastikan file dalam format CSV yang valid (Nama, NIM).');
+        alert('Gagal mendeteksi data. Pastikan format kolom memiliki header "Nama" dan "NIM".');
       }
-    };
-    reader.readAsText(file);
+    } catch (err) {
+       console.error("Bulk Upload Error:", err);
+       alert("Terjadi kesalahan saat membaca file .xlsx");
+    }
+    
     e.target.value = ''; // reset input
   };
 
   const filtered = students.filter(s => s.name.toLowerCase().includes(search.toLowerCase()) || s.nim.includes(search));
 
   return (
-    <div className="space-y-6 animate-in fade-in duration-500 h-full flex flex-col w-full relative">
+    <div className="space-y-6 animate-in fade-in duration-500 h-full flex flex-col w-full relative pb-10">
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div>
           <h2 className="text-2xl md:text-3xl font-black text-cyan-50 tracking-widest uppercase">Database Entitas (MHS)</h2>
@@ -1368,8 +1463,8 @@ const AdminStudents: React.FC = () => {
            </div>
            
            <label className="flex flex-1 md:flex-none justify-center items-center gap-2 px-5 py-2.5 bg-purple-600/20 text-purple-400 hover:bg-purple-600/40 border border-purple-500/50 rounded-xl transition-all duration-300 font-black uppercase text-[10px] md:text-xs cursor-pointer active:scale-95 shadow-[0_0_10px_rgba(147,51,234,0.3)]">
-              <Upload className="w-4 h-4" /> Import CSV
-              <input type="file" accept=".csv, .txt" className="hidden" onChange={handleBulkUpload} />
+              <Upload className="w-4 h-4" /> Import XLSX
+              <input type="file" accept=".xlsx, .xls" className="hidden" onChange={handleBulkUpload} />
            </label>
            
            <button onClick={() => setIsAdding(!isAdding)} className="flex flex-1 md:flex-none justify-center items-center gap-2 px-5 py-2.5 bg-cyan-600/20 text-cyan-400 hover:bg-cyan-600/40 border border-cyan-500/50 rounded-xl transition-all duration-300 font-black uppercase text-[10px] md:text-xs active:scale-95 shadow-[0_0_10px_rgba(6,182,212,0.3)]">
@@ -1581,7 +1676,7 @@ const AdminSettings: React.FC = () => {
   }
 
   return (
-    <div className="space-y-6 animate-in fade-in duration-500">
+    <div className="space-y-6 animate-in fade-in duration-500 pb-10">
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div>
            <h2 className="text-2xl md:text-3xl font-black text-cyan-50 tracking-widest uppercase">Konfigurasi Sesi</h2>
@@ -1680,14 +1775,14 @@ const AdminReports: React.FC = () => {
   });
 
   return (
-    <div className="space-y-6 animate-in fade-in duration-500 h-full flex flex-col relative w-full">
+    <div className="space-y-6 animate-in fade-in duration-500 h-full flex flex-col relative w-full pb-10">
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div>
            <h2 className="text-2xl md:text-3xl font-black text-cyan-50 tracking-widest uppercase">Pusat Data Log</h2>
            <p className="text-cyan-500/70 text-xs md:text-sm font-mono mt-1 uppercase">Histori Audit, Citra Biometrik & Geolokasi</p>
         </div>
-        <button onClick={() => exportToCSV(filteredLogs)} className="w-full md:w-auto flex items-center justify-center gap-3 px-8 py-3.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white rounded-xl transition-all duration-300 font-black tracking-widest uppercase text-xs shadow-[0_0_20px_rgba(16,185,129,0.4)] active:scale-95">
-           <Download className="w-4 h-4" /> Export Report (CSV)
+        <button onClick={() => exportToExcel(filteredLogs)} className="w-full md:w-auto flex items-center justify-center gap-3 px-8 py-3.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white rounded-xl transition-all duration-300 font-black tracking-widest uppercase text-xs shadow-[0_0_20px_rgba(16,185,129,0.4)] active:scale-95">
+           <Download className="w-4 h-4" /> Export Report (XLSX)
         </button>
       </div>
 
@@ -1724,7 +1819,8 @@ const AdminReports: React.FC = () => {
                 <tr key={log.id} className="hover:bg-cyan-900/20 transition-colors duration-200">
                   <td className="p-4 md:p-5">
                     <div onClick={() => setPreviewImage(log.photoBase64)} className="w-16 h-16 rounded-xl overflow-hidden border-2 border-cyan-500/40 bg-black relative group cursor-pointer shadow-md hover:shadow-[0_0_15px_rgba(6,182,212,0.6)] hover:border-cyan-300 transition-all duration-300">
-                      <img src={log.photoBase64} alt="Selfie" className="w-full h-full object-cover sepia-[.2] hue-rotate-[180deg] saturate-[1.5]" />
+                      {/* Filter warna dihapus */}
+                      <img src={log.photoBase64} alt="Selfie" className="w-full h-full object-cover" />
                       <div className="absolute inset-0 bg-[#0A1628]/60 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity backdrop-blur-sm">
                         <Maximize className="w-5 h-5 text-cyan-400" />
                       </div>
@@ -1772,7 +1868,8 @@ const AdminReports: React.FC = () => {
             <div className="relative w-full overflow-hidden rounded-[2rem] border-[4px] md:border-[8px] border-cyan-500/30 shadow-[0_0_80px_rgba(6,182,212,0.4)] bg-black">
                 {/* HUD Overlay for fullscreen */}
                 <div className="absolute inset-0 pointer-events-none bg-[linear-gradient(transparent_95%,rgba(6,182,212,0.2)_100%),linear-gradient(90deg,transparent_95%,rgba(6,182,212,0.2)_100%)] bg-[length:40px_40px] mix-blend-screen opacity-50"></div>
-                <img src={previewImage} alt="Preview Selfie Fullscreen" className="max-w-full max-h-[75vh] md:max-h-[85vh] w-full object-contain mx-auto sepia-[.2] hue-rotate-[180deg] saturate-[1.5]" onClick={e => e.stopPropagation()} />
+                {/* Filter warna juga dihapus di fullscreen preview */}
+                <img src={previewImage} alt="Preview Selfie Fullscreen" className="max-w-full max-h-[75vh] md:max-h-[85vh] w-full object-contain mx-auto" onClick={e => e.stopPropagation()} />
             </div>
             <p className="mt-5 text-cyan-400 text-[10px] font-mono tracking-[0.2em] bg-[#0A1628] px-4 py-2 rounded-lg border border-cyan-500/20 uppercase">Ketuk area luar untuk terminasi pratinjau</p>
           </div>
@@ -1805,7 +1902,7 @@ const AdminGeofence: React.FC = () => {
   };
 
   return (
-    <div className="space-y-6 animate-in fade-in duration-500 max-w-3xl">
+    <div className="space-y-6 animate-in fade-in duration-500 max-w-3xl pb-10">
       <div>
         <h2 className="text-2xl md:text-3xl font-black text-cyan-50 tracking-widest uppercase">Konfigurasi Geofencing</h2>
         <p className="text-cyan-500/70 text-xs md:text-sm font-mono mt-1 uppercase">Pemetaan radius keamanan area kerja</p>
@@ -1914,7 +2011,7 @@ const AdminLayout: React.FC<{ children: React.ReactNode, activeRoute: string, se
         </div>
       </aside>
 
-      <main className="flex-1 relative overflow-y-auto w-full h-screen custom-scrollbar">
+      <main className="flex-1 flex flex-col relative overflow-y-auto w-full h-screen custom-scrollbar">
         {/* RESPONSIVE HEADER & STATUS BADGE */}
         <header className="sticky top-0 p-4 md:p-6 flex justify-between md:justify-end items-center z-30 w-full bg-[#0A1628]/80 backdrop-blur-xl border-b border-cyan-900/50 shadow-[0_4px_30px_rgba(0,0,0,0.5)]">
            <button className="md:hidden p-2.5 bg-[#050B14] border border-cyan-500/30 rounded-xl text-cyan-400 transition-colors active:scale-95 shadow-[0_0_10px_rgba(6,182,212,0.2)]" onClick={() => setIsMobileMenuOpen(true)}>
@@ -1933,7 +2030,11 @@ const AdminLayout: React.FC<{ children: React.ReactNode, activeRoute: string, se
         <div className="absolute top-[-10%] right-[-10%] w-[50%] h-[50%] bg-cyan-600/10 rounded-full blur-[120px] pointer-events-none"></div>
         <div className="absolute bottom-[-10%] left-[-10%] w-[50%] h-[50%] bg-blue-600/10 rounded-full blur-[120px] pointer-events-none"></div>
         
-        <div className="p-4 md:p-8 max-w-7xl mx-auto relative z-10 min-h-full pb-20">{children}</div>
+        <div className="p-4 md:p-8 max-w-7xl mx-auto relative z-10 flex-1 w-full">{children}</div>
+
+        <footer className="text-center py-6 text-[10px] md:text-xs text-cyan-600/60 font-mono tracking-widest mt-auto relative z-10 w-full">
+          Copyright © 2026 DEPT. RKG RSIGM UMI— All Rights Reserved. Made with ❤️
+        </footer>
       </main>
       
       {/* GLOBAL SCROLLBAR STYLING */}
