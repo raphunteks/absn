@@ -16,7 +16,7 @@ const teamData = [
          ig: "https://www.instagram.com/axaaxyz_01" 
       },
       { 
-         name: "Abdullah H.D Lasari, drg M.Kom", 
+         name: "Abdullah H.D Lasari, drg., M.Kom", 
          role: "Backend Development", 
          dept: "Dept. RKG RSIGM UMI", 
          img: "/dulprofil.png", 
@@ -111,7 +111,7 @@ export default function OurTeam() {
           Developer <span className="text-[#0066cc]">Team</span>
         </h1>
         <p className="text-slate-500 mt-4 text-sm md:text-base font-medium max-w-lg mx-auto leading-relaxed">
-          Sosok dibalik layar pengembangan Sistem Informasi BEM KBMFKG UMI & Dept. RKG RSIGM UMI.
+          Sosok dibalik layar pengembangan Sistem Informasi Dept. RKG RSIGM UMI.
         </p>
       </div>
 
