@@ -12,14 +12,14 @@ const teamData = [
          name: "M. Aksa Arsyad, drg., S.KG", 
          role: "Lead Developer", 
          dept: "Dept. RKG RSIGM UMI", 
-         img: "/axaprofil.png", 
+         img: "/public/axaprofil.jpg", 
          ig: "https://www.instagram.com/axaaxyz_01" 
       },
       { 
          name: "Abdullah H.D Lasari, drg M.Kom", 
          role: "Backend Development", 
          dept: "Dept. RKG RSIGM UMI", 
-         img: "/dulprofil.png", 
+         img: "/public/dulprofil.png", 
          ig: "" 
       }
     ]
@@ -32,14 +32,14 @@ const teamData = [
          name: "M. Rakhmat Ersyad M, drg., Sp.RKG., S.H", 
          role: "Frontend Development", 
          dept: "Dept. RKG RSIGM UMI", 
-         img: "/mrakhmatprofil.png", 
+         img: "/public/mrakhmatprofil.png", 
          ig: "https://www.instagram.com/mrakhmat" 
       },
       { 
          name: "Andi Nurul Azizah Tenrilili, drg., Sp.RKG", 
          role: "Frontend Development", 
          dept: "Dept. RKG RSIGM UMI", 
-         img: "/azizahprofil.png", 
+         img: "/public/azizahprofil.png", 
          ig: "" 
       }
     ]
@@ -52,7 +52,7 @@ const teamData = [
          name: "Dian Handayani, drg., Sp.RKG., M.Kes", 
          role: "Backend Development", 
          dept: "Dept. RKG RSIGM UMI", 
-         img: "/dianprofil.png", 
+         img: "/public/dianprofil.png", 
          ig: "" 
       }
     ]
@@ -65,7 +65,7 @@ const teamData = [
          name: "Andi Rasdianti Inra Purnama, drg., Sp.RKG", 
          role: "UI/UX Design (CSS)", 
          dept: "Dept. RKG RSIGM UMI", 
-         img: "/rasdiantiprofil.png", 
+         img: "/public/rasdiantiprofil.png", 
          ig: "" 
       }
     ]
