@@ -1,6 +1,6 @@
 "use client";
 
-import React from 'react';
+import React, { useEffect } from 'react';
 import { AppWindow, LayoutTemplate, Database, Palette, Instagram, ChevronLeft } from 'lucide-react';
 
 const teamData = [
@@ -73,6 +73,22 @@ const teamData = [
 ];
 
 export default function OurTeam() {
+  
+  // Mengatur Favicon dan Title Document
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      let link = document.querySelector("link[rel~='icon']") as HTMLLinkElement;
+      if (!link) {
+        link = document.createElement('link');
+        link.rel = 'icon';
+        document.head.appendChild(link);
+      }
+      link.href = '/axalogo.png';
+      link.type = 'image/png';
+      document.title = "Developer Team - DEPT. RKG";
+    }
+  }, []);
+
   return (
     <div className="min-h-screen bg-[#f8fafc] flex flex-col items-center py-12 md:py-16 px-4 relative overflow-hidden font-sans">
       
