@@ -16,7 +16,6 @@ import { format, startOfDay, endOfDay } from 'date-fns';
 
 // ==========================================
 // DYNAMIC SCRIPT LOADER UNTUK EXCEL (XLSX)
-// Mengatasi masalah modul eksternal esbuild di Canvas
 // ==========================================
 const loadXlsx = async () => {
   if ((window as any).XLSX) return (window as any).XLSX;
@@ -30,7 +29,7 @@ const loadXlsx = async () => {
 };
 
 // ==========================================
-// UPSTASH REDIS CLOUD CLIENT (REST API POST)
+// UPSTASH REDIS CLOUD CLIENT
 // ==========================================
 class Redis {
   url: string;
@@ -71,7 +70,6 @@ class Redis {
         return data.result; 
       }
     } catch (e) { 
-      console.error(`Redis GET Error [${key}]:`, e);
       return null; 
     }
   }
@@ -89,7 +87,6 @@ class Redis {
       if (data.error) throw new Error(data.error);
       return data;
     } catch (e) {
-      console.error(`Redis SET Error [${key}]:`, e);
       throw e;
     }
   }
@@ -136,7 +133,6 @@ const exportToExcel = async (logs: Log[]) => {
     XLSX.utils.book_append_sheet(workbook, worksheet, "Riwayat Absensi");
     XLSX.writeFile(workbook, `Radiology_Absensi_Report_${new Date().toISOString().split('T')[0]}.xlsx`);
   } catch (error) {
-    console.error("Failed to export Excel", error);
     alert("Gagal memuat modul Excel. Periksa koneksi internet Anda.");
   }
 };
@@ -264,7 +260,6 @@ const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
       await CloudStore.set(key, JSON.stringify(data));
       setSyncStatus('synced');
     } catch (e) {
-      console.error(`Sync Engine Error [${key}]:`, e);
       setSyncStatus('error');
     }
   };
@@ -285,7 +280,6 @@ const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
       setSyncStatus('synced');
       alert("✅ Sistem Radiologi tersinkronisasi paksa ke Cloud Database!");
     } catch (e: any) {
-      console.error(e);
       setSyncStatus('error');
       alert("❌ Error saat sinkronisasi: " + e.message);
     }
@@ -543,7 +537,7 @@ const QRScanner: React.FC<{ activeSessionName: string, onComplete: (data: {nim: 
               const alreadyAttended = logs.some(l => l.nim === ownerNim && l.sessionName === activeSessionName && l.timestamp.startsWith(today));
               
               if (alreadyAttended) {
-                 setError(`⚠️ Entitas ${foundStudent.name} telah tercatat hadir pada sesi ${activeSessionName} hari ini.`);
+                 setError(`⚠️ Entitas ${foundStudent.name} telah tercatat hadir pada sesi ${activeSessionName} ini hari ini.`);
                  setIsAutoLoggingIn(false);
                  return;
               }
@@ -921,7 +915,7 @@ const AttendanceWizard: React.FC = () => {
   }, []);
 
   const reset = () => { setStep(1); setData({}); activeSessionRef.current = ''; };
-  const steps = ['Kronologi', 'Spasial', 'Kredensial', 'Biometrik'];
+  const steps = ['Waktu', 'Lokasi', 'Identitas', 'Verifikasi'];
 
   return (
     <div className="min-h-screen flex flex-col font-sans text-slate-100 overflow-hidden relative radiology-bg">
@@ -1014,7 +1008,7 @@ const AttendanceWizard: React.FC = () => {
       </main>
 
       <footer className="text-center py-4 text-[10px] md:text-xs text-cyan-600/60 font-mono tracking-widest relative z-50 w-full bg-black/20">
-        <a href="https://absensi.maksaarsyad.xyz/ourteam" className="hover:text-cyan-400 hover:drop-shadow-[0_0_8px_rgba(6,182,212,0.8)] transition-all duration-300 cursor-pointer">
+        <a href="/ourteam" className="hover:text-cyan-400 hover:drop-shadow-[0_0_8px_rgba(6,182,212,0.8)] transition-all duration-300 cursor-pointer">
           Copyright © 2026 DEPT. RKG RSIGM UMI— All Rights Reserved. Made with ❤️
         </a>
       </footer>
@@ -1132,7 +1126,7 @@ const AdminLogin: React.FC<{ onLogin: () => void }> = ({ onLogin }) => {
       </div>
 
       <footer className="text-center py-4 text-[10px] md:text-xs text-cyan-600/60 font-mono tracking-widest relative z-50 w-full mt-auto">
-        <a href="https://absensi.maksaarsyad.xyz/ourteam" className="hover:text-cyan-400 hover:drop-shadow-[0_0_8px_rgba(6,182,212,0.8)] transition-all duration-300 cursor-pointer">
+        <a href="/ourteam" className="hover:text-cyan-400 hover:drop-shadow-[0_0_8px_rgba(6,182,212,0.8)] transition-all duration-300 cursor-pointer">
           Copyright © 2026 DEPT. RKG RSIGM UMI— All Rights Reserved. Made with ❤️
         </a>
       </footer>
@@ -1976,7 +1970,7 @@ const AdminLayout: React.FC<{ children: React.ReactNode, activeRoute: string, se
         <div className="p-4 md:p-8 max-w-7xl mx-auto relative z-10 flex-1 w-full">{children}</div>
 
         <footer className="text-center py-6 text-[10px] md:text-xs text-cyan-600/60 font-mono tracking-widest mt-auto relative z-50 w-full">
-          <a href="https://absensi.maksaarsyad.xyz/ourteam" className="hover:text-cyan-400 hover:drop-shadow-[0_0_8px_rgba(6,182,212,0.8)] transition-all duration-300 cursor-pointer">
+          <a href="/ourteam" className="hover:text-cyan-400 hover:drop-shadow-[0_0_8px_rgba(6,182,212,0.8)] transition-all duration-300 cursor-pointer">
             Copyright © 2026 DEPT. RKG RSIGM UMI— All Rights Reserved. Made with ❤️
           </a>
         </footer>
