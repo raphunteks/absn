@@ -118,10 +118,10 @@ const exportToExcel = async (logs: Log[]) => {
       'ID Log': log.id,
       'NIM': log.nim,
       'Nama Mahasiswa': log.name,
-      'Cluster': log.clusterName || 'Tanpa Cluster',
+      'Kelompok': log.clusterName || 'Tanpa Kelompok',
       'Tanggal': new Date(log.timestamp).toLocaleDateString('id-ID'),
       'Waktu': new Date(log.timestamp).toLocaleTimeString('id-ID'),
-      'Sesi': log.sessionName,
+      'Jadwal': log.sessionName,
       'Status': log.status,
       'Latitude': log.location.lat,
       'Longitude': log.location.lng,
@@ -131,9 +131,9 @@ const exportToExcel = async (logs: Log[]) => {
     const worksheet = XLSX.utils.json_to_sheet(dataToExport);
     const workbook = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(workbook, worksheet, "Riwayat Absensi");
-    XLSX.writeFile(workbook, `Radiology_Absensi_Report_${new Date().toISOString().split('T')[0]}.xlsx`);
+    XLSX.writeFile(workbook, `Laporan_Absensi_${new Date().toISOString().split('T')[0]}.xlsx`);
   } catch (error) {
-    alert("Gagal memuat modul Excel. Periksa koneksi internet Anda.");
+    alert("Gagal memuat file Excel. Pastikan Anda memiliki koneksi internet.");
   }
 };
 
@@ -200,11 +200,11 @@ interface AppContextType {
 }
 
 const defaultSessions: Session[] = [
-  { id: '1', name: 'Shift Pagi (Radiologi)', startTime: '07:00', endTime: '09:00', toleranceMinutes: 15, isActive: true },
-  { id: '2', name: 'Shift Siang (Lab)', startTime: '12:00', endTime: '13:30', toleranceMinutes: 15, isActive: true },
+  { id: '1', name: 'Shift Pagi', startTime: '07:00', endTime: '09:00', toleranceMinutes: 15, isActive: true },
+  { id: '2', name: 'Shift Siang', startTime: '12:00', endTime: '13:30', toleranceMinutes: 15, isActive: true },
 ];
-const defaultGeofence: Geofence = { lat: -6.200000, lng: 106.816666, radius: 500, name: 'Klinik Radiologi Pusat' };
-const defaultClusters: Cluster[] = [{ id: 'c1', name: 'Cluster I 2025' }, { id: 'c2', name: 'Cluster II 2025' }];
+const defaultGeofence: Geofence = { lat: -6.200000, lng: 106.816666, radius: 500, name: 'Gedung Kampus Pusat' };
+const defaultClusters: Cluster[] = [{ id: 'c1', name: 'Angkatan 2024' }, { id: 'c2', name: 'Angkatan 2025' }];
 
 const AppContext = createContext<AppContextType | null>(null);
 
@@ -272,7 +272,7 @@ const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
 
   const forceManualSync = async () => {
     if (!CloudStore.isAvailable()) {
-      alert("❌ Sinkronisasi Gagal: Konfigurasi NEXT_PUBLIC_... Upstash tidak terbaca di Environment Variables.");
+      alert("❌ Gagal Sinkronisasi: Pengaturan Cloud Database tidak ditemukan.");
       return;
     }
     setSyncStatus('syncing');
@@ -284,10 +284,10 @@ const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
       await CloudStore.set('axaxyz_geofence', JSON.stringify(geofence));
       await CloudStore.set('axaxyz_admins', JSON.stringify(admins));
       setSyncStatus('synced');
-      alert("✅ Sistem Radiologi tersinkronisasi paksa ke Cloud Database!");
+      alert("✅ Seluruh data berhasil dicadangkan ke Cloud Database!");
     } catch (e: any) {
       setSyncStatus('error');
-      alert("❌ Error saat sinkronisasi: " + e.message);
+      alert("❌ Terjadi kesalahan saat menyimpan data: " + e.message);
     }
   };
 
@@ -323,7 +323,7 @@ const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const deleteAdmin = (id: string) => saveAdmins(admins.filter(a => a.id !== id));
 
   const studentLogout = () => {
-     if(!confirm('Apakah Anda yakin ingin mengeluarkan perangkat ini dari sesi mahasiswa Anda?')) return;
+     if(!confirm('Apakah Anda yakin ingin logout / keluar dari akun mahasiswa di perangkat ini?')) return;
      const ownerNim = localStorage.getItem('axaxyz_device_owner');
      if (ownerNim) {
         const student = students.find(s => s.nim === ownerNim);
@@ -331,7 +331,7 @@ const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
      }
      localStorage.removeItem('axaxyz_device_id');
      localStorage.removeItem('axaxyz_device_owner');
-     alert('Perangkat Anda telah berhasil dikeluarkan dari sistem (Logged Out).');
+     alert('Anda telah berhasil keluar dari sistem absensi di perangkat ini.');
      window.location.reload();
   };
 
@@ -345,8 +345,8 @@ const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
           </div>
         </div>
         <Loader2 className="w-8 h-8 text-cyan-400 animate-spin mb-4 drop-shadow-[0_0_10px_rgba(6,182,212,0.8)]" />
-        <h2 className="text-xl font-black text-cyan-100 tracking-widest uppercase mb-2">Inisialisasi Sistem...</h2>
-        <p className="text-cyan-600/80 text-xs text-center max-w-xs font-mono uppercase">Memuat modul Dentomaxillofacial Radiology</p>
+        <h2 className="text-xl font-black text-cyan-100 tracking-widest uppercase mb-2">Memuat Sistem...</h2>
+        <p className="text-cyan-600/80 text-xs text-center max-w-xs font-mono uppercase">Menyiapkan portal absensi mahasiswa</p>
       </div>
     );
   }
@@ -427,7 +427,7 @@ const TimeCheck: React.FC<{ onComplete: (data: { sessionName: string; status: 'H
               </span>
             </div>
             <button onClick={() => onComplete({ sessionName: activeSession.session.name, status: activeSession.status as 'Hadir' | 'Terlambat' })} className="w-full py-4 bg-cyan-600 hover:bg-cyan-500 text-white font-black uppercase tracking-widest rounded-2xl transition-all duration-300 shadow-[0_0_20px_rgba(6,182,212,0.4)] hover:shadow-[0_0_30px_rgba(6,182,212,0.6)] flex items-center justify-center gap-3 active:scale-[0.98]">
-              Inisiasi Pemindaian <ScanFace className="w-5 h-5" />
+              Mulai Absen <ScanFace className="w-5 h-5" />
             </button>
           </div>
         ) : (
@@ -435,8 +435,8 @@ const TimeCheck: React.FC<{ onComplete: (data: { sessionName: string; status: 'H
             <div className="p-6 bg-rose-950/30 border border-rose-500/30 rounded-2xl text-rose-400 flex flex-col items-center gap-3">
               <AlertCircle className="w-12 h-12 animate-pulse drop-shadow-[0_0_15px_rgba(244,63,94,0.5)]" />
               <div>
-                 <p className="font-black text-lg uppercase tracking-widest text-rose-200">Sistem Terkunci</p>
-                 <p className="text-xs mt-2 font-mono text-rose-400/80">Tidak ada sesi absensi radiologi yang aktif saat ini.</p>
+                 <p className="font-black text-lg uppercase tracking-widest text-rose-200">Belum Waktunya</p>
+                 <p className="text-xs mt-2 font-mono text-rose-400/80">Saat ini tidak ada jadwal absensi yang sedang aktif.</p>
               </div>
             </div>
           </div>
@@ -455,7 +455,7 @@ const LocationCheck: React.FC<{ onComplete: (loc: {lat: number, lng: number}) =>
   const checkLocation = useCallback(() => {
     setStatus('loading');
     if (!navigator.geolocation) {
-      setStatus('error'); setErrorMsg('Sensor Geolocation tidak diizinkan.'); return;
+      setStatus('error'); setErrorMsg('Akses lokasi (GPS) pada browser Anda tidak diizinkan.'); return;
     }
     navigator.geolocation.getCurrentPosition(
       (position) => {
@@ -467,10 +467,10 @@ const LocationCheck: React.FC<{ onComplete: (loc: {lat: number, lng: number}) =>
           setTimeout(() => onComplete({ lat: latitude, lng: longitude }), 1500);
         } else {
           setStatus('error');
-          setErrorMsg(`Titik GPS berada di luar area aman ${geofence.name || 'klinik'}.`);
+          setErrorMsg(`Anda berada di luar jangkauan area absen (${geofence.name || 'Lokasi Kampus'}).`);
         }
       },
-      (error) => { setStatus('error'); setErrorMsg('Sinyal satelit lemah. Pastikan GPS aktif.'); },
+      (error) => { setStatus('error'); setErrorMsg('Sinyal GPS lemah atau belum diaktifkan. Pastikan GPS perangkat menyala.'); },
       { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
     );
   }, [onComplete, geofence]);
@@ -490,15 +490,15 @@ const LocationCheck: React.FC<{ onComplete: (loc: {lat: number, lng: number}) =>
       </div>
 
       <div className="text-center space-y-2 w-full bg-[#0A1628]/80 backdrop-blur-xl border border-cyan-500/20 p-6 md:p-8 rounded-3xl shadow-[0_20px_50px_rgba(0,0,0,0.5)] transition-all duration-300 relative z-10">
-        <h3 className="text-2xl font-black text-white tracking-widest uppercase">Pemindaian Spasial</h3>
-        {status === 'loading' && <p className="text-cyan-400/60 font-mono text-xs uppercase tracking-widest mt-2">Menyelaraskan koordinat satelit...</p>}
+        <h3 className="text-2xl font-black text-white tracking-widest uppercase">Cek Lokasi</h3>
+        {status === 'loading' && <p className="text-cyan-400/60 font-mono text-xs uppercase tracking-widest mt-2">Mencari lokasi perangkat Anda...</p>}
         
         {status === 'success' && (
           <div className="text-emerald-400 space-y-3 animate-in fade-in zoom-in mt-6">
             <ActivitySquare className="w-16 h-16 mx-auto drop-shadow-[0_0_20px_rgba(16,185,129,0.8)]" />
             <div>
-               <p className="font-black text-xl uppercase tracking-widest text-emerald-300">Validasi Geofence Cocok</p>
-               <p className="text-xs text-emerald-500/80 font-mono mt-1">Jarak deviasi: {Math.round(distance || 0)}m dari pusat radar.</p>
+               <p className="font-black text-xl uppercase tracking-widest text-emerald-300">Lokasi Sesuai</p>
+               <p className="text-xs text-emerald-500/80 font-mono mt-1">Jarak Anda: {Math.round(distance || 0)}m dari titik pusat absen.</p>
             </div>
           </div>
         )}
@@ -511,7 +511,7 @@ const LocationCheck: React.FC<{ onComplete: (loc: {lat: number, lng: number}) =>
               {distance && <p className="text-[10px] text-rose-400 mt-3 font-mono bg-rose-950 inline-block px-3 py-1.5 rounded-lg border border-rose-500/20">Jarak saat ini: {Math.round(distance)}m (Batas Maksimal: {geofence.radius}m)</p>}
             </div>
             <button onClick={checkLocation} className="w-full py-4 bg-transparent border border-cyan-500/50 hover:bg-cyan-500/10 text-cyan-400 rounded-2xl text-xs uppercase tracking-widest font-black flex items-center justify-center gap-3 transition-all duration-300 active:scale-[0.98]">
-              <RefreshCcw className="w-4 h-4" /> Resinkronisasi Satelit
+              <RefreshCcw className="w-4 h-4" /> Cek Ulang Lokasi
             </button>
           </div>
         )}
@@ -543,7 +543,7 @@ const QRScanner: React.FC<{ activeSessionName: string, onComplete: (data: {nim: 
               const alreadyAttended = logs.some(l => l.nim === ownerNim && l.sessionName === activeSessionName && l.timestamp.startsWith(today));
               
               if (alreadyAttended) {
-                 setError(`⚠️ Entitas ${foundStudent.name} telah tercatat hadir pada sesi ${activeSessionName} ini hari ini.`);
+                 setError(`⚠️ Halo ${foundStudent.name}, Anda sudah melakukan absensi pada sesi ${activeSessionName} untuk hari ini.`);
                  setIsAutoLoggingIn(false);
                  return;
               }
@@ -566,12 +566,12 @@ const QRScanner: React.FC<{ activeSessionName: string, onComplete: (data: {nim: 
   const handleVerify = (scannedNim?: string) => {
     setError('');
     const targetNim = scannedNim || nimInput;
-    if (!targetNim) { setError('Masukkan atau pindai identitas NIM.'); return; }
+    if (!targetNim) { setError('Mohon masukkan atau scan NIM Anda terlebih dahulu.'); return; }
 
     const today = new Date().toISOString().split('T')[0];
     const alreadyAttended = logs.some(l => l.nim === targetNim && l.sessionName === activeSessionName && l.timestamp.startsWith(today));
     
-    let studentName = 'Entitas Tidak Dikenal';
+    let studentName = 'Mahasiswa Belum Terdaftar';
     
     if (students.length > 0) {
       const foundStudent = students.find(s => s.nim === targetNim);
@@ -579,7 +579,7 @@ const QRScanner: React.FC<{ activeSessionName: string, onComplete: (data: {nim: 
     }
 
     if (alreadyAttended) {
-      setError(`⚠️ Akses Ditolak: Entitas ${studentName} telah tercatat hadir pada sesi ${activeSessionName} hari ini.`);
+      setError(`⚠️ Gagal: ${studentName} sudah tercatat hadir pada sesi ${activeSessionName} hari ini.`);
       return;
     }
 
@@ -592,14 +592,14 @@ const QRScanner: React.FC<{ activeSessionName: string, onComplete: (data: {nim: 
     }
     
     if (students.length > 0) {
-      if (!passInput && !scannedNim) { setError('Otorisasi sandi diperlukan.'); return; }
+      if (!passInput && !scannedNim) { setError('Kata sandi diperlukan untuk melanjutkan.'); return; }
       const foundStudent = students.find(s => s.nim === targetNim);
       if (!foundStudent) {
-        setError('Akses ditolak: NIM tidak ditemukan dalam database.'); return;
+        setError('Akses ditolak: NIM Anda belum terdaftar di database.'); return;
       }
       
       if (!scannedNim && foundStudent.password !== passInput) {
-        setError('Akses ditolak: Sandi tidak valid.'); return;
+        setError('Akses ditolak: Kata sandi yang dimasukkan salah.'); return;
       }
       studentName = foundStudent.name;
       if (foundStudent.clusterId) {
@@ -607,7 +607,7 @@ const QRScanner: React.FC<{ activeSessionName: string, onComplete: (data: {nim: 
       }
 
       if (foundStudent.deviceId && foundStudent.deviceId !== finalDeviceId) {
-        setError('⚠️ Protokol Keamanan: NIM ini telah terkunci pada perangkat lain. Harap hubungi Admin.');
+        setError('⚠️ Keamanan Sistem: Akun NIM ini sudah terikat (login) di HP/Perangkat lain. Hubungi Admin jika Anda mengganti HP.');
         return;
       }
       
@@ -615,12 +615,12 @@ const QRScanner: React.FC<{ activeSessionName: string, onComplete: (data: {nim: 
         updateStudent(foundStudent.id, { deviceId: finalDeviceId });
       }
     } else {
-      studentName = 'Bypass Mode'; 
+      studentName = 'Mode Bebas (Belum ada data di database)'; 
       let deviceOwner = localStorage.getItem('axaxyz_device_owner');
       if (!deviceOwner) {
         localStorage.setItem('axaxyz_device_owner', targetNim); 
       } else if (deviceOwner !== targetNim) {
-        setError('⚠️ Protokol Keamanan: Perangkat ini terikat pada identitas lain.');
+        setError('⚠️ Keamanan Sistem: Perangkat/HP ini sudah digunakan untuk login akun mahasiswa lain.');
         return;
       }
     }
@@ -655,16 +655,16 @@ const QRScanner: React.FC<{ activeSessionName: string, onComplete: (data: {nim: 
             },
             () => {} 
           ).catch((err: any) => {
-             setError('Gagal menginisiasi modul kamera optik.');
+             setError('Gagal membuka kamera scanner. Pastikan izin kamera diberikan.');
              setIsScanning(false);
           });
         } catch (err) {
-          setError('Terjadi kegagalan sistem kamera optik.');
+          setError('Terjadi masalah pada modul kamera perangkat Anda.');
           setIsScanning(false);
         }
       }, 100);
     } catch (error) {
-      setError('Modul QR Scanner rusak. Hubungi teknisi.');
+      setError('Scanner QR belum siap. Coba muat ulang halaman.');
       setIsScanning(false);
     }
   };
@@ -680,7 +680,7 @@ const QRScanner: React.FC<{ activeSessionName: string, onComplete: (data: {nim: 
      return (
         <div className="flex flex-col items-center justify-center p-8 space-y-6 w-full max-w-md mx-auto z-10 relative">
            <Loader2 className="w-12 h-12 text-cyan-400 animate-spin drop-shadow-[0_0_15px_rgba(6,182,212,0.8)]" />
-           <p className="text-cyan-300 font-mono uppercase tracking-widest text-xs animate-pulse text-center">Menyelaraskan Hardware & Biometrik...</p>
+           <p className="text-cyan-300 font-mono uppercase tracking-widest text-xs animate-pulse text-center">Menyiapkan sistem untuk Anda...</p>
         </div>
      );
   }
@@ -692,8 +692,8 @@ const QRScanner: React.FC<{ activeSessionName: string, onComplete: (data: {nim: 
           <div className="w-20 h-20 bg-[#050B14] border border-cyan-500/50 rounded-2xl flex items-center justify-center mx-auto mb-5 shadow-[0_0_30px_rgba(6,182,212,0.3)]">
             {isScanning ? <Camera className="w-10 h-10 text-cyan-400 animate-pulse drop-shadow-[0_0_10px_rgba(6,182,212,0.8)]" /> : <QrCode className="w-10 h-10 text-cyan-400 drop-shadow-[0_0_10px_rgba(6,182,212,0.8)]" />}
           </div>
-          <h3 className="text-2xl font-black text-white mb-2 tracking-widest uppercase">Identifikasi</h3>
-          <p className="text-cyan-500/70 text-xs font-mono uppercase tracking-wide">Pindai KTM Dentomaxillofacial Anda</p>
+          <h3 className="text-2xl font-black text-white mb-2 tracking-widest uppercase">Masuk Akun</h3>
+          <p className="text-cyan-500/70 text-xs font-mono uppercase tracking-wide">Pindai QR Code atau Input Manual</p>
         </div>
 
         {isScanning ? (
@@ -714,18 +714,18 @@ const QRScanner: React.FC<{ activeSessionName: string, onComplete: (data: {nim: 
                 <div className="absolute bottom-4 left-4 w-8 h-8 border-b-4 border-l-4 border-cyan-400 rounded-bl-lg shadow-[0_0_10px_rgba(6,182,212,0.8)]"></div>
                 <div className="absolute bottom-4 right-4 w-8 h-8 border-b-4 border-r-4 border-cyan-400 rounded-br-lg shadow-[0_0_10px_rgba(6,182,212,0.8)]"></div>
              </div>
-             <p className="text-[10px] text-center text-cyan-400 font-mono uppercase tracking-widest animate-pulse">Menunggu data optik...</p>
-             <button onClick={stopScanner} className="w-full py-4 bg-transparent border border-rose-500/50 hover:bg-rose-500/10 text-rose-400 rounded-xl text-xs uppercase tracking-widest font-black transition-all duration-300 active:scale-[0.98]">Batalkan Pemindaian</button>
+             <p className="text-[10px] text-center text-cyan-400 font-mono uppercase tracking-widest animate-pulse">Menunggu pindaian QR Code...</p>
+             <button onClick={stopScanner} className="w-full py-4 bg-transparent border border-rose-500/50 hover:bg-rose-500/10 text-rose-400 rounded-xl text-xs uppercase tracking-widest font-black transition-all duration-300 active:scale-[0.98]">Batalkan Kamera</button>
           </div>
         ) : (
           <div className="space-y-6">
             <button onClick={startScanner} className="w-full py-4 bg-cyan-600/20 hover:bg-cyan-600/40 border border-cyan-500/50 text-cyan-400 font-black tracking-widest uppercase text-xs rounded-2xl flex justify-center items-center gap-3 transition-all duration-300 active:scale-[0.98] shadow-[0_0_15px_rgba(6,182,212,0.2)]">
-              <Camera className="w-5 h-5" /> Inisiasi Kamera Optik
+              <Camera className="w-5 h-5" /> Buka Kamera QR Scanner
             </button>
             
             <div className="relative flex items-center py-2 opacity-40">
                <div className="flex-grow border-t border-cyan-500/50"></div>
-               <span className="flex-shrink-0 mx-4 text-cyan-300 text-[9px] font-mono tracking-[0.3em] uppercase">Bypass Manual</span>
+               <span className="flex-shrink-0 mx-4 text-cyan-300 text-[9px] font-mono tracking-[0.3em] uppercase">Atau Input Manual</span>
                <div className="flex-grow border-t border-cyan-500/50"></div>
             </div>
 
@@ -739,7 +739,7 @@ const QRScanner: React.FC<{ activeSessionName: string, onComplete: (data: {nim: 
             
             {students.length > 0 && (
               <div className="space-y-1.5">
-                <label className="text-[9px] text-cyan-500/80 font-bold uppercase tracking-[0.2em] ml-1">Kode Otorisasi (Sandi)</label>
+                <label className="text-[9px] text-cyan-500/80 font-bold uppercase tracking-[0.2em] ml-1">Kata Sandi (Password)</label>
                 <div className="flex items-center bg-[#050B14] border border-cyan-500/30 rounded-xl overflow-hidden focus-within:border-cyan-400 focus-within:shadow-[0_0_15px_rgba(6,182,212,0.3)] transition-all duration-300">
                   <div className="pl-4 pr-2 text-cyan-600"><Key className="w-5 h-5"/></div>
                   <input type="password" placeholder="Ketik Sandi..." className="w-full bg-transparent py-4 pr-4 text-cyan-50 font-mono outline-none placeholder-cyan-900/50" value={passInput} onChange={(e) => setPassInput(e.target.value)} />
@@ -755,13 +755,13 @@ const QRScanner: React.FC<{ activeSessionName: string, onComplete: (data: {nim: 
             )}
 
             <button onClick={() => handleVerify()} className="w-full py-4 mt-4 bg-cyan-600 hover:bg-cyan-500 text-white font-black tracking-widest uppercase text-xs rounded-2xl transition-all duration-300 shadow-[0_0_20px_rgba(6,182,212,0.4)] active:scale-[0.98]">
-              Verifikasi Kredensial
+              Lanjut Verifikasi
             </button>
           </div>
         )}
       </div>
       <p className="text-[9px] text-cyan-600/60 text-center max-w-xs uppercase tracking-[0.2em] font-mono z-10 relative">
-        Dilindungi Oleh Security Device Fingerprinting
+        Data dilindungi dengan sistem Device Fingerprinting
       </p>
 
       <style>{`
@@ -811,7 +811,6 @@ const SelfieCapture: React.FC<{ onComplete: (base64: string) => void }> = ({ onC
       const ctx = canvas.getContext('2d');
       if (ctx) {
         // PERBAIKAN MIRRORING: Hanya draw image tanpa scale(-1, 1) agar foto asli
-        // Filter warna telah dihapus sepenuhnya sesuai permintaan
         ctx.drawImage(videoRef.current, 0, 0, canvas.width, canvas.height);
         setImage(canvas.toDataURL('image/jpeg', 0.8));
       }
@@ -821,8 +820,8 @@ const SelfieCapture: React.FC<{ onComplete: (base64: string) => void }> = ({ onC
   return (
     <div className="flex flex-col items-center justify-center p-4 md:p-6 space-y-6 w-full max-w-md mx-auto animate-in slide-in-from-right duration-500 z-10 relative">
       <div className="text-center">
-        <h3 className="text-2xl md:text-3xl font-black text-white tracking-widest uppercase">Pemindaian Biometrik</h3>
-        <p className="text-cyan-500/70 text-xs font-mono uppercase tracking-wide mt-2">Posisikan struktur wajah pada area frame X-Ray</p>
+        <h3 className="text-2xl md:text-3xl font-black text-white tracking-widest uppercase">Foto Bukti Hadir</h3>
+        <p className="text-cyan-500/70 text-xs font-mono uppercase tracking-wide mt-2">Posisikan wajah Anda di tengah kotak kamera</p>
       </div>
 
       <div className="w-full bg-[#050B14] rounded-3xl overflow-hidden border-2 border-cyan-500/50 relative shadow-[0_0_40px_rgba(6,182,212,0.3)] aspect-[3/4] md:aspect-video flex items-center justify-center transition-all duration-500 group">
@@ -833,14 +832,13 @@ const SelfieCapture: React.FC<{ onComplete: (base64: string) => void }> = ({ onC
             autoPlay
             playsInline
             muted
-            // Filter warna telah dihapus, murni menampilkan UI frame saja
             className="w-full h-full object-cover transform scale-x-[-1]"
           />
         ) : (
-          <img src={image} alt="Biometric" className="w-full h-full object-cover" />
+          <img src={image} alt="Selfie Absen" className="w-full h-full object-cover" />
         )}
         
-        {/* Overlay X-Ray Style Grid Tanpa Mengubah Warna Orang */}
+        {/* Overlay X-Ray Style Grid */}
         <div className="absolute inset-0 pointer-events-none bg-[linear-gradient(transparent_95%,rgba(6,182,212,0.1)_100%),linear-gradient(90deg,transparent_95%,rgba(6,182,212,0.1)_100%)] bg-[length:40px_40px]"></div>
 
         {!image && (
@@ -873,13 +871,13 @@ const SelfieCapture: React.FC<{ onComplete: (base64: string) => void }> = ({ onC
             <div className="w-6 h-6 rounded-full border-[3px] border-cyan-400 flex items-center justify-center">
               <div className="w-2 h-2 rounded-full bg-cyan-400 animate-ping"></div>
             </div>
-            Rekam Citra Radiologi
+            Ambil Foto Selfie
           </button>
         ) : (
           <div className="flex gap-4">
-            <button onClick={() => { setImage(null); startCamera(); }} className="flex-1 py-4 bg-transparent border border-rose-500/50 hover:bg-rose-500/10 text-rose-400 font-bold uppercase tracking-widest text-xs rounded-xl transition-all duration-300 active:scale-[0.95]">Buang Citra</button>
+            <button onClick={() => { setImage(null); startCamera(); }} className="flex-1 py-4 bg-transparent border border-rose-500/50 hover:bg-rose-500/10 text-rose-400 font-bold uppercase tracking-widest text-xs rounded-xl transition-all duration-300 active:scale-[0.95]">Ulangi Foto</button>
             <button onClick={() => onComplete(image)} className="flex-[2] py-4 bg-cyan-600 hover:bg-cyan-500 text-white font-black tracking-widest uppercase text-xs rounded-xl transition-all duration-300 shadow-[0_0_20px_rgba(6,182,212,0.4)] flex items-center justify-center gap-3 active:scale-[0.95]">
-              <CheckCircle2 className="w-5 h-5" /> Verifikasi Citra
+              <CheckCircle2 className="w-5 h-5" /> Gunakan Foto Ini
             </button>
           </div>
         )}
@@ -897,13 +895,13 @@ const SuccessScreen: React.FC<{ reset: () => void }> = ({ reset }) => (
       </div>
     </div>
     <div className="space-y-4">
-      <h2 className="text-3xl md:text-4xl font-black text-emerald-300 tracking-widest uppercase">Protokol Selesai</h2>
+      <h2 className="text-3xl md:text-4xl font-black text-emerald-300 tracking-widest uppercase">Absensi Berhasil!</h2>
       <p className="text-cyan-500/70 text-xs font-mono uppercase tracking-wide max-w-sm mx-auto leading-relaxed">
-        Data Spasial, Waktu, & Citra Biometrik berhasil diamankan dalam Database Radiologi Terenkripsi.
+        Data kehadiran, jam, lokasi, dan foto selfie Anda telah berhasil disimpan ke dalam sistem.
       </p>
     </div>
     <button onClick={reset} className="px-10 py-4 bg-transparent border border-cyan-500 hover:bg-cyan-500/20 text-cyan-400 rounded-2xl transition-all duration-300 font-black tracking-widest uppercase text-sm mt-8 shadow-[0_0_20px_rgba(6,182,212,0.2)] active:scale-95">
-      Tutup Terminal
+      Selesai
     </button>
   </div>
 );
@@ -925,15 +923,15 @@ const AttendanceWizard: React.FC = () => {
 
   return (
     <div className="min-h-screen flex flex-col font-sans text-slate-100 overflow-hidden relative radiology-bg">
-      {/* Radiology Dark Theme Global Styling */}
+      {/* Dark Theme Global Styling */}
       <style>{`
         .radiology-bg {
            background-color: #020617;
            background-image: 
-              radial-gradient(circle at 15% 50%, rgba(6, 182, 212, 0.08), transparent 25%),
-              radial-gradient(circle at 85% 30%, rgba(59, 130, 246, 0.08), transparent 25%),
-              linear-gradient(rgba(6, 182, 212, 0.03) 1px, transparent 1px),
-              linear-gradient(90deg, rgba(6, 182, 212, 0.03) 1px, transparent 1px);
+             radial-gradient(circle at 15% 50%, rgba(6, 182, 212, 0.08), transparent 25%),
+             radial-gradient(circle at 85% 30%, rgba(59, 130, 246, 0.08), transparent 25%),
+             linear-gradient(rgba(6, 182, 212, 0.03) 1px, transparent 1px),
+             linear-gradient(90deg, rgba(6, 182, 212, 0.03) 1px, transparent 1px);
            background-size: 100% 100%, 100% 100%, 30px 30px, 30px 30px;
            background-position: 0 0, 0 0, 0 0, 0 0;
            animation: pulse-bg 10s ease-in-out infinite alternate;
@@ -952,7 +950,7 @@ const AttendanceWizard: React.FC = () => {
           </div>
           <div className="flex flex-col">
              <span className="font-black text-lg md:text-2xl tracking-[0.2em] text-cyan-50 uppercase drop-shadow-[0_0_10px_rgba(6,182,212,0.5)]">DEPT. RKG</span>
-             <span className="text-[8px] md:text-[10px] text-cyan-400 font-mono tracking-widest uppercase mt-0.5">Dentomaxillofacial Radiology</span>
+             <span className="text-[8px] md:text-[10px] text-cyan-400 font-mono tracking-widest uppercase mt-0.5">Sistem Absensi Mahasiswa</span>
           </div>
         </div>
         
@@ -965,10 +963,10 @@ const AttendanceWizard: React.FC = () => {
            )}
            {linkedNim ? (
               <button onClick={studentLogout} className="text-[9px] md:text-[10px] font-black px-4 py-2 bg-rose-950/50 border border-rose-500/50 hover:bg-rose-500 hover:text-white rounded-lg text-rose-400 tracking-[0.15em] uppercase shadow-[0_0_10px_rgba(244,63,94,0.2)] transition-all flex items-center gap-2">
-                 <LogOut className="w-3 h-3" /> Logout
+                 <LogOut className="w-3 h-3" /> Keluar
               </button>
            ) : (
-              <div className="text-[9px] md:text-[10px] font-black px-4 py-2 bg-cyan-950/50 border border-cyan-500/50 rounded-lg text-cyan-300 tracking-[0.15em] uppercase shadow-[0_0_10px_rgba(6,182,212,0.2)]">PORTAL MHS</div>
+              <div className="text-[9px] md:text-[10px] font-black px-4 py-2 bg-cyan-950/50 border border-cyan-500/50 rounded-lg text-cyan-300 tracking-[0.15em] uppercase shadow-[0_0_10px_rgba(6,182,212,0.2)]">Portal Mahasiswa</div>
            )}
         </div>
       </header>
@@ -1034,7 +1032,7 @@ const AdminLogin: React.FC<{ onLogin: () => void }> = ({ onLogin }) => {
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     if (lockoutTimer > 0) {
-      setErr(`Terminal terkunci. Silakan coba dalam ${lockoutTimer}s.`);
+      setErr(`Sistem terkunci. Silakan coba lagi dalam ${lockoutTimer} detik.`);
       return;
     }
     setIsLoading(true); setErr('');
@@ -1056,9 +1054,9 @@ const AdminLogin: React.FC<{ onLogin: () => void }> = ({ onLogin }) => {
       setAttempts(newAttempts);
       if (newAttempts >= 3) {
         setLockoutTimer(30); 
-        setErr('❌ Otorisasi ditolak. Akses diblokir sementara (30s).');
+        setErr('❌ Akses ditolak. Anda diblokir sementara (30 detik).');
       } else {
-        setErr(`❌ Kredensial tidak valid. (Sisa: ${3 - newAttempts})`);
+        setErr(`❌ Username atau Password salah. (Sisa percobaan: ${3 - newAttempts})`);
       }
     }
     setIsLoading(false);
@@ -1081,8 +1079,8 @@ const AdminLogin: React.FC<{ onLogin: () => void }> = ({ onLogin }) => {
               <Lock className="w-4 h-4 text-cyan-400" />
             </div>
           </div>
-          <h2 className="text-2xl md:text-3xl font-black text-cyan-50 tracking-[0.2em] uppercase">RKG Admin</h2>
-          <p className="text-cyan-500/80 text-[10px] md:text-xs mt-2 uppercase tracking-[0.3em] font-mono">Terminal Keamanan Pusat</p>
+          <h2 className="text-2xl md:text-3xl font-black text-cyan-50 tracking-[0.2em] uppercase">Login Admin</h2>
+          <p className="text-cyan-500/80 text-[10px] md:text-xs mt-2 uppercase tracking-[0.3em] font-mono">Panel Kelola Absensi</p>
         </div>
 
         <form onSubmit={handleLogin} className="space-y-6">
@@ -1094,15 +1092,15 @@ const AdminLogin: React.FC<{ onLogin: () => void }> = ({ onLogin }) => {
           )}
 
           <div className="space-y-2">
-            <label className="text-[9px] text-cyan-500/80 font-bold uppercase tracking-[0.2em] ml-1">ID Pengguna</label>
+            <label className="text-[9px] text-cyan-500/80 font-bold uppercase tracking-[0.2em] ml-1">Username</label>
             <div className="relative flex items-center bg-[#050B14] border border-cyan-500/30 rounded-xl overflow-hidden focus-within:border-cyan-400 transition-all duration-300 shadow-[inset_0_2px_10px_rgba(0,0,0,0.5)]">
               <div className="pl-4 pr-3 text-cyan-600"><User className="w-4 h-4"/></div>
-              <input type="text" value={user} onChange={e=>setUser(e.target.value)} disabled={lockoutTimer > 0 || isLoading} className="w-full bg-transparent py-4 pr-4 text-cyan-50 font-mono outline-none placeholder-cyan-900/50 disabled:opacity-50 text-sm" placeholder="Ketik ID Admin..." required />
+              <input type="text" value={user} onChange={e=>setUser(e.target.value)} disabled={lockoutTimer > 0 || isLoading} className="w-full bg-transparent py-4 pr-4 text-cyan-50 font-mono outline-none placeholder-cyan-900/50 disabled:opacity-50 text-sm" placeholder="Ketik Username..." required />
             </div>
           </div>
 
           <div className="space-y-2">
-            <label className="text-[9px] text-cyan-500/80 font-bold uppercase tracking-[0.2em] ml-1">Kode Akses</label>
+            <label className="text-[9px] text-cyan-500/80 font-bold uppercase tracking-[0.2em] ml-1">Password</label>
             <div className="relative flex items-center bg-[#050B14] border border-cyan-500/30 rounded-xl overflow-hidden focus-within:border-cyan-400 transition-all duration-300 shadow-[inset_0_2px_10px_rgba(0,0,0,0.5)]">
               <div className="pl-4 pr-3 text-cyan-600"><Key className="w-4 h-4"/></div>
               <input type={showPass ? 'text' : 'password'} value={pass} onChange={e=>setPass(e.target.value)} disabled={lockoutTimer > 0 || isLoading} className="w-full bg-transparent py-4 pr-12 text-cyan-50 font-mono outline-none placeholder-cyan-900/50 disabled:opacity-50 text-sm" placeholder="••••••••" required />
@@ -1114,7 +1112,7 @@ const AdminLogin: React.FC<{ onLogin: () => void }> = ({ onLogin }) => {
 
           <button type="submit" disabled={lockoutTimer > 0 || isLoading} className="w-full py-4 mt-8 bg-cyan-600 hover:bg-cyan-500 disabled:bg-cyan-900 disabled:text-cyan-700 disabled:cursor-not-allowed text-white font-black tracking-[0.2em] uppercase text-xs rounded-xl transition-all duration-300 shadow-[0_0_20px_rgba(6,182,212,0.3)] hover:shadow-[0_0_30px_rgba(6,182,212,0.6)] flex justify-center items-center gap-3 active:scale-95 border border-cyan-400/50">
             {isLoading ? <Loader2 className="w-5 h-5 animate-spin" /> : (
-               <>Otorisasi Akses <ChevronRight className="w-4 h-4" /></>
+               <>Masuk ke Dashboard <ChevronRight className="w-4 h-4" /></>
             )}
           </button>
         </form>
@@ -1192,8 +1190,8 @@ const AdminDashboardHome: React.FC = () => {
       {/* FILTER SECTION */}
       <div className="bg-[#0A1628]/80 backdrop-blur-md border border-cyan-500/20 p-5 rounded-[1.5rem] flex flex-col md:flex-row gap-4 justify-between items-end shadow-lg">
          <div>
-            <h2 className="text-xl md:text-2xl font-black text-cyan-50 tracking-widest uppercase">Dashboard Analisis</h2>
-            <p className="text-cyan-500/70 text-xs font-mono uppercase mt-1">Pemantauan Presensi Radiologi</p>
+            <h2 className="text-xl md:text-2xl font-black text-cyan-50 tracking-widest uppercase">Dashboard Absensi</h2>
+            <p className="text-cyan-500/70 text-xs font-mono uppercase mt-1">Ringkasan data kehadiran mahasiswa</p>
          </div>
          <div className="flex flex-col md:flex-row gap-3 w-full md:w-auto">
             <div className="flex flex-col gap-1">
@@ -1205,9 +1203,9 @@ const AdminDashboardHome: React.FC = () => {
                <input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} className="bg-[#050B14] border border-cyan-500/30 text-cyan-50 text-xs font-mono p-2.5 rounded-lg outline-none focus:border-cyan-400" />
             </div>
             <div className="flex flex-col gap-1">
-               <label className="text-[9px] text-cyan-500 uppercase tracking-widest font-bold">Filter Kelompok (Cluster)</label>
+               <label className="text-[9px] text-cyan-500 uppercase tracking-widest font-bold">Filter Kelompok / Angkatan</label>
                <select value={selectedCluster} onChange={e => setSelectedCluster(e.target.value)} className="bg-[#050B14] border border-cyan-500/30 text-cyan-50 text-xs font-bold uppercase p-2.5 rounded-lg outline-none focus:border-cyan-400 min-w-[150px]">
-                  <option value="All">Semua Cluster</option>
+                  <option value="All">Semua Kelompok</option>
                   {clusters.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
                </select>
             </div>
@@ -1240,7 +1238,7 @@ const AdminDashboardHome: React.FC = () => {
         {/* TREND CHART */}
         <div className="lg:col-span-2 bg-[#0A1628]/60 backdrop-blur-md border border-cyan-500/20 p-6 rounded-[1.5rem] flex flex-col shadow-lg relative overflow-hidden">
           <div className="absolute top-0 right-0 w-32 h-32 bg-cyan-600/10 rounded-bl-[100px] pointer-events-none"></div>
-          <h3 className="text-sm font-black text-cyan-50 mb-6 tracking-widest uppercase flex items-center gap-2"><Activity className="w-4 h-4 text-cyan-400"/> Tren Frekuensi Harian</h3>
+          <h3 className="text-sm font-black text-cyan-50 mb-6 tracking-widest uppercase flex items-center gap-2"><Activity className="w-4 h-4 text-cyan-400"/> Tren Absensi Harian</h3>
           <div className="flex-1 w-full min-h-[250px] relative z-10">
             {trendData.length > 0 ? (
               <ResponsiveContainer width="100%" height="100%">
@@ -1269,7 +1267,7 @@ const AdminDashboardHome: React.FC = () => {
 
         {/* PIE CHART */}
         <div className="bg-[#0A1628]/60 backdrop-blur-md border border-cyan-500/20 p-6 rounded-[1.5rem] flex flex-col shadow-lg">
-          <h3 className="text-sm font-black text-cyan-50 mb-6 tracking-widest uppercase">Komposisi Presensi</h3>
+          <h3 className="text-sm font-black text-cyan-50 mb-6 tracking-widest uppercase">Komposisi Kehadiran</h3>
           <div className="flex-1 w-full min-h-[250px]">
              {pieData.length > 0 ? (
                 <ResponsiveContainer width="100%" height="100%">
@@ -1296,7 +1294,7 @@ const AdminDashboardHome: React.FC = () => {
         
         {/* BAR CHART BY SESSION */}
         <div className="lg:col-span-3 bg-[#0A1628]/60 backdrop-blur-md border border-cyan-500/20 p-6 rounded-[1.5rem] flex flex-col shadow-lg">
-          <h3 className="text-sm font-black text-cyan-50 mb-6 tracking-widest uppercase">Distribusi per Sesi Shift</h3>
+          <h3 className="text-sm font-black text-cyan-50 mb-6 tracking-widest uppercase">Kehadiran Berdasarkan Jadwal/Shift</h3>
           <div className="flex-1 w-full h-[250px]">
             {barData.length > 0 ? (
               <ResponsiveContainer width="100%" height="100%">
@@ -1340,19 +1338,19 @@ const AdminClusters: React.FC = () => {
     <div className="space-y-6 animate-in fade-in duration-500 pb-10">
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div>
-          <h2 className="text-2xl md:text-3xl font-black text-cyan-50 tracking-widest uppercase">Manajemen Cluster</h2>
-          <p className="text-cyan-500/70 text-xs md:text-sm font-mono uppercase mt-1">Kelola Pengelompokan Angkatan / Divisi</p>
+          <h2 className="text-2xl md:text-3xl font-black text-cyan-50 tracking-widest uppercase">Data Kelompok / Angkatan</h2>
+          <p className="text-cyan-500/70 text-xs md:text-sm font-mono uppercase mt-1">Kelola Pengelompokan Mahasiswa</p>
         </div>
         <button onClick={() => setIsAdding(!isAdding)} className="flex items-center gap-2 px-5 py-3 bg-cyan-600/20 text-cyan-400 hover:bg-cyan-500/30 border border-cyan-500/50 rounded-xl transition-all duration-300 font-black uppercase tracking-widest text-xs shadow-[0_0_15px_rgba(6,182,212,0.2)]">
-          <Plus className="w-4 h-4" /> Tambah Cluster Baru
+          <Plus className="w-4 h-4" /> Tambah Kelompok Baru
         </button>
       </div>
 
       {isAdding && (
         <form onSubmit={handleAdd} className="bg-[#0A1628]/80 backdrop-blur-md border border-cyan-500/30 p-5 md:p-6 rounded-2xl flex flex-col md:flex-row gap-4 items-end shadow-xl animate-in slide-in-from-top-4">
           <div className="flex-1 space-y-1.5 w-full">
-            <label className="text-[10px] md:text-xs text-cyan-500 font-bold uppercase tracking-widest ml-1">Nama Cluster / Kelompok</label>
-            <input required type="text" value={newC} onChange={e=>setNewC(e.target.value)} className="w-full bg-[#050B14] border border-cyan-500/30 rounded-xl px-4 py-3.5 text-white outline-none focus:border-cyan-400 transition-colors text-sm font-mono" placeholder="Contoh: Cluster I 2025" />
+            <label className="text-[10px] md:text-xs text-cyan-500 font-bold uppercase tracking-widest ml-1">Nama Kelompok / Angkatan</label>
+            <input required type="text" value={newC} onChange={e=>setNewC(e.target.value)} className="w-full bg-[#050B14] border border-cyan-500/30 rounded-xl px-4 py-3.5 text-white outline-none focus:border-cyan-400 transition-colors text-sm font-mono" placeholder="Contoh: Angkatan 2025" />
           </div>
           <button type="submit" className="w-full md:w-auto px-8 py-3.5 bg-cyan-600 hover:bg-cyan-500 text-white font-black uppercase tracking-widest text-xs rounded-xl transition-all duration-300 shadow-lg active:scale-95">Simpan</button>
         </form>
@@ -1375,13 +1373,13 @@ const AdminClusters: React.FC = () => {
                      </div>
                      <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
                         <button onClick={()=>{setEditingId(c.id); setEditName(c.name);}} className="p-2 bg-blue-500/10 hover:bg-blue-500/20 text-blue-400 border border-blue-500/20 rounded-lg"><Edit className="w-4 h-4"/></button>
-                        <button onClick={()=>{if(confirm(`Hapus Cluster ${c.name}? Data siswa terkait akan kehilangan referensi.`)) deleteCluster(c.id);}} className="p-2 bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/20 rounded-lg"><Trash2 className="w-4 h-4"/></button>
+                        <button onClick={()=>{if(confirm(`Hapus kelompok ${c.name}? Data mahasiswa terkait akan terpengaruh.`)) deleteCluster(c.id);}} className="p-2 bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/20 rounded-lg"><Trash2 className="w-4 h-4"/></button>
                      </div>
                   </>
                )}
             </div>
          ))}
-         {clusters.length === 0 && <div className="col-span-full p-8 text-center border-2 border-dashed border-cyan-900 rounded-2xl text-cyan-700 font-mono text-sm uppercase">Belum Ada Cluster Terdaftar</div>}
+         {clusters.length === 0 && <div className="col-span-full p-8 text-center border-2 border-dashed border-cyan-900 rounded-2xl text-cyan-700 font-mono text-sm uppercase">Belum Ada Kelompok Terdaftar</div>}
       </div>
     </div>
   );
@@ -1413,7 +1411,7 @@ const AdminStudents: React.FC = () => {
   };
 
   const handleUnlinkDevice = (id: string, name: string) => {
-     if(confirm(`Konfirmasi Pelepasan Otoritas Perangkat untuk ${name}?`)) {
+     if(confirm(`Konfirmasi Pelepasan Akses Perangkat (Logout HP) untuk ${name}?`)) {
         updateStudent(id, { deviceId: null });
      }
   };
@@ -1424,7 +1422,7 @@ const AdminStudents: React.FC = () => {
     if (!file) return;
 
     if (!selectedClusterForBulk) {
-       alert("Pilih Cluster (Kelompok) terlebih dahulu sebelum upload file Excel.");
+       alert("Pilih Kelompok (Angkatan) terlebih dahulu sebelum upload file Excel.");
        e.target.value = ''; // reset input
        return;
     }
@@ -1455,7 +1453,7 @@ const AdminStudents: React.FC = () => {
 
       if (newSt.length > 0) {
         bulkAddStudents(newSt);
-        alert(`Berhasil mengimpor ${newSt.length} entitas ke dalam sistem.`);
+        alert(`Berhasil mengimpor ${newSt.length} mahasiswa ke dalam sistem.`);
       } else {
         alert('Gagal mendeteksi data. Pastikan format kolom memiliki header "Nama" dan "NIM".');
       }
@@ -1473,21 +1471,21 @@ const AdminStudents: React.FC = () => {
     <div className="space-y-6 animate-in fade-in duration-500 h-full flex flex-col w-full relative pb-10">
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div>
-          <h2 className="text-2xl md:text-3xl font-black text-cyan-50 tracking-widest uppercase">Database Entitas (MHS)</h2>
-          <p className="text-cyan-500/70 text-xs md:text-sm font-mono mt-1 uppercase">Manajemen Akses & Kartu RFID/QR Optik</p>
+          <h2 className="text-2xl md:text-3xl font-black text-cyan-50 tracking-widest uppercase">Data Mahasiswa</h2>
+          <p className="text-cyan-500/70 text-xs md:text-sm font-mono mt-1 uppercase">Kelola Data Mahasiswa dan Kartu Absen (QR)</p>
         </div>
         
         <div className="flex flex-col sm:flex-row gap-3 w-full md:w-auto bg-[#0A1628]/80 p-2 rounded-2xl border border-cyan-500/20 shadow-lg">
            
            <div className="flex items-center bg-[#050B14] border border-cyan-500/30 rounded-xl px-2 h-11">
               <select value={selectedClusterForBulk} onChange={e=>setSelectedClusterForBulk(e.target.value)} className="bg-transparent text-cyan-50 text-xs font-bold uppercase outline-none w-32 cursor-pointer appearance-none px-2">
-                 <option value="" disabled>PILIH CLUSTER (IMPORT)</option>
+                 <option value="" disabled>PILIH KELOMPOK</option>
                  {clusters.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
               </select>
            </div>
            
            <label className="flex flex-1 md:flex-none justify-center items-center gap-2 px-5 py-2.5 bg-purple-600/20 text-purple-400 hover:bg-purple-600/40 border border-purple-500/50 rounded-xl transition-all duration-300 font-black uppercase text-[10px] md:text-xs cursor-pointer active:scale-95 shadow-[0_0_10px_rgba(147,51,234,0.3)]">
-              <Upload className="w-4 h-4" /> Import XLSX
+              <Upload className="w-4 h-4" /> Import Excel
               <input type="file" accept=".xlsx, .xls" className="hidden" onChange={handleBulkUpload} />
            </label>
            
@@ -1500,27 +1498,27 @@ const AdminStudents: React.FC = () => {
       {isAdding && (
         <form onSubmit={handleAdd} className="bg-[#0A1628]/90 backdrop-blur-md border border-cyan-500/50 p-5 md:p-6 rounded-[1.5rem] grid grid-cols-1 md:grid-cols-5 gap-4 items-end animate-in slide-in-from-top-4 shadow-[0_10px_30px_rgba(0,0,0,0.5)]">
           <div className="space-y-1.5 md:col-span-2">
-            <label className="text-[9px] md:text-[10px] text-cyan-500 font-bold uppercase tracking-widest ml-1">Nama Entitas</label>
+            <label className="text-[9px] md:text-[10px] text-cyan-500 font-bold uppercase tracking-widest ml-1">Nama Mahasiswa</label>
             <input required type="text" value={newS.name} onChange={e=>setNewS({...newS, name: e.target.value})} className="w-full bg-[#050B14] border border-cyan-500/30 rounded-xl px-4 py-3 text-cyan-50 outline-none focus:border-cyan-400 font-mono text-sm" placeholder="Nama Lengkap..." />
           </div>
           <div className="space-y-1.5">
-            <label className="text-[9px] md:text-[10px] text-cyan-500 font-bold uppercase tracking-widest ml-1">ID Unik (NIM)</label>
-            <input required type="text" value={newS.nim} onChange={e=>setNewS({...newS, nim: e.target.value})} className="w-full bg-[#050B14] border border-cyan-500/30 rounded-xl px-4 py-3 text-cyan-50 outline-none focus:border-cyan-400 font-mono text-sm" placeholder="NIM..." />
+            <label className="text-[9px] md:text-[10px] text-cyan-500 font-bold uppercase tracking-widest ml-1">NIM</label>
+            <input required type="text" value={newS.nim} onChange={e=>setNewS({...newS, nim: e.target.value})} className="w-full bg-[#050B14] border border-cyan-500/30 rounded-xl px-4 py-3 text-cyan-50 outline-none focus:border-cyan-400 font-mono text-sm" placeholder="Nomor Induk Mahasiswa..." />
           </div>
           <div className="space-y-1.5">
-            <label className="text-[9px] md:text-[10px] text-cyan-500 font-bold uppercase tracking-widest ml-1">Cluster</label>
+            <label className="text-[9px] md:text-[10px] text-cyan-500 font-bold uppercase tracking-widest ml-1">Kelompok</label>
             <select required value={newS.clusterId} onChange={e=>setNewS({...newS, clusterId: e.target.value})} className="w-full bg-[#050B14] border border-cyan-500/30 rounded-xl px-4 py-3 text-cyan-50 outline-none focus:border-cyan-400 font-bold text-xs uppercase appearance-none cursor-pointer">
-               <option value="" disabled>Pilih Cluster</option>
+               <option value="" disabled>Pilih Kelompok</option>
                {clusters.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
             </select>
           </div>
-          <button type="submit" className="w-full py-3 bg-cyan-600 hover:bg-cyan-500 text-white font-black uppercase tracking-widest text-xs rounded-xl transition-all duration-300 shadow-[0_0_15px_rgba(6,182,212,0.4)] active:scale-95">Registrasi</button>
+          <button type="submit" className="w-full py-3 bg-cyan-600 hover:bg-cyan-500 text-white font-black uppercase tracking-widest text-xs rounded-xl transition-all duration-300 shadow-[0_0_15px_rgba(6,182,212,0.4)] active:scale-95">Simpan Data</button>
         </form>
       )}
 
       <div className="relative w-full max-w-md">
          <SearchIcon className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-cyan-600" />
-         <input type="text" placeholder="Pencarian Data..." value={search} onChange={e=>setSearch(e.target.value)} className="w-full bg-[#0A1628]/80 border border-cyan-500/30 rounded-2xl pl-11 pr-4 py-3.5 text-cyan-50 outline-none focus:border-cyan-400 transition-colors shadow-inner font-mono text-sm" />
+         <input type="text" placeholder="Cari Nama atau NIM..." value={search} onChange={e=>setSearch(e.target.value)} className="w-full bg-[#0A1628]/80 border border-cyan-500/30 rounded-2xl pl-11 pr-4 py-3.5 text-cyan-50 outline-none focus:border-cyan-400 transition-colors shadow-inner font-mono text-sm" />
       </div>
 
       <div className="flex-1 bg-[#0A1628]/60 backdrop-blur-md border border-cyan-500/20 rounded-[1.5rem] overflow-hidden flex flex-col shadow-[0_15px_40px_rgba(0,0,0,0.5)] relative">
@@ -1528,11 +1526,11 @@ const AdminStudents: React.FC = () => {
           <table className="w-full text-left border-collapse min-w-[800px]">
             <thead>
               <tr className="bg-[#050B14]/80 border-b border-cyan-500/20 text-cyan-500 text-[10px] tracking-[0.2em] uppercase font-black">
-                <th className="p-4 md:p-5 whitespace-nowrap">ID Unik (NIM)</th>
-                <th className="p-4 md:p-5 whitespace-nowrap">Nama Entitas</th>
-                <th className="p-4 md:p-5 whitespace-nowrap">Cluster Kategori</th>
-                <th className="p-4 md:p-5 text-center whitespace-nowrap">Otorisasi Hardware</th>
-                <th className="p-4 md:p-5 text-right whitespace-nowrap">Manajemen</th>
+                <th className="p-4 md:p-5 whitespace-nowrap">NIM</th>
+                <th className="p-4 md:p-5 whitespace-nowrap">Nama Mahasiswa</th>
+                <th className="p-4 md:p-5 whitespace-nowrap">Kelompok</th>
+                <th className="p-4 md:p-5 text-center whitespace-nowrap">Status Login HP</th>
+                <th className="p-4 md:p-5 text-right whitespace-nowrap">Pilihan</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-cyan-900/30">
@@ -1542,12 +1540,12 @@ const AdminStudents: React.FC = () => {
                   <td className="p-4 md:p-5 font-bold text-sm uppercase">{st.name}</td>
                   <td className="p-4 md:p-5">
                      <span className="text-[10px] uppercase font-bold tracking-widest text-cyan-300 bg-cyan-950/50 border border-cyan-500/30 px-3 py-1.5 rounded-md shadow-sm">
-                        {clusters.find(c => c.id === st.clusterId)?.name || 'UNASSIGNED'}
+                        {clusters.find(c => c.id === st.clusterId)?.name || 'BELUM ADA KELOMPOK'}
                      </span>
                   </td>
                   <td className="p-4 md:p-5 text-center">
                     {st.deviceId ? (
-                      <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-950/50 text-emerald-400 text-[10px] font-black uppercase tracking-widest border border-emerald-500/30 shadow-[0_0_10px_rgba(16,185,129,0.2)]"><CheckCircle2 className="w-3.5 h-3.5"/> Tersinkron</span>
+                      <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-950/50 text-emerald-400 text-[10px] font-black uppercase tracking-widest border border-emerald-500/30 shadow-[0_0_10px_rgba(16,185,129,0.2)]"><CheckCircle2 className="w-3.5 h-3.5"/> Terhubung</span>
                     ) : (
                       <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-900 text-slate-500 text-[10px] font-black uppercase tracking-widest border border-white/10">Kosong</span>
                     )}
@@ -1558,19 +1556,19 @@ const AdminStudents: React.FC = () => {
                          <RefreshCcw className="w-4 h-4" />
                       </button>
                     )}
-                    <button onClick={() => setEditingStudent(st)} title="Modifikasi Data" className="p-2 md:p-2.5 text-blue-500 hover:text-blue-300 rounded-xl transition-all duration-300 border border-blue-500/30 bg-blue-950/40 hover:bg-blue-900 hover:-translate-y-0.5 active:scale-95 shadow-sm">
+                    <button onClick={() => setEditingStudent(st)} title="Edit Data Mahasiswa" className="p-2 md:p-2.5 text-blue-500 hover:text-blue-300 rounded-xl transition-all duration-300 border border-blue-500/30 bg-blue-950/40 hover:bg-blue-900 hover:-translate-y-0.5 active:scale-95 shadow-sm">
                        <Settings className="w-4 h-4" />
                     </button>
-                    <button onClick={() => setSelectedStudentForKTM(st)} title="Cetak ID Optik (KTM)" className="px-3 py-2 text-[10px] font-black uppercase tracking-widest text-cyan-400 bg-cyan-950/50 border border-cyan-500/40 hover:bg-cyan-600 hover:text-white rounded-xl transition-all duration-300 flex items-center gap-2 hover:-translate-y-0.5 active:scale-95 shadow-[0_0_10px_rgba(6,182,212,0.2)]">
-                      <ScanFace className="w-4 h-4"/> Cetak KTM
+                    <button onClick={() => setSelectedStudentForKTM(st)} title="Cetak Kartu Absen (QR)" className="px-3 py-2 text-[10px] font-black uppercase tracking-widest text-cyan-400 bg-cyan-950/50 border border-cyan-500/40 hover:bg-cyan-600 hover:text-white rounded-xl transition-all duration-300 flex items-center gap-2 hover:-translate-y-0.5 active:scale-95 shadow-[0_0_10px_rgba(6,182,212,0.2)]">
+                      <ScanFace className="w-4 h-4"/> Cetak Kartu
                     </button>
-                    <button onClick={() => {if(confirm(`Hapus permanen entitas ${st.name}?`)) deleteStudent(st.id);}} title="Terminasi" className="p-2 md:p-2.5 text-rose-500 hover:text-white hover:bg-rose-600 rounded-xl transition-all duration-300 border border-rose-500/30 bg-rose-950/40 hover:-translate-y-0.5 active:scale-95 shadow-sm">
+                    <button onClick={() => {if(confirm(`Hapus permanen mahasiswa ${st.name}?`)) deleteStudent(st.id);}} title="Hapus Mahasiswa" className="p-2 md:p-2.5 text-rose-500 hover:text-white hover:bg-rose-600 rounded-xl transition-all duration-300 border border-rose-500/30 bg-rose-950/40 hover:-translate-y-0.5 active:scale-95 shadow-sm">
                       <Trash2 className="w-4 h-4" />
                     </button>
                   </td>
                 </tr>
               ))}
-              {filtered.length === 0 && <tr><td colSpan={5} className="p-12 text-center text-cyan-800 font-mono text-sm uppercase tracking-widest">Database Entitas Kosong / Tidak Ditemukan.</td></tr>}
+              {filtered.length === 0 && <tr><td colSpan={5} className="p-12 text-center text-cyan-800 font-mono text-sm uppercase tracking-widest">Tidak ada data mahasiswa ditemukan.</td></tr>}
             </tbody>
           </table>
         </div>
@@ -1581,7 +1579,7 @@ const AdminStudents: React.FC = () => {
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/90 backdrop-blur-xl p-4 animate-in fade-in zoom-in-95 duration-200">
            <form onSubmit={handleUpdate} className="bg-[#0A1628] border border-cyan-500/40 p-6 md:p-8 rounded-3xl w-full max-w-md shadow-[0_0_50px_rgba(6,182,212,0.3)] relative radiology-bg">
               <div className="flex justify-between items-center mb-8">
-                 <h3 className="text-xl md:text-2xl font-black text-cyan-50 tracking-widest uppercase">Modifikasi Entitas</h3>
+                 <h3 className="text-xl md:text-2xl font-black text-cyan-50 tracking-widest uppercase">Edit Data Mahasiswa</h3>
                  <button type="button" onClick={() => setEditingStudent(null)} className="p-2 bg-rose-950/50 hover:bg-rose-500 hover:text-white border border-rose-500/30 rounded-xl transition-colors text-rose-400"><X className="w-5 h-5"/></button>
               </div>
               <div className="space-y-5">
@@ -1598,14 +1596,14 @@ const AdminStudents: React.FC = () => {
                     <input required type="text" value={editingStudent.password || ''} onChange={e=>setEditingStudent({...editingStudent, password: e.target.value})} className="w-full bg-[#050B14] border border-cyan-500/30 rounded-xl px-4 py-3.5 text-cyan-50 outline-none focus:border-cyan-400 font-mono text-sm shadow-inner" />
                  </div>
                  <div className="space-y-1.5">
-                    <label className="text-[10px] text-cyan-500 font-bold uppercase tracking-widest ml-1">Pindah Cluster</label>
+                    <label className="text-[10px] text-cyan-500 font-bold uppercase tracking-widest ml-1">Pindah Kelompok</label>
                     <select required value={editingStudent.clusterId || ''} onChange={e=>setEditingStudent({...editingStudent, clusterId: e.target.value})} className="w-full bg-[#050B14] border border-cyan-500/30 rounded-xl px-4 py-3.5 text-cyan-50 outline-none focus:border-cyan-400 font-bold text-xs uppercase appearance-none cursor-pointer">
-                       <option value="" disabled>Pilih Cluster</option>
+                       <option value="" disabled>Pilih Kelompok</option>
                        {clusters.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
                     </select>
                  </div>
                  <button type="submit" className="w-full py-4 mt-6 bg-cyan-600 hover:bg-cyan-500 text-white font-black tracking-widest uppercase text-xs rounded-2xl transition-all duration-300 shadow-[0_10px_20px_rgba(6,182,212,0.4)] active:scale-95 border border-cyan-400/50">
-                    Timpa Database Sistem
+                    Simpan Perubahan
                  </button>
               </div>
            </form>
@@ -1624,13 +1622,13 @@ const AdminStudents: React.FC = () => {
           `}</style>
           <div className="bg-[#0A1628] border border-cyan-500/30 p-6 md:p-8 rounded-[2rem] w-full max-w-[450px] shadow-[0_0_50px_rgba(6,182,212,0.3)] relative z-50">
             <div className="flex justify-between items-center mb-6">
-              <h3 className="text-lg font-black text-cyan-50 tracking-widest uppercase">Visualisasi Optik KTM</h3>
+              <h3 className="text-lg font-black text-cyan-50 tracking-widest uppercase">Cetak Kartu Absen</h3>
               <button onClick={() => setSelectedStudentForKTM(null)} className="p-2 bg-rose-950/50 hover:bg-rose-500 hover:text-white border border-rose-500/30 rounded-xl transition-colors text-rose-400"><X className="w-4 h-4"/></button>
             </div>
             
             <div id="ktm-print-area" className="w-[320px] md:w-[340px] h-[500px] md:h-[540px] mx-auto bg-[#050B14] rounded-[2rem] p-6 relative overflow-hidden shadow-2xl flex flex-col items-center justify-between border-[4px] border-cyan-500/50">
                
-               {/* Cyber/Radiology Graphics for Card */}
+               {/* Graphics for Card */}
                <div className="absolute top-0 left-0 w-full h-2 bg-cyan-400"></div>
                <div className="absolute top-[-50px] right-[-50px] w-48 h-48 bg-cyan-600/20 rounded-full blur-[40px]"></div>
                <div className="absolute bottom-[-50px] left-[-50px] w-48 h-48 bg-purple-600/20 rounded-full blur-[40px]"></div>
@@ -1638,12 +1636,12 @@ const AdminStudents: React.FC = () => {
                
                <div className="text-center relative z-10 w-full mt-4">
                  <div className="w-16 h-16 bg-[#0A1628] border-2 border-cyan-400 rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-[0_0_20px_rgba(6,182,212,0.5)] p-2">
-                   <img src="/axalogo.png" alt="RKG" className="w-full h-full object-contain filter drop-shadow-[0_0_5px_rgba(6,182,212,0.8)]" onError={(e) => { e.currentTarget.style.display = 'none'; e.currentTarget.nextElementSibling?.classList.remove('hidden'); }} />
+                   <img src="/axalogo.png" alt="Logo" className="w-full h-full object-contain filter drop-shadow-[0_0_5px_rgba(6,182,212,0.8)]" onError={(e) => { e.currentTarget.style.display = 'none'; e.currentTarget.nextElementSibling?.classList.remove('hidden'); }} />
                    <ActivitySquare className="text-cyan-400 w-full h-full hidden" />
                  </div>
                  <h2 className="text-cyan-50 font-black tracking-[0.2em] text-lg drop-shadow-md">DEPT. RKG</h2>
-                 <p className="text-cyan-400 text-[8px] tracking-[0.3em] font-bold uppercase mt-1">Dentomaxillofacial Radiology</p>
-                 <p className="text-cyan-600 text-[7px] tracking-[0.2em] uppercase mt-1">Kartu Akses Sistem</p>
+                 <p className="text-cyan-400 text-[8px] tracking-[0.3em] font-bold uppercase mt-1">Sistem Absensi Mahasiswa</p>
+                 <p className="text-cyan-600 text-[7px] tracking-[0.2em] uppercase mt-1">Kartu Akses Absen</p>
                </div>
 
                <div className="bg-white p-3 rounded-2xl relative z-10 shadow-[0_0_30px_rgba(6,182,212,0.6)] border-4 border-[#0A1628]">
@@ -1655,13 +1653,13 @@ const AdminStudents: React.FC = () => {
                  <div className="h-[2px] w-16 bg-cyan-500 mx-auto my-2 rounded-full shadow-[0_0_10px_rgba(6,182,212,0.8)]"></div>
                  <p className="text-cyan-300 font-mono text-lg tracking-[0.2em] font-bold mt-2">{selectedStudentForKTM.nim}</p>
                  <p className="text-[#050B14] bg-cyan-500 inline-block px-3 py-1 rounded-md text-[8px] font-black uppercase tracking-[0.2em] mt-3">
-                    {clusters.find(c => c.id === selectedStudentForKTM.clusterId)?.name || 'UNKNOWN CLUSTER'}
+                    {clusters.find(c => c.id === selectedStudentForKTM.clusterId)?.name || 'BELUM ADA KELOMPOK'}
                  </p>
                </div>
             </div>
 
             <button onClick={() => window.print()} className="w-full mt-8 py-4 bg-transparent border-2 border-cyan-500 hover:bg-cyan-500/20 text-cyan-400 font-black tracking-widest uppercase text-xs rounded-2xl flex items-center justify-center gap-3 transition-all duration-300 shadow-[0_0_20px_rgba(6,182,212,0.3)] active:scale-95">
-              <Printer className="w-4 h-4" /> Hardcopy Print Request
+              <Printer className="w-4 h-4" /> Cetak Sekarang (Print)
             </button>
           </div>
         </div>
@@ -1690,25 +1688,25 @@ const AdminReports: React.FC = () => {
     <div className="space-y-6 animate-in fade-in duration-500 h-full flex flex-col relative w-full pb-10">
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div>
-           <h2 className="text-2xl md:text-3xl font-black text-cyan-50 tracking-widest uppercase">Pusat Data Log</h2>
-           <p className="text-cyan-500/70 text-xs md:text-sm font-mono mt-1 uppercase">Histori Audit, Citra Biometrik & Geolokasi</p>
+           <h2 className="text-2xl md:text-3xl font-black text-cyan-50 tracking-widest uppercase">Riwayat Kehadiran</h2>
+           <p className="text-cyan-500/70 text-xs md:text-sm font-mono mt-1 uppercase">Data waktu, lokasi, dan foto absensi mahasiswa</p>
         </div>
         <button onClick={() => exportToExcel(filteredLogs)} className="w-full md:w-auto flex items-center justify-center gap-3 px-8 py-3.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white rounded-xl transition-all duration-300 font-black tracking-widest uppercase text-xs shadow-[0_0_20px_rgba(16,185,129,0.4)] active:scale-95">
-           <Download className="w-4 h-4" /> Export Report (XLSX)
+           <Download className="w-4 h-4" /> Download Laporan (Excel)
         </button>
       </div>
 
       <div className="flex flex-col md:flex-row gap-3 md:gap-4 bg-[#0A1628]/60 p-4 rounded-2xl border border-cyan-500/20 shadow-lg">
         <div className="relative flex-1">
            <SearchIcon className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-cyan-600" />
-           <input type="text" placeholder="Pencarian spesifik..." value={search} onChange={e=>setSearch(e.target.value)} className="w-full bg-[#050B14] border border-cyan-500/30 rounded-xl pl-11 pr-4 py-3.5 text-cyan-50 outline-none focus:border-cyan-400 transition-colors shadow-inner font-mono text-sm" />
+           <input type="text" placeholder="Cari Nama atau NIM..." value={search} onChange={e=>setSearch(e.target.value)} className="w-full bg-[#050B14] border border-cyan-500/30 rounded-xl pl-11 pr-4 py-3.5 text-cyan-50 outline-none focus:border-cyan-400 transition-colors shadow-inner font-mono text-sm" />
         </div>
         <select value={filterCluster} onChange={e=>setFilterCluster(e.target.value)} className="bg-[#050B14] border border-cyan-500/30 rounded-xl px-5 py-3.5 text-cyan-50 outline-none focus:border-cyan-400 transition-colors shadow-inner w-full md:w-48 font-bold text-xs uppercase cursor-pointer appearance-none">
-          <option value="All">Filter: Semua Cluster</option>
+          <option value="All">Semua Kelompok</option>
           {clusters.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
         </select>
         <select value={filterSession} onChange={e=>setFilterSession(e.target.value)} className="bg-[#050B14] border border-cyan-500/30 rounded-xl px-5 py-3.5 text-cyan-50 outline-none focus:border-cyan-400 transition-colors shadow-inner w-full md:w-48 font-bold text-xs uppercase cursor-pointer appearance-none">
-          <option value="All">Filter: Semua Sesi</option>
+          <option value="All">Semua Jadwal Shift</option>
           {sessions.map(s => <option key={s.id} value={s.name}>{s.name}</option>)}
         </select>
       </div>
@@ -1718,11 +1716,11 @@ const AdminReports: React.FC = () => {
           <table className="w-full text-left border-collapse min-w-[1000px]">
             <thead>
               <tr className="bg-[#050B14]/80 border-b border-cyan-500/30 text-cyan-500 text-[10px] tracking-[0.2em] uppercase font-black">
-                <th className="p-4 md:p-5">Citra Visual</th>
-                <th className="p-4 md:p-5">Data Entitas</th>
-                <th className="p-4 md:p-5">Waktu Pencatatan (Log)</th>
-                <th className="p-4 md:p-5">Parameter Sesi</th>
-                <th className="p-4 md:p-5">Satelit Geofence</th>
+                <th className="p-4 md:p-5">Foto Absen</th>
+                <th className="p-4 md:p-5">Data Mahasiswa</th>
+                <th className="p-4 md:p-5">Waktu Kehadiran</th>
+                <th className="p-4 md:p-5">Jadwal Shift</th>
+                <th className="p-4 md:p-5">Lokasi Absen</th>
                 <th className="p-4 md:p-5 text-right">Opsi</th>
               </tr>
             </thead>
@@ -1731,7 +1729,6 @@ const AdminReports: React.FC = () => {
                 <tr key={log.id} className="hover:bg-cyan-900/20 transition-colors duration-200">
                   <td className="p-4 md:p-5">
                     <div onClick={() => setPreviewImage(log.photoBase64)} className="w-16 h-16 rounded-xl overflow-hidden border-2 border-cyan-500/40 bg-black relative group cursor-pointer shadow-md hover:shadow-[0_0_15px_rgba(6,182,212,0.6)] hover:border-cyan-300 transition-all duration-300">
-                      {/* Filter warna dihapus */}
                       <img src={log.photoBase64} alt="Selfie" className="w-full h-full object-cover" />
                       <div className="absolute inset-0 bg-[#0A1628]/60 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity backdrop-blur-sm">
                         <Maximize className="w-5 h-5 text-cyan-400" />
@@ -1741,7 +1738,7 @@ const AdminReports: React.FC = () => {
                   <td className="p-4 md:p-5">
                      <p className="font-bold text-cyan-50 text-sm uppercase tracking-wide truncate max-w-[200px] mb-1">{log.name}</p>
                      <p className="text-xs text-cyan-400/80 font-mono tracking-widest">{log.nim}</p>
-                     <p className="text-[9px] mt-2 inline-block px-2 py-0.5 bg-cyan-950 text-cyan-300 rounded border border-cyan-500/20 font-bold uppercase tracking-wider">{log.clusterName || 'Tanpa Cluster'}</p>
+                     <p className="text-[9px] mt-2 inline-block px-2 py-0.5 bg-cyan-950 text-cyan-300 rounded border border-cyan-500/20 font-bold uppercase tracking-wider">{log.clusterName || 'Tanpa Kelompok'}</p>
                   </td>
                   <td className="p-4 md:p-5">
                      <p className="text-cyan-50 font-black font-mono text-base tracking-wider mb-1 drop-shadow-md">{new Date(log.timestamp).toLocaleTimeString('id-ID')}</p>
@@ -1753,18 +1750,18 @@ const AdminReports: React.FC = () => {
                   </td>
                   <td className="p-4 md:p-5">
                     <a href={`https://www.google.com/maps?q=${log.location.lat},${log.location.lng}`} target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 px-3 py-2 bg-cyan-950/50 hover:bg-cyan-600 hover:text-white text-cyan-400 text-[9px] font-black uppercase tracking-[0.2em] rounded-lg border border-cyan-500/40 transition-all duration-300 shadow-sm active:scale-95">
-                      <MapPin className="w-3 h-3" /> Pindai G-Maps
+                      <MapPin className="w-3 h-3" /> Buka Peta
                     </a>
                     <p className="text-[9px] text-cyan-600/70 mt-2.5 font-mono uppercase tracking-widest bg-[#050B14] inline-block px-2 py-1 rounded-md border border-cyan-900/50">{log.location.lat.toFixed(5)}, {log.location.lng.toFixed(5)}</p>
                   </td>
                   <td className="p-4 md:p-5 text-right">
-                    <button onClick={() => { if(confirm(`Hapus permanen log absensi entitas ${log.name}?`)) deleteLog(log.id); }} title="Terminasi Log" className="p-2.5 text-rose-500 hover:text-white hover:bg-rose-600 rounded-xl transition-all duration-300 border border-transparent hover:border-rose-500/50 hover:shadow-[0_0_15px_rgba(244,63,94,0.4)] active:scale-95">
+                    <button onClick={() => { if(confirm(`Yakin ingin menghapus riwayat kehadiran ${log.name}?`)) deleteLog(log.id); }} title="Hapus Riwayat" className="p-2.5 text-rose-500 hover:text-white hover:bg-rose-600 rounded-xl transition-all duration-300 border border-transparent hover:border-rose-500/50 hover:shadow-[0_0_15px_rgba(244,63,94,0.4)] active:scale-95">
                       <Trash2 className="w-5 h-5" />
                     </button>
                   </td>
                 </tr>
               ))}
-              {filteredLogs.length === 0 && <tr><td colSpan={6} className="p-16 text-center text-cyan-800 font-mono text-sm uppercase tracking-widest">Database Log Kosong / Tidak Ditemukan.</td></tr>}
+              {filteredLogs.length === 0 && <tr><td colSpan={6} className="p-16 text-center text-cyan-800 font-mono text-sm uppercase tracking-widest">Belum ada riwayat absensi.</td></tr>}
             </tbody>
           </table>
         </div>
@@ -1780,10 +1777,9 @@ const AdminReports: React.FC = () => {
             <div className="relative w-full overflow-hidden rounded-[2rem] border-[4px] md:border-[8px] border-cyan-500/30 shadow-[0_0_80px_rgba(6,182,212,0.4)] bg-black">
                 {/* HUD Overlay for fullscreen */}
                 <div className="absolute inset-0 pointer-events-none bg-[linear-gradient(transparent_95%,rgba(6,182,212,0.2)_100%),linear-gradient(90deg,transparent_95%,rgba(6,182,212,0.2)_100%)] bg-[length:40px_40px] mix-blend-screen opacity-50"></div>
-                {/* Filter warna juga dihapus di fullscreen preview */}
-                <img src={previewImage} alt="Preview Selfie Fullscreen" className="max-w-full max-h-[75vh] md:max-h-[85vh] w-full object-contain mx-auto" onClick={e => e.stopPropagation()} />
+                <img src={previewImage} alt="Preview Foto Absen" className="max-w-full max-h-[75vh] md:max-h-[85vh] w-full object-contain mx-auto" onClick={e => e.stopPropagation()} />
             </div>
-            <p className="mt-5 text-cyan-400 text-[10px] font-mono tracking-[0.2em] bg-[#0A1628] px-4 py-2 rounded-lg border border-cyan-500/20 uppercase">Ketuk area luar untuk terminasi pratinjau</p>
+            <p className="mt-5 text-cyan-400 text-[10px] font-mono tracking-[0.2em] bg-[#0A1628] px-4 py-2 rounded-lg border border-cyan-500/20 uppercase">Ketuk area luar untuk menutup foto</p>
           </div>
         </div>
       )}
@@ -1796,19 +1792,19 @@ const AdminGeofence: React.FC = () => {
   const [lat, setLat] = useState(geofence.lat.toString());
   const [lng, setLng] = useState(geofence.lng.toString());
   const [radius, setRadius] = useState(geofence.radius.toString());
-  const [locationName, setLocationName] = useState(geofence.name || 'Klinik Radiologi');
+  const [locationName, setLocationName] = useState(geofence.name || 'Gedung Kampus Pusat');
 
   const handleSave = (e: React.FormEvent) => {
     e.preventDefault();
     updateGeofence({ lat: parseFloat(lat), lng: parseFloat(lng), radius: parseInt(radius), name: locationName });
-    alert('Konfigurasi spasial berhasil disimpan dan disinkronisasikan ke Server.');
+    alert('Pengaturan lokasi absensi berhasil disimpan!');
   };
 
   const getMyLocation = () => {
     if (navigator.geolocation) {
       navigator.geolocation.getCurrentPosition(
         (pos) => { setLat(pos.coords.latitude.toString()); setLng(pos.coords.longitude.toString()); },
-        () => alert('Sensor GPS gagal mengunci lokasi.')
+        () => alert('Gagal mendeteksi lokasi GPS Anda saat ini.')
       );
     }
   };
@@ -1816,43 +1812,43 @@ const AdminGeofence: React.FC = () => {
   return (
     <div className="space-y-6 animate-in fade-in duration-500 max-w-3xl pb-10">
       <div>
-        <h2 className="text-2xl md:text-3xl font-black text-cyan-50 tracking-widest uppercase">Konfigurasi Geofencing</h2>
-        <p className="text-cyan-500/70 text-xs md:text-sm font-mono mt-1 uppercase">Pemetaan radius keamanan area kerja</p>
+        <h2 className="text-2xl md:text-3xl font-black text-cyan-50 tracking-widest uppercase">Pengaturan Lokasi Absen</h2>
+        <p className="text-cyan-500/70 text-xs md:text-sm font-mono mt-1 uppercase">Tentukan batas area kampus atau tempat kerja</p>
       </div>
 
       <form onSubmit={handleSave} className="bg-[#0A1628]/80 backdrop-blur-md border border-cyan-500/30 p-6 md:p-8 rounded-[2rem] space-y-6 md:space-y-8 shadow-[0_15px_40px_rgba(0,0,0,0.5)]">
         <div className="p-5 bg-cyan-950/30 border border-cyan-500/30 rounded-2xl flex items-start gap-4 shadow-inner relative overflow-hidden">
           <div className="absolute left-0 top-0 w-1 h-full bg-cyan-500"></div>
           <Navigation className="w-7 h-7 text-cyan-400 mt-1 shrink-0 drop-shadow-[0_0_8px_rgba(6,182,212,0.8)]" />
-          <p className="text-xs text-cyan-100/90 leading-relaxed font-mono uppercase tracking-wide">Radar sistem hanya akan mengizinkan otorisasi kehadiran jika kordinat spasial pengguna (secara realtime) berada dalam zona hijau (<b>Radius Maksimal</b>) dari titik pusat radar di bawah ini.</p>
+          <p className="text-xs text-cyan-100/90 leading-relaxed font-mono uppercase tracking-wide">Mahasiswa hanya bisa melakukan absen jika lokasi GPS mereka berada dalam jangkauan jarak (<b>Batas Radius Maksimal</b>) dari koordinat lokasi yang Anda tentukan di bawah ini.</p>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-5 md:gap-6">
           <div className="space-y-1.5 md:col-span-2">
-             <label className="text-[10px] text-cyan-500 font-bold uppercase tracking-widest ml-1">Nama Titik Radar (Pesan Kegagalan)</label>
-             <input required type="text" value={locationName} onChange={e=>setLocationName(e.target.value)} className="w-full bg-[#050B14] border border-cyan-500/30 rounded-xl px-4 py-3.5 text-cyan-50 outline-none focus:border-cyan-400 transition-colors shadow-inner text-sm font-mono" placeholder="Contoh: Gedung Klinik Pusat" />
+             <label className="text-[10px] text-cyan-500 font-bold uppercase tracking-widest ml-1">Nama Lokasi Absen</label>
+             <input required type="text" value={locationName} onChange={e=>setLocationName(e.target.value)} className="w-full bg-[#050B14] border border-cyan-500/30 rounded-xl px-4 py-3.5 text-cyan-50 outline-none focus:border-cyan-400 transition-colors shadow-inner text-sm font-mono" placeholder="Contoh: Gedung Rektorat" />
           </div>
           <div className="space-y-1.5">
-            <label className="text-[10px] text-cyan-500 font-bold uppercase tracking-widest ml-1">Sumbu Y (Latitude)</label>
+            <label className="text-[10px] text-cyan-500 font-bold uppercase tracking-widest ml-1">Latitude</label>
             <input required type="number" step="any" value={lat} onChange={e=>setLat(e.target.value)} className="w-full bg-[#050B14] border border-cyan-500/30 rounded-xl px-4 py-3.5 text-cyan-50 outline-none focus:border-cyan-400 transition-colors shadow-inner font-mono text-sm" />
           </div>
           <div className="space-y-1.5">
-            <label className="text-[10px] text-cyan-500 font-bold uppercase tracking-widest ml-1">Sumbu X (Longitude)</label>
+            <label className="text-[10px] text-cyan-500 font-bold uppercase tracking-widest ml-1">Longitude</label>
             <input required type="number" step="any" value={lng} onChange={e=>setLng(e.target.value)} className="w-full bg-[#050B14] border border-cyan-500/30 rounded-xl px-4 py-3.5 text-cyan-50 outline-none focus:border-cyan-400 transition-colors shadow-inner font-mono text-sm" />
           </div>
         </div>
 
         <div className="space-y-1.5">
-           <label className="text-[10px] text-cyan-500 font-bold uppercase tracking-widest ml-1">Limitasi Jarak Radar (Meter)</label>
+           <label className="text-[10px] text-cyan-500 font-bold uppercase tracking-widest ml-1">Batas Jarak Radius (Meter)</label>
            <input required type="number" min="10" value={radius} onChange={e=>setRadius(e.target.value)} className="w-full bg-[#050B14] border border-cyan-500/30 rounded-xl px-4 py-4 text-cyan-400 outline-none focus:border-cyan-400 transition-colors shadow-inner font-black text-lg md:text-xl text-center tracking-widest" />
         </div>
 
         <div className="flex flex-col md:flex-row gap-3 md:gap-4 pt-8 border-t border-cyan-900/50">
           <button type="button" onClick={getMyLocation} className="w-full md:w-auto px-6 py-4 bg-[#050B14] hover:bg-cyan-950/40 border border-cyan-500/40 text-cyan-400 font-black tracking-widest uppercase text-xs rounded-xl transition-all duration-300 flex items-center justify-center gap-3 active:scale-95 shadow-sm">
-            <MapPin className="w-4 h-4" /> Kalibrasi Posisi
+            <MapPin className="w-4 h-4" /> Gunakan Lokasi Saya Saat Ini
           </button>
           <button type="submit" className="w-full md:flex-1 py-4 bg-cyan-600 hover:bg-cyan-500 text-white font-black tracking-[0.15em] uppercase text-xs rounded-xl transition-all duration-300 shadow-[0_0_20px_rgba(6,182,212,0.4)] active:scale-95 border border-cyan-400/50">
-            Kunci Pengaturan Spasial
+            Simpan Lokasi
           </button>
         </div>
       </form>
@@ -1893,11 +1889,11 @@ const AdminSettings: React.FC = () => {
     <div className="space-y-6 animate-in fade-in duration-500 pb-10">
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div>
-           <h2 className="text-2xl md:text-3xl font-black text-cyan-50 tracking-widest uppercase">Konfigurasi Sesi</h2>
-           <p className="text-cyan-500/70 text-xs md:text-sm font-mono mt-1 uppercase">Manajemen Jadwal Shift Radiologi</p>
+           <h2 className="text-2xl md:text-3xl font-black text-cyan-50 tracking-widest uppercase">Pengaturan Jadwal Shift</h2>
+           <p className="text-cyan-500/70 text-xs md:text-sm font-mono mt-1 uppercase">Kelola jadwal jam kehadiran mahasiswa</p>
         </div>
         <button onClick={() => {cancelForm(); setIsAdding(true);}} className="flex items-center gap-2 px-6 py-3 bg-cyan-600/20 text-cyan-400 hover:bg-cyan-500/30 border border-cyan-500/50 rounded-xl transition-all duration-300 font-black uppercase tracking-widest text-xs shadow-[0_0_15px_rgba(6,182,212,0.2)] w-full md:w-auto justify-center">
-           <Plus className="w-4 h-4" /> Alokasi Sesi Baru
+           <Plus className="w-4 h-4" /> Tambah Jadwal Baru
         </button>
       </div>
 
@@ -1907,8 +1903,8 @@ const AdminSettings: React.FC = () => {
           <div className="absolute top-4 right-4 cursor-pointer text-cyan-600 hover:text-cyan-400" onClick={cancelForm}><X className="w-5 h-5"/></div>
 
           <div className="space-y-1.5 md:col-span-2">
-             <label className="text-[10px] text-cyan-500 font-bold uppercase tracking-widest ml-1">Nama Sesi (Label Shift)</label>
-             <input required type="text" value={formSess.name} onChange={e=>setFormSess({...formSess, name: e.target.value})} className="w-full bg-[#050B14] border border-cyan-500/30 rounded-xl px-4 py-3.5 text-cyan-50 outline-none focus:border-cyan-400 font-mono text-sm" placeholder="e.g. Shift Malam (Cito)" />
+             <label className="text-[10px] text-cyan-500 font-bold uppercase tracking-widest ml-1">Nama Shift</label>
+             <input required type="text" value={formSess.name} onChange={e=>setFormSess({...formSess, name: e.target.value})} className="w-full bg-[#050B14] border border-cyan-500/30 rounded-xl px-4 py-3.5 text-cyan-50 outline-none focus:border-cyan-400 font-mono text-sm" placeholder="Contoh: Shift Pagi / Kelas A" />
           </div>
           <div className="space-y-1.5">
              <label className="text-[10px] text-cyan-500 font-bold uppercase tracking-widest ml-1">Jam Mulai</label>
@@ -1919,14 +1915,14 @@ const AdminSettings: React.FC = () => {
              <input required type="time" value={formSess.endTime} onChange={e=>setFormSess({...formSess, endTime: e.target.value})} className="w-full bg-[#050B14] border border-cyan-500/30 rounded-xl px-4 py-3.5 text-cyan-50 outline-none focus:border-cyan-400 font-mono text-sm" />
           </div>
           <div className="space-y-1.5">
-             <label className="text-[10px] text-cyan-500 font-bold uppercase tracking-widest ml-1">Batas Toleransi</label>
+             <label className="text-[10px] text-cyan-500 font-bold uppercase tracking-widest ml-1">Batas Keterlambatan</label>
              <div className="relative">
                 <input required type="number" min="0" value={formSess.toleranceMinutes} onChange={e=>setFormSess({...formSess, toleranceMinutes: parseInt(e.target.value)})} className="w-full bg-[#050B14] border border-cyan-500/30 rounded-xl pl-4 pr-12 py-3.5 text-cyan-50 outline-none focus:border-cyan-400 font-mono text-sm" />
-                <span className="absolute right-4 top-1/2 -translate-y-1/2 text-cyan-600 text-xs font-mono font-bold">MIN</span>
+                <span className="absolute right-4 top-1/2 -translate-y-1/2 text-cyan-600 text-xs font-mono font-bold">MENIT</span>
              </div>
           </div>
           <button type="submit" className="md:col-span-5 w-full py-4 bg-cyan-600 hover:bg-cyan-500 text-white font-black uppercase tracking-widest text-xs rounded-xl transition-all duration-300 shadow-[0_0_15px_rgba(6,182,212,0.4)] active:scale-95 mt-2">
-             {editingSessId ? 'Terapkan Modifikasi' : 'Simpan Alokasi Sesi'}
+             {editingSessId ? 'Simpan Perubahan' : 'Buat Jadwal Shift'}
           </button>
         </form>
       )}
@@ -1941,27 +1937,27 @@ const AdminSettings: React.FC = () => {
               <h3 className="text-xl font-black text-cyan-50 uppercase tracking-widest max-w-[60%]">{session.name}</h3>
               <div className="flex gap-2">
                 <button onClick={() => updateSession(session.id, { isActive: !session.isActive })} className={cn("px-4 py-2 text-[9px] font-black uppercase tracking-widest rounded-lg border transition-all duration-300 shadow-sm active:scale-95 flex items-center gap-1", session.isActive ? "bg-emerald-950/50 text-emerald-400 border-emerald-500/40 shadow-[0_0_10px_rgba(16,185,129,0.2)]" : "bg-slate-900/80 text-slate-500 border-slate-700")}>
-                   {session.isActive ? <><Activity className="w-3 h-3"/> Online</> : 'Offline'}
+                   {session.isActive ? <><Activity className="w-3 h-3"/> Aktif</> : 'Nonaktif'}
                 </button>
               </div>
             </div>
             
             <div className="space-y-4 text-xs font-mono bg-[#050B14] p-5 rounded-2xl border border-cyan-500/20 relative z-10 shadow-inner">
               <div className="flex justify-between items-center text-cyan-400/80">
-                 <div className="flex items-center gap-3"><Clock className="w-4 h-4 text-cyan-500"/> Jendela Waktu</div>
+                 <div className="flex items-center gap-3"><Clock className="w-4 h-4 text-cyan-500"/> Jam Absen</div>
                  <span className="text-cyan-50 font-bold bg-[#0A1628] px-3 py-1.5 rounded-lg border border-cyan-500/20">{session.startTime} - {session.endTime}</span>
               </div>
               <div className="flex justify-between items-center text-cyan-400/80">
-                 <div className="flex items-center gap-3"><ActivitySquare className="w-4 h-4 text-purple-500"/> Deviasi Maksimal (Telat)</div>
-                 <span className="text-purple-300 font-bold bg-purple-950/40 px-3 py-1.5 rounded-lg border border-purple-500/30">+{session.toleranceMinutes} MIN</span>
+                 <div className="flex items-center gap-3"><ActivitySquare className="w-4 h-4 text-purple-500"/> Toleransi Terlambat</div>
+                 <span className="text-purple-300 font-bold bg-purple-950/40 px-3 py-1.5 rounded-lg border border-purple-500/30">+{session.toleranceMinutes} Menit</span>
               </div>
             </div>
 
             <div className="flex justify-end gap-2 mt-5 relative z-10">
                <button onClick={() => startEdit(session)} className="flex items-center gap-2 px-4 py-2 text-[10px] font-black uppercase tracking-widest bg-blue-950/50 text-blue-400 hover:bg-blue-600 hover:text-white border border-blue-500/30 rounded-xl transition-all duration-300 active:scale-95">
-                 <Edit className="w-3.5 h-3.5" /> Modifikasi
+                 <Edit className="w-3.5 h-3.5" /> Edit
                </button>
-               <button onClick={() => {if(confirm(`Hapus permanen sesi ${session.name}?`)) deleteSession(session.id);}} className="flex items-center gap-2 px-4 py-2 text-[10px] font-black uppercase tracking-widest bg-rose-950/50 text-rose-400 hover:bg-rose-600 hover:text-white border border-rose-500/30 rounded-xl transition-all duration-300 active:scale-95">
+               <button onClick={() => {if(confirm(`Yakin ingin menghapus jadwal ${session.name}?`)) deleteSession(session.id);}} className="flex items-center gap-2 px-4 py-2 text-[10px] font-black uppercase tracking-widest bg-rose-950/50 text-rose-400 hover:bg-rose-600 hover:text-white border border-rose-500/30 rounded-xl transition-all duration-300 active:scale-95">
                  <Trash2 className="w-3.5 h-3.5" /> Hapus
                </button>
             </div>
@@ -2003,11 +1999,11 @@ const AdminManagement: React.FC = () => {
     <div className="space-y-6 animate-in fade-in duration-500 pb-10">
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div>
-          <h2 className="text-2xl md:text-3xl font-black text-cyan-50 tracking-widest uppercase">Manajemen Admin</h2>
-          <p className="text-cyan-500/70 text-xs md:text-sm font-mono uppercase mt-1">Kelola Akun Otorisasi Keamanan Pusat</p>
+          <h2 className="text-2xl md:text-3xl font-black text-cyan-50 tracking-widest uppercase">Kelola Akun Admin</h2>
+          <p className="text-cyan-500/70 text-xs md:text-sm font-mono uppercase mt-1">Tambah atau atur akses masuk ke Dashboard</p>
         </div>
         <button onClick={() => setIsAdding(!isAdding)} className="flex items-center gap-2 px-5 py-3 bg-cyan-600/20 text-cyan-400 hover:bg-cyan-500/30 border border-cyan-500/50 rounded-xl transition-all duration-300 font-black uppercase tracking-widest text-xs shadow-[0_0_15px_rgba(6,182,212,0.2)]">
-          <Plus className="w-4 h-4" /> Tambah Admin
+          <Plus className="w-4 h-4" /> Tambah Admin Baru
         </button>
       </div>
 
@@ -2021,7 +2017,7 @@ const AdminManagement: React.FC = () => {
             <label className="text-[10px] md:text-xs text-cyan-500 font-bold uppercase tracking-widest ml-1">Password Baru</label>
             <input required type="text" value={newAd.password} onChange={e=>setNewAd({...newAd, password: e.target.value})} className="w-full bg-[#050B14] border border-cyan-500/30 rounded-xl px-4 py-3.5 text-white outline-none focus:border-cyan-400 transition-colors text-sm font-mono" placeholder="Ketik Password..." />
           </div>
-          <button type="submit" className="w-full md:w-auto px-8 py-3.5 bg-cyan-600 hover:bg-cyan-500 text-white font-black uppercase tracking-widest text-xs rounded-xl transition-all duration-300 shadow-lg active:scale-95">Simpan Kredensial</button>
+          <button type="submit" className="w-full md:w-auto px-8 py-3.5 bg-cyan-600 hover:bg-cyan-500 text-white font-black uppercase tracking-widest text-xs rounded-xl transition-all duration-300 shadow-lg active:scale-95">Simpan Admin</button>
         </form>
       )}
 
@@ -2049,18 +2045,18 @@ const AdminManagement: React.FC = () => {
                         <div className="w-10 h-10 bg-cyan-950/50 rounded-xl flex items-center justify-center border border-cyan-500/30"><ShieldCheck className="w-5 h-5 text-cyan-400" /></div>
                         <div>
                            <h3 className="font-bold text-white text-base tracking-wide font-mono">{a.username}</h3>
-                           <p className="text-[10px] text-cyan-500 tracking-widest uppercase mt-0.5">Admin Security</p>
+                           <p className="text-[10px] text-cyan-500 tracking-widest uppercase mt-0.5">Admin Dashboard</p>
                         </div>
                      </div>
                      <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
                         <button onClick={()=>{setEditingId(a.id); setEditUser(a.username); setEditPass(a.password || '');}} className="flex-1 flex justify-center items-center gap-2 py-2 bg-blue-500/10 hover:bg-blue-500/20 text-blue-400 border border-blue-500/20 rounded-lg text-[10px] uppercase font-bold tracking-wider"><Edit className="w-3.5 h-3.5"/> Edit</button>
-                        <button onClick={()=>{if(confirm(`Hapus Admin ${a.username}? Akses login orang tersebut akan tertutup.`)) deleteAdmin(a.id);}} className="flex-1 flex justify-center items-center gap-2 py-2 bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/20 rounded-lg text-[10px] uppercase font-bold tracking-wider"><Trash2 className="w-3.5 h-3.5"/> Hapus</button>
+                        <button onClick={()=>{if(confirm(`Yakin ingin menghapus Admin ${a.username}?`)) deleteAdmin(a.id);}} className="flex-1 flex justify-center items-center gap-2 py-2 bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/20 rounded-lg text-[10px] uppercase font-bold tracking-wider"><Trash2 className="w-3.5 h-3.5"/> Hapus</button>
                      </div>
                   </>
                )}
             </div>
          ))}
-         {admins.length === 0 && <div className="col-span-full p-8 text-center border-2 border-dashed border-cyan-900 rounded-2xl text-cyan-700 font-mono text-sm uppercase">Belum Ada Admin Terdaftar di Cloud</div>}
+         {admins.length === 0 && <div className="col-span-full p-8 text-center border-2 border-dashed border-cyan-900 rounded-2xl text-cyan-700 font-mono text-sm uppercase">Belum Ada Admin Terdaftar</div>}
       </div>
     </div>
   );
@@ -2077,13 +2073,13 @@ const AdminLayout: React.FC<{ children: React.ReactNode, activeRoute: string, se
   const handleLogout = () => { localStorage.removeItem('axaxyz_admin_auth'); setRoute('admin-login'); };
 
   const navItems = [
-    { id: 'admin-dashboard', icon: ActivitySquare, label: 'Dashboard Analisis' },
-    { id: 'admin-clusters', icon: Network, label: 'Manajemen Cluster' },
-    { id: 'admin-students', icon: Database, label: 'Database Entitas' },
-    { id: 'admin-reports', icon: FileText, label: 'Pusat Data Log' },
-    { id: 'admin-geofence', icon: Map, label: 'Sistem Geofencing' },
-    { id: 'admin-settings', icon: Calendar, label: 'Konfigurasi Sesi' },
-    { id: 'admin-management', icon: ShieldCheck, label: 'Manajemen Admin' },
+    { id: 'admin-dashboard', icon: ActivitySquare, label: 'Dashboard Utama' },
+    { id: 'admin-clusters', icon: Network, label: 'Data Kelompok' },
+    { id: 'admin-students', icon: Database, label: 'Data Mahasiswa' },
+    { id: 'admin-reports', icon: FileText, label: 'Riwayat Absensi' },
+    { id: 'admin-geofence', icon: Map, label: 'Pengaturan Lokasi' },
+    { id: 'admin-settings', icon: Calendar, label: 'Jadwal Absen' },
+    { id: 'admin-management', icon: ShieldCheck, label: 'Kelola Admin' },
   ];
 
   return (
@@ -2102,12 +2098,12 @@ const AdminLayout: React.FC<{ children: React.ReactNode, activeRoute: string, se
         <div className="p-6 md:p-8 border-b border-cyan-900/50 flex items-center justify-between">
           <div className="flex items-center gap-4">
              <div className="w-12 h-12 bg-[#050B14] border border-cyan-500/50 rounded-xl flex items-center justify-center shadow-[0_0_15px_rgba(6,182,212,0.4)] overflow-hidden p-2">
-                <img src="/axalogo.png" alt="RKG" className="w-full h-full object-contain filter drop-shadow-[0_0_5px_rgba(6,182,212,0.8)]" onError={(e) => { e.currentTarget.style.display = 'none'; e.currentTarget.nextElementSibling?.classList.remove('hidden'); }} />
+                <img src="/axalogo.png" alt="Logo" className="w-full h-full object-contain filter drop-shadow-[0_0_5px_rgba(6,182,212,0.8)]" onError={(e) => { e.currentTarget.style.display = 'none'; e.currentTarget.nextElementSibling?.classList.remove('hidden'); }} />
                 <ActivitySquare className="text-cyan-400 w-full h-full hidden" />
              </div>
              <div className="flex flex-col">
                 <span className="font-black text-lg md:text-xl tracking-[0.2em] text-cyan-50 uppercase drop-shadow-[0_0_10px_rgba(6,182,212,0.5)]">DEPT. RKG</span>
-                <span className="text-[7px] md:text-[8px] text-cyan-400 font-mono tracking-[0.3em] uppercase mt-1">Security Core Admin</span>
+                <span className="text-[7px] md:text-[8px] text-cyan-400 font-mono tracking-[0.3em] uppercase mt-1">Admin Panel</span>
              </div>
           </div>
           <button className="md:hidden p-2 bg-cyan-950/50 border border-cyan-500/30 rounded-xl text-cyan-400 transition-colors" onClick={() => setIsMobileMenuOpen(false)}>
@@ -2125,7 +2121,7 @@ const AdminLayout: React.FC<{ children: React.ReactNode, activeRoute: string, se
         
         <div className="p-4 md:p-5 border-t border-cyan-900/50">
           <button onClick={handleLogout} className="w-full flex items-center justify-center gap-3 px-5 py-4 rounded-xl text-rose-400 bg-rose-950/30 hover:bg-rose-600 hover:text-white transition-all duration-300 text-[10px] font-black uppercase tracking-[0.2em] border border-rose-500/30 active:scale-95 shadow-sm hover:shadow-[0_0_15px_rgba(244,63,94,0.4)]">
-             <LogOut className="w-4 h-4" /> Terminasi Sesi Admin
+             <LogOut className="w-4 h-4" /> Keluar (Logout)
           </button>
         </div>
       </aside>
@@ -2138,10 +2134,10 @@ const AdminLayout: React.FC<{ children: React.ReactNode, activeRoute: string, se
            </button>
            
            <div className="flex items-center gap-2.5 px-4 md:px-5 py-2 md:py-2.5 bg-[#050B14] border border-cyan-500/30 rounded-xl text-[9px] md:text-[10px] font-bold shadow-[0_0_20px_rgba(0,0,0,0.5)] transition-all font-mono">
-               {syncStatus === 'syncing' && <><RefreshCcw className="w-3.5 h-3.5 md:w-4 md:h-4 animate-spin text-cyan-400"/> <span className="text-cyan-400 tracking-[0.2em] uppercase">Syncing Cloud...</span></>}
-               {syncStatus === 'synced' && <><Cloud className="w-3.5 h-3.5 md:w-4 md:h-4 text-emerald-400 drop-shadow-[0_0_5px_rgba(16,185,129,0.8)]"/> <span className="text-emerald-400 tracking-[0.2em] uppercase">Database Synced</span></>}
-               {syncStatus === 'error' && <><CloudOff className="w-3.5 h-3.5 md:w-4 md:h-4 text-rose-400"/> <span className="text-rose-400 tracking-[0.2em] uppercase">Sync Error</span></>}
-               {syncStatus === 'offline' && <><ServerCrash className="w-3.5 h-3.5 md:w-4 md:h-4 text-amber-500"/> <span className="text-amber-500 tracking-[0.2em] uppercase">Local Mode</span></>}
+               {syncStatus === 'syncing' && <><RefreshCcw className="w-3.5 h-3.5 md:w-4 md:h-4 animate-spin text-cyan-400"/> <span className="text-cyan-400 tracking-[0.2em] uppercase">Menyimpan...</span></>}
+               {syncStatus === 'synced' && <><Cloud className="w-3.5 h-3.5 md:w-4 md:h-4 text-emerald-400 drop-shadow-[0_0_5px_rgba(16,185,129,0.8)]"/> <span className="text-emerald-400 tracking-[0.2em] uppercase">Tersimpan Online</span></>}
+               {syncStatus === 'error' && <><CloudOff className="w-3.5 h-3.5 md:w-4 md:h-4 text-rose-400"/> <span className="text-rose-400 tracking-[0.2em] uppercase">Gagal Simpan</span></>}
+               {syncStatus === 'offline' && <><ServerCrash className="w-3.5 h-3.5 md:w-4 md:h-4 text-amber-500"/> <span className="text-amber-500 tracking-[0.2em] uppercase">Mode Offline</span></>}
            </div>
         </header>
 
@@ -2182,7 +2178,7 @@ export default function App() {
       }
       link.href = '/axalogo.png';
       link.type = 'image/png';
-      document.title = "Sistem Radiologi - DEPT. RKG";
+      document.title = "Sistem Absensi Mahasiswa - DEPT. RKG";
 
       // SEO Google Site Verification (Gold Standard GSC)
       let metaGsc = document.querySelector("meta[name='google-site-verification']");
@@ -2203,8 +2199,8 @@ export default function App() {
   return (
     <AppProvider>
       <div className="fixed bottom-4 md:bottom-6 right-4 md:right-6 z-[999] flex gap-2 md:gap-3 bg-[#0A1628]/90 backdrop-blur-xl p-2.5 rounded-2xl border border-cyan-500/30 shadow-[0_20px_50px_rgba(0,0,0,0.8)]">
-        <button onClick={() => setRoute('student')} className={cn("px-4 md:px-6 py-2.5 md:py-3.5 rounded-xl text-[9px] md:text-[10px] font-black uppercase tracking-[0.2em] transition-all duration-300 active:scale-95 shadow-sm border", route === 'student' ? "bg-cyan-600 text-white shadow-[0_0_15px_rgba(6,182,212,0.4)] border-cyan-400" : "bg-[#050B14] text-cyan-600 hover:bg-cyan-950/50 hover:text-cyan-400 border-transparent hover:border-cyan-900/50")}>Terminal MHS</button>
-        <button onClick={() => setRoute(typeof window !== 'undefined' && localStorage.getItem('axaxyz_admin_auth') === 'true' ? 'admin-dashboard' : 'admin-login')} className={cn("px-4 md:px-6 py-2.5 md:py-3.5 rounded-xl text-[9px] md:text-[10px] font-black uppercase tracking-[0.2em] transition-all duration-300 active:scale-95 shadow-sm border", route.startsWith('admin') ? "bg-blue-600 text-white shadow-[0_0_15px_rgba(37,99,235,0.4)] border-blue-400" : "bg-[#050B14] text-cyan-600 hover:bg-cyan-950/50 hover:text-cyan-400 border-transparent hover:border-cyan-900/50")}>Area Admin</button>
+        <button onClick={() => setRoute('student')} className={cn("px-4 md:px-6 py-2.5 md:py-3.5 rounded-xl text-[9px] md:text-[10px] font-black uppercase tracking-[0.2em] transition-all duration-300 active:scale-95 shadow-sm border", route === 'student' ? "bg-cyan-600 text-white shadow-[0_0_15px_rgba(6,182,212,0.4)] border-cyan-400" : "bg-[#050B14] text-cyan-600 hover:bg-cyan-950/50 hover:text-cyan-400 border-transparent hover:border-cyan-900/50")}>Portal Mahasiswa</button>
+        <button onClick={() => setRoute(typeof window !== 'undefined' && localStorage.getItem('axaxyz_admin_auth') === 'true' ? 'admin-dashboard' : 'admin-login')} className={cn("px-4 md:px-6 py-2.5 md:py-3.5 rounded-xl text-[9px] md:text-[10px] font-black uppercase tracking-[0.2em] transition-all duration-300 active:scale-95 shadow-sm border", route.startsWith('admin') ? "bg-blue-600 text-white shadow-[0_0_15px_rgba(37,99,235,0.4)] border-blue-400" : "bg-[#050B14] text-cyan-600 hover:bg-cyan-950/50 hover:text-cyan-400 border-transparent hover:border-cyan-900/50")}>Portal Admin</button>
       </div>
 
       {route === 'student' && <AttendanceWizard />}
