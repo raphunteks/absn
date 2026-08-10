@@ -17,9 +17,6 @@ import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 import { format, parseISO, isWithinInterval, startOfDay, endOfDay } from 'date-fns';
 
-// PENTING: Hapus tanda komentar di bawah ini saat di-deploy ke Vercel agar Speed Insights berjalan.
-// import { SpeedInsights } from "@vercel/speed-insights/next";
-
 // ==========================================
 // UPSTASH REDIS CLOUD CLIENT (REST API POST)
 // ==========================================
@@ -104,8 +101,8 @@ const calculateDistance = (lat1: number, lon1: number, lat2: number, lon2: numbe
   return R * c; 
 };
 
-// Fungsi pembantu untuk memuat XLSX secara dinamis (mengatasi error bundle pada Canvas)
-const loadXLSX = async () => {
+// Fungsi pembantu untuk memuat modul XLSX secara dinamis melalui CDN untuk menghindari error kompilasi
+const loadXLSX = async (): Promise<any> => {
   if (typeof window !== 'undefined' && (window as any).XLSX) return (window as any).XLSX;
   return new Promise((resolve, reject) => {
     const script = document.createElement('script');
@@ -118,34 +115,37 @@ const loadXLSX = async () => {
 
 // Poin 3: Export Data ke XLSX
 const exportToXLSX = async (logs: Log[], students: Student[], clusters: Cluster[]) => {
-  const XLSX: any = await loadXLSX();
-  
-  const data = logs.map(log => {
-    const student = students.find(s => s.nim === log.nim);
-    const cluster = clusters.find(c => c.id === student?.clusterId)?.name || 'Tanpa Cluster';
-    const date = new Date(log.timestamp).toLocaleDateString('id-ID');
-    const time = new Date(log.timestamp).toLocaleTimeString('id-ID');
-    const mapsLink = `https://www.google.com/maps?q=${log.location.lat},${log.location.lng}`;
-    
-    return {
-      'ID Log': log.id,
-      'NIM': log.nim,
-      'Nama': log.name,
-      'Cluster / Kategori': cluster,
-      'Tanggal': date,
-      'Waktu': time,
-      'Sesi': log.sessionName,
-      'Status': log.status,
-      'Latitude': log.location.lat,
-      'Longitude': log.location.lng,
-      'Link Maps': mapsLink
-    };
-  });
+  try {
+    const XLSX = await loadXLSX();
+    const data = logs.map(log => {
+      const student = students.find(s => s.nim === log.nim);
+      const cluster = clusters.find(c => c.id === student?.clusterId)?.name || 'Tanpa Cluster';
+      const date = new Date(log.timestamp).toLocaleDateString('id-ID');
+      const time = new Date(log.timestamp).toLocaleTimeString('id-ID');
+      const mapsLink = `https://www.google.com/maps?q=${log.location.lat},${log.location.lng}`;
+      
+      return {
+        'ID Log': log.id,
+        'NIM': log.nim,
+        'Nama': log.name,
+        'Cluster / Kategori': cluster,
+        'Tanggal': date,
+        'Waktu': time,
+        'Sesi': log.sessionName,
+        'Status': log.status,
+        'Latitude': log.location.lat,
+        'Longitude': log.location.lng,
+        'Link Maps': mapsLink
+      };
+    });
 
-  const worksheet = XLSX.utils.json_to_sheet(data);
-  const workbook = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(workbook, worksheet, "Riwayat Absensi");
-  XLSX.writeFile(workbook, `Rekap_Absensi_RKG_${new Date().toISOString().split('T')[0]}.xlsx`);
+    const worksheet = XLSX.utils.json_to_sheet(data);
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, "Riwayat Absensi");
+    XLSX.writeFile(workbook, `Rekap_Absensi_RKG_${new Date().toISOString().split('T')[0]}.xlsx`);
+  } catch (err) {
+    alert("Gagal memuat modul Excel. Pastikan koneksi internet stabil.");
+  }
 };
 
 const redis = Redis.fromEnv();
@@ -828,7 +828,7 @@ const AttendanceWizard: React.FC = () => {
   const [step, setStep] = useState(1);
   const [data, setData] = useState<Partial<Log>>({});
   
-  // Fitur Poin 5: Mendapatkan NIM dari localStorage untuk fitur Logout Device
+  // Poin 5: Mendapatkan NIM dari localStorage untuk fitur Logout Device
   const [deviceOwnerNIM, setDeviceOwnerNIM] = useState<string | null>(null);
 
   useEffect(() => {
@@ -854,11 +854,11 @@ const AttendanceWizard: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-slate-950 flex flex-col font-sans text-slate-100 overflow-hidden relative selection:bg-cyan-500/30">
-      {/* Background futuristik medis */}
+      {/* Background futuristik medis radiologi */}
       <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-slate-900 via-slate-950 to-slate-950"></div>
       <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/carbon-fibre.png')] opacity-5 mix-blend-overlay"></div>
       <div className="absolute top-[-10%] left-[-10%] w-[60%] h-[60%] bg-cyan-900/20 rounded-full blur-[150px] pointer-events-none"></div>
-      <div className="absolute bottom-[-10%] right-[-10%] w-[60%] h-[60%] bg-blue-900/10 rounded-full blur-[150px] pointer-events-none"></div>
+      <div className="absolute bottom-[-10%] right-[-10%] w-[60%] h-[60%] bg-purple-900/10 rounded-full blur-[150px] pointer-events-none"></div>
       
       <header className="w-full p-4 md:p-6 flex justify-between items-center relative z-10 border-b border-cyan-500/10 bg-slate-950/80 backdrop-blur-xl shadow-lg">
         <div className="flex items-center gap-3 md:gap-4">
@@ -882,7 +882,7 @@ const AttendanceWizard: React.FC = () => {
                  </button>
               </div>
            )}
-           <div className="text-[9px] md:text-[10px] font-bold px-4 py-2 bg-cyan-950/50 border border-cyan-500/30 rounded-full text-cyan-300 tracking-[0.2em] shadow-[0_0_10px_rgba(6,182,212,0.2)] uppercase">PORTAL SUBJEK</div>
+           <div className="text-[9px] md:text-[10px] font-bold px-4 py-2 bg-cyan-950/50 border border-cyan-500/30 rounded-full text-cyan-300 tracking-[0.2em] shadow-[0_0_10px_rgba(6,182,212,0.2)] uppercase">PORTAL MHS</div>
         </div>
       </header>
 
@@ -1031,20 +1031,20 @@ const AdminLogin: React.FC<{ onLogin: () => void }> = ({ onLogin }) => {
 };
 
 // ==========================================
-// COMPONENT: ADMIN DASHBOARD (Poin 2)
+// COMPONENT: ADMIN DASHBOARD (Poin 2 & Poin 4)
 // ==========================================
 const AdminDashboardHome: React.FC = () => {
-  const { logs, students, clusters, sessions } = useAppContext();
+  const { logs, students, clusters } = useAppContext();
   
-  // Filtering States
-  const [startDate, setStartDate] = useState(new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().split('T')[0]); // Default 1st day of current month
+  // Poin 2: Filter Range Tanggal dan Cluster
+  const [startDate, setStartDate] = useState(new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().split('T')[0]); // Default awal bulan ini
   const [endDate, setEndDate] = useState(new Date().toISOString().split('T')[0]);
   const [selectedCluster, setSelectedCluster] = useState('All');
 
   const parsedStart = startOfDay(parseISO(startDate));
   const parsedEnd = endOfDay(parseISO(endDate));
 
-  // Filter logs by date and cluster
+  // Filter logs berdasarkan range tanggal dan cluster
   const filteredLogs = logs.filter(log => {
     const logDate = new Date(log.timestamp);
     const inDateRange = isWithinInterval(logDate, { start: parsedStart, end: parsedEnd });
@@ -1055,7 +1055,7 @@ const AdminDashboardHome: React.FC = () => {
     return inDateRange && inCluster;
   });
 
-  // Calculate Today's Status based on Filtered Cluster
+  // Kalkulasi Status Hari Ini (Berdasarkan filter Cluster)
   const todayStr = new Date().toISOString().split('T')[0];
   const todayLogs = filteredLogs.filter(l => l.timestamp.startsWith(todayStr));
   
@@ -1101,14 +1101,14 @@ const AdminDashboardHome: React.FC = () => {
         </div>
         
         <div className="flex flex-col sm:flex-row gap-3 w-full lg:w-auto">
-           <div className="flex items-center bg-black/40 border border-cyan-500/20 rounded-xl overflow-hidden px-3 py-2">
+           <div className="flex items-center bg-black/40 border border-cyan-500/20 rounded-xl overflow-hidden px-3 py-2 shadow-inner">
               <Calendar className="w-4 h-4 text-cyan-500/50 mr-2"/>
               <input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} className="bg-transparent text-xs text-white font-mono outline-none" />
               <span className="text-cyan-500/50 mx-2">-</span>
               <input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} className="bg-transparent text-xs text-white font-mono outline-none" />
            </div>
            
-           <div className="flex items-center bg-black/40 border border-cyan-500/20 rounded-xl overflow-hidden px-3 py-2">
+           <div className="flex items-center bg-black/40 border border-cyan-500/20 rounded-xl overflow-hidden px-3 py-2 shadow-inner">
               <Layers className="w-4 h-4 text-cyan-500/50 mr-2"/>
               <select value={selectedCluster} onChange={e => setSelectedCluster(e.target.value)} className="bg-transparent text-xs text-white font-mono outline-none w-full min-w-[120px] appearance-none cursor-pointer">
                  <option value="All">Semua Cluster</option>
@@ -1124,7 +1124,7 @@ const AdminDashboardHome: React.FC = () => {
           { title: 'Subjek Terdaftar', val: totalStudents, icon: Users, color: 'text-blue-400', border: 'border-blue-500/30' },
           { title: 'Hadir (Hari Ini)', val: onTimeToday, icon: CheckCircle2, color: 'text-emerald-400', border: 'border-emerald-500/30' },
           { title: 'Terlambat (Hari Ini)', val: lateToday, icon: Clock, color: 'text-amber-400', border: 'border-amber-500/30' },
-          { title: 'Belum Absen (Hari Ini)', val: notAttendedToday, icon: UserMinus, color: 'text-rose-400', border: 'border-rose-500/30' }
+          { title: 'Belum Absen (Hari Ini)', val: notAttendedToday, icon: UserMinus, color: 'text-rose-400', border: 'border-rose-500/30' } // Poin 2: Ganti Upstash Redis dgn Total Tidak Absen
         ].map((stat, i) => (
           <div key={i} className={cn("bg-slate-900/60 border p-5 rounded-[1.5rem] flex items-center justify-between transition-all duration-300 hover:bg-slate-800/80 shadow-[0_0_15px_rgba(0,0,0,0.2)]", stat.border)}>
             <div>
@@ -1136,7 +1136,9 @@ const AdminDashboardHome: React.FC = () => {
         ))}
       </div>
 
-      {/* ADVANCED CHARTS */}
+      {/* Poin 4: Cloud Diagnostic UI (GBR 2) telah dihilangkan sepenuhnya dari blok ini agar rapi. */}
+
+      {/* ADVANCED CHARTS (Poin 2) */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 min-h-[350px] md:min-h-[400px]">
         {/* Trend Area Chart */}
         <div className="bg-slate-900/60 border border-cyan-500/20 p-6 rounded-[2rem] flex flex-col shadow-[0_0_30px_rgba(6,182,212,0.05)] relative overflow-hidden">
@@ -1235,7 +1237,7 @@ const AdminStudents: React.FC = () => {
      }
   };
 
-  // Poin 1 & 2: Bulk Upload XLSX
+  // Poin 1 & 2: Bulk Upload Format Excel (.XLSX)
   const handleBulkUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -1254,7 +1256,7 @@ const AdminStudents: React.FC = () => {
           
           const newSt: Omit<Student, 'id'>[] = [];
           json.forEach(row => {
-            // Asumsi header excel: Nama, NIM, Cluster (Opsional, merujuk ke Nama Cluster)
+            // Asumsi penamaan header pada excel
             const name = row['Nama'] || row['NAMA'] || row['name'];
             const nim = String(row['NIM'] || row['nim']);
             const clusterName = row['Cluster'] || row['CLUSTER'] || row['Kategori'];
@@ -1274,7 +1276,7 @@ const AdminStudents: React.FC = () => {
             bulkAddStudents(newSt);
             alert(`Berhasil menginjeksi ${newSt.length} data subjek ke database.`);
           } else {
-            alert('Gagal mendeteksi kolom yang valid (Pastikan ada header "Nama" dan "NIM").');
+            alert('Gagal mendeteksi kolom yang valid (Pastikan ada header "Nama" dan "NIM" dalam Excel Anda).');
           }
         } catch (err) {
           console.error(err);
@@ -1284,9 +1286,9 @@ const AdminStudents: React.FC = () => {
       reader.readAsBinaryString(file);
     } catch (err) {
       console.error(err);
-      alert('Gagal memuat parser XLSX.');
+      alert('Gagal memuat parser XLSX. Pastikan koneksi internet berjalan.');
     } finally {
-      e.target.value = ''; // Reset input
+      e.target.value = ''; // Reset input agar bisa memuat file yang sama
     }
   };
 
@@ -1338,7 +1340,7 @@ const AdminStudents: React.FC = () => {
           </div>
           <div className="space-y-1.5">
             <label className="text-[10px] md:text-xs text-cyan-500/70 font-mono font-bold uppercase tracking-widest ml-1">Cluster</label>
-            <select value={newS.clusterId} onChange={e=>setNewS({...newS, clusterId: e.target.value})} className="w-full bg-black/40 border border-cyan-500/20 rounded-xl px-4 py-3 text-white outline-none focus:border-cyan-400 font-mono text-sm appearance-none">
+            <select value={newS.clusterId} onChange={e=>setNewS({...newS, clusterId: e.target.value})} className="w-full bg-black/40 border border-cyan-500/20 rounded-xl px-4 py-3 text-white outline-none focus:border-cyan-400 font-mono text-sm appearance-none cursor-pointer">
                <option value="">-- Kosong --</option>
                {clusters.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
             </select>
@@ -1418,7 +1420,7 @@ const AdminStudents: React.FC = () => {
                  </div>
                  <div className="space-y-1.5">
                     <label className="text-[10px] md:text-xs text-cyan-500/70 font-mono font-bold uppercase tracking-widest ml-1">Cluster</label>
-                    <select value={editingStudent.clusterId || ''} onChange={e=>setEditingStudent({...editingStudent, clusterId: e.target.value})} className="w-full bg-black/50 border border-cyan-500/20 rounded-xl px-4 py-3.5 text-white font-mono outline-none focus:border-cyan-400 transition-colors shadow-inner text-sm appearance-none">
+                    <select value={editingStudent.clusterId || ''} onChange={e=>setEditingStudent({...editingStudent, clusterId: e.target.value})} className="w-full bg-black/50 border border-cyan-500/20 rounded-xl px-4 py-3.5 text-white font-mono outline-none focus:border-cyan-400 transition-colors shadow-inner text-sm appearance-none cursor-pointer">
                        <option value="">-- Kosong --</option>
                        {clusters.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
                     </select>
@@ -1450,7 +1452,7 @@ const AdminStudents: React.FC = () => {
               <button onClick={() => setSelectedStudentForKTM(null)} className="p-2 bg-white/5 hover:bg-rose-900/60 hover:text-rose-400 rounded-full transition-colors text-white border border-transparent hover:border-rose-500/30"><X className="w-5 h-5"/></button>
             </div>
             
-            {/* Desain KTM yang lebih Sci-Fi */}
+            {/* Desain KTM bernuansa Sci-Fi Medis */}
             <div id="ktm-print-area" className="w-[320px] md:w-[340px] h-[500px] md:h-[540px] mx-auto bg-slate-950 rounded-[2rem] p-6 relative overflow-hidden shadow-2xl flex flex-col items-center justify-between border-[2px] border-cyan-500/50">
                <div className="absolute top-0 left-0 w-full h-[30%] bg-gradient-to-b from-cyan-900/40 to-transparent"></div>
                <div className="absolute bottom-0 right-0 w-full h-[30%] bg-gradient-to-t from-purple-900/20 to-transparent"></div>
@@ -1487,7 +1489,7 @@ const AdminStudents: React.FC = () => {
 };
 
 // ==========================================
-// COMPONENT: ADMIN CLUSTERS (Baru)
+// COMPONENT: ADMIN CLUSTERS (Poin 1: Kategori Cluster)
 // ==========================================
 const AdminClusters: React.FC = () => {
   const { clusters, addCluster, updateCluster, deleteCluster } = useAppContext();
@@ -1568,7 +1570,6 @@ const AdminClusters: React.FC = () => {
   );
 };
 
-
 const AdminGeofence: React.FC = () => {
   const { geofence, updateGeofence } = useAppContext();
   const [lat, setLat] = useState(geofence.lat.toString());
@@ -1639,7 +1640,7 @@ const AdminGeofence: React.FC = () => {
 };
 
 // ==========================================
-// COMPONENT: ADMIN SETTINGS (Sesi) (Poin 1 CRUD Update Sesi)
+// COMPONENT: ADMIN SETTINGS (Poin 1 CRUD Sesi)
 // ==========================================
 const AdminSettings: React.FC = () => {
   const { sessions, updateSession, addSession, deleteSession } = useAppContext();
@@ -1878,7 +1879,6 @@ const AdminLayout: React.FC<{ children: React.ReactNode, activeRoute: string, se
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const handleLogout = () => { localStorage.removeItem('axaxyz_admin_auth'); setRoute('admin-login'); };
 
-  // NavItems updated with "Manajemen Cluster"
   const navItems = [
     { id: 'admin-dashboard', icon: BarChart3, label: 'Data Analitik' },
     { id: 'admin-students', icon: Database, label: 'Data Subjek / MHS' },
@@ -1942,7 +1942,6 @@ const AdminLayout: React.FC<{ children: React.ReactNode, activeRoute: string, se
            </button>
            
            <div className="flex items-center gap-3">
-               {/* Poin 4: Tombol Force Sync (Eksisting tapi UI dipindah kesini agar rapi) */}
                <button onClick={forceManualSync} className="p-2 md:px-4 md:py-2 bg-slate-900 hover:bg-cyan-950/50 border border-cyan-500/20 hover:border-cyan-500/50 text-cyan-400 rounded-full md:rounded-xl transition-all duration-300 flex items-center gap-2 shadow-sm active:scale-95" title="Force Sync ke Cloud">
                   <Upload className="w-3.5 h-3.5 md:w-4 md:h-4" />
                   <span className="hidden md:inline text-[9px] md:text-[10px] font-mono tracking-widest uppercase font-bold">Injeksi Cloud</span>
@@ -1997,7 +1996,7 @@ export default function App() {
   return (
     <AppProvider>
       <div className="fixed bottom-4 md:bottom-6 right-4 md:right-6 z-[999] flex gap-2 md:gap-3 bg-black/80 backdrop-blur-xl p-2.5 rounded-[1.5rem] border border-cyan-500/20 shadow-[0_0_30px_rgba(0,0,0,0.8)]">
-        <button onClick={() => setRoute('student')} className={cn("px-4 md:px-5 py-2.5 md:py-3 rounded-xl text-[9px] md:text-[10px] font-mono font-bold uppercase tracking-widest transition-all duration-300 active:scale-95 shadow-sm", route === 'student' ? "bg-cyan-900/60 text-cyan-300 border border-cyan-500/50 shadow-[0_0_15px_rgba(6,182,212,0.3)]" : "bg-white/5 text-slate-400 hover:bg-cyan-950/40 hover:text-cyan-300 border border-transparent hover:border-cyan-500/30")}>Portal Subjek</button>
+        <button onClick={() => setRoute('student')} className={cn("px-4 md:px-5 py-2.5 md:py-3 rounded-xl text-[9px] md:text-[10px] font-mono font-bold uppercase tracking-widest transition-all duration-300 active:scale-95 shadow-sm", route === 'student' ? "bg-cyan-900/60 text-cyan-300 border border-cyan-500/50 shadow-[0_0_15px_rgba(6,182,212,0.3)]" : "bg-white/5 text-slate-400 hover:bg-cyan-950/40 hover:text-cyan-300 border border-transparent hover:border-cyan-500/30")}>Portal MHS</button>
         <button onClick={() => setRoute(typeof window !== 'undefined' && localStorage.getItem('axaxyz_admin_auth') === 'true' ? 'admin-dashboard' : 'admin-login')} className={cn("px-4 md:px-5 py-2.5 md:py-3 rounded-xl text-[9px] md:text-[10px] font-mono font-bold uppercase tracking-widest transition-all duration-300 active:scale-95 shadow-sm", route.startsWith('admin') ? "bg-purple-900/60 text-purple-300 border border-purple-500/50 shadow-[0_0_15px_rgba(168,85,247,0.3)]" : "bg-white/5 text-slate-400 hover:bg-purple-950/40 hover:text-purple-300 border border-transparent hover:border-purple-500/30")}>Admin Core</button>
       </div>
 
@@ -2014,9 +2013,6 @@ export default function App() {
           {route === 'admin-reports' && <AdminReports />}
         </AdminLayout>
       )}
-
-      {/* PENTING: Hapus tanda komentar di bawah ini saat kode dijalankan di lokal/Vercel */}
-      {/* <SpeedInsights /> */}
     </AppProvider>
   );
 }
