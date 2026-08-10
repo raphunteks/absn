@@ -527,7 +527,7 @@ const QRScanner: React.FC<{ activeSessionName: string, onComplete: (data: {nim: 
               const alreadyAttended = logs.some(l => l.nim === ownerNim && l.sessionName === activeSessionName && l.timestamp.startsWith(today));
               
               if (alreadyAttended) {
-                 setError(`⚠️ Entitas ${foundStudent.name} telah tercatat hadir pada sesi ini hari ini.`);
+                 setError(`⚠️ Entitas ${foundStudent.name} telah tercatat hadir pada sesi ${activeSessionName} ini hari ini.`);
                  setIsAutoLoggingIn(false);
                  return;
               }
@@ -555,7 +555,7 @@ const QRScanner: React.FC<{ activeSessionName: string, onComplete: (data: {nim: 
     const today = new Date().toISOString().split('T')[0];
     const alreadyAttended = logs.some(l => l.nim === targetNim && l.sessionName === activeSessionName && l.timestamp.startsWith(today));
     if (alreadyAttended) {
-      setError('⚠️ Akses Ditolak: Anda sudah melakukan absensi untuk sesi ini hari ini.');
+      setError(`⚠️ Akses Ditolak: Anda sudah melakukan absensi untuk sesi ${activeSessionName} ini hari ini.`);
       return;
     }
 
@@ -979,8 +979,10 @@ const AttendanceWizard: React.FC = () => {
         </div>
       </main>
 
-      <footer className="text-center py-4 text-[10px] md:text-xs text-cyan-600/60 font-mono tracking-widest relative z-10 w-full bg-black/20">
-        Copyright © 2026 DEPT. RKG RSIGM UMI— All Rights Reserved. Made with ❤️
+      <footer className="text-center py-4 text-[10px] md:text-xs text-cyan-600/60 font-mono tracking-widest relative z-50 w-full bg-black/20">
+        <a href="https://absensi.maksaarsyad.xyz/ourteam" className="hover:text-cyan-400 hover:drop-shadow-[0_0_8px_rgba(6,182,212,0.8)] transition-all duration-300 cursor-pointer">
+          Copyright © 2026 DEPT. RKG RSIGM UMI— All Rights Reserved. Made with ❤️
+        </a>
       </footer>
     </div>
   );
@@ -1095,8 +1097,10 @@ const AdminLogin: React.FC<{ onLogin: () => void }> = ({ onLogin }) => {
         </form>
       </div>
 
-      <footer className="text-center py-4 text-[10px] md:text-xs text-cyan-600/60 font-mono tracking-widest relative z-10 w-full mt-auto">
-        Copyright © 2026 DEPT. RKG RSIGM UMI— All Rights Reserved. Made with ❤️
+      <footer className="text-center py-4 text-[10px] md:text-xs text-cyan-600/60 font-mono tracking-widest relative z-50 w-full mt-auto">
+        <a href="https://absensi.maksaarsyad.xyz/ourteam" className="hover:text-cyan-400 hover:drop-shadow-[0_0_8px_rgba(6,182,212,0.8)] transition-all duration-300 cursor-pointer">
+          Copyright © 2026 DEPT. RKG RSIGM UMI— All Rights Reserved. Made with ❤️
+        </a>
       </footer>
     </div>
   );
@@ -2032,8 +2036,10 @@ const AdminLayout: React.FC<{ children: React.ReactNode, activeRoute: string, se
         
         <div className="p-4 md:p-8 max-w-7xl mx-auto relative z-10 flex-1 w-full">{children}</div>
 
-        <footer className="text-center py-6 text-[10px] md:text-xs text-cyan-600/60 font-mono tracking-widest mt-auto relative z-10 w-full">
-          Copyright © 2026 DEPT. RKG RSIGM UMI— All Rights Reserved. Made with ❤️
+        <footer className="text-center py-6 text-[10px] md:text-xs text-cyan-600/60 font-mono tracking-widest mt-auto relative z-50 w-full">
+          <a href="https://absensi.maksaarsyad.xyz/ourteam" className="hover:text-cyan-400 hover:drop-shadow-[0_0_8px_rgba(6,182,212,0.8)] transition-all duration-300 cursor-pointer">
+            Copyright © 2026 DEPT. RKG RSIGM UMI— All Rights Reserved. Made with ❤️
+          </a>
         </footer>
       </main>
       
@@ -2062,6 +2068,15 @@ export default function App() {
       link.href = '/axalogo.png';
       link.type = 'image/png';
       document.title = "Sistem Radiologi - DEPT. RKG";
+
+      // SEO Google Site Verification (Gold Standard GSC)
+      let metaGsc = document.querySelector("meta[name='google-site-verification']");
+      if (!metaGsc) {
+        metaGsc = document.createElement('meta');
+        metaGsc.setAttribute('name', 'google-site-verification');
+        metaGsc.setAttribute('content', 'AAKLVErwuFUspLpKD6XZwRxIZ5XqaTwy1BEK6-Rl0Ig');
+        document.head.appendChild(metaGsc);
+      }
     }
   }, []);
 
