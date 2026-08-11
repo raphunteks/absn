@@ -490,27 +490,40 @@ const StudentDashboard: React.FC<{ onStartAbsen: () => void, linkedNim: string |
          const dateStrLocal = getLocalYYYYMMDD(d);
          const isToday = dateStrLocal === todayLocal;
          const label = d.toLocaleDateString('id-ID', { day: '2-digit', month: 'short' });
-         const count = myLogs.filter(l => getLocalYYYYMMDD(l.timestamp) === dateStrLocal).length;
          
-         data.push({ day: label, count: count });
+         let dayHadir = 0;
+         let dayTerlambat = 0;
+         let dayAlpha = 0;
+         let dayBelumAbsen = 0;
 
          activeSessions.forEach(sess => {
              const log = myLogs.find(l => getLocalYYYYMMDD(l.timestamp) === dateStrLocal && l.sessionName === sess.name);
-             if (!log) {
+             if (log) {
+                 if (log.status === 'Hadir') dayHadir++;
+                 else if (log.status === 'Terlambat') dayTerlambat++;
+             } else {
                  if (isToday) {
                      const currentMinutes = new Date().getHours() * 60 + new Date().getMinutes();
                      const [endH, endM] = sess.endTime.split(':').map(Number);
                      const endTotal = endH * 60 + endM;
                      const endWithTol = endTotal + sess.toleranceMinutes;
                      
-                     if (currentMinutes > endWithTol) tempAlpha++;
-                     else tempBelumAbsen++;
+                     if (currentMinutes > endWithTol) { dayAlpha++; tempAlpha++; }
+                     else { dayBelumAbsen++; tempBelumAbsen++; }
                  } else {
                      if (d < new Date(new Date().setHours(0,0,0,0))) {
-                        tempAlpha++; 
+                        dayAlpha++; tempAlpha++;
                      }
                  }
              }
+         });
+
+         data.push({ 
+            day: label, 
+            Hadir: dayHadir, 
+            Terlambat: dayTerlambat, 
+            Alpha: dayAlpha, 
+            BelumAbsen: dayBelumAbsen 
          });
      }
      return { chartData: data, alpha: tempAlpha, belumAbsen: tempBelumAbsen };
@@ -609,20 +622,33 @@ const StudentDashboard: React.FC<{ onStartAbsen: () => void, linkedNim: string |
         {/* Chart */}
         <div className="lg:col-span-2 bg-[#0A1628]/80 backdrop-blur-xl border border-cyan-500/20 p-6 md:p-8 rounded-[2rem] shadow-lg flex flex-col overflow-hidden">
           <h3 className="text-base font-black text-white mb-1 tracking-widest uppercase truncate">{myCluster?.startDate ? 'Kehadiran Periode Stase' : 'Kehadiran Mingguan'}</h3>
-          <p className="text-[10px] md:text-xs text-cyan-500/70 font-mono uppercase mb-8">Jam tervalidasi, sinkronisasi otomatis ke sistem</p>
+          <p className="text-[10px] md:text-xs text-cyan-500/70 font-mono uppercase mb-6">Jam tervalidasi, sinkronisasi otomatis ke sistem</p>
           <div className="flex-1 w-full min-h-[200px] overflow-x-auto custom-scrollbar">
              <div className="min-w-[400px] h-full">
                  <ResponsiveContainer width="100%" height="100%">
                    <BarChart data={staseDataList} margin={{ top: 0, right: 0, left: 0, bottom: 0 }}>
                      <XAxis dataKey="day" axisLine={false} tickLine={false} tick={{fill: '#64748b', fontSize: 10, fontWeight: 'bold'}} dy={10} interval="preserveStartEnd" minTickGap={20} />
                      <Tooltip cursor={{fill: '#1e293b', opacity: 0.4}} contentStyle={{backgroundColor: '#050B14', borderColor: '#8b5cf6', color: '#f8fafc', borderRadius: '1rem', fontSize: '12px'}} />
-                     <Bar dataKey="count" fill="#8b5cf6" radius={[8, 8, 8, 8]} barSize={staseDataList.length > 15 ? 15 : 40}>
-                       {staseDataList.map((entry, index) => (
-                         <Cell key={`cell-${index}`} fill={entry.count > 0 ? '#8b5cf6' : '#2e1065'} opacity={entry.count > 0 ? 1 : 0.3} />
-                       ))}
-                     </Bar>
+                     <Bar dataKey="Hadir" stackId="a" fill="#10b981" barSize={staseDataList.length > 15 ? 15 : 40} />
+                     <Bar dataKey="Terlambat" stackId="a" fill="#f59e0b" />
+                     <Bar dataKey="Alpha" stackId="a" fill="#f43f5e" />
+                     <Bar dataKey="BelumAbsen" stackId="a" fill="#3b82f6" />
                    </BarChart>
                  </ResponsiveContainer>
+             </div>
+          </div>
+          <div className="flex justify-center gap-4 mt-6 flex-wrap">
+             <div className="flex items-center gap-1.5 text-[9px] font-bold uppercase tracking-wider text-slate-300">
+                <div className="w-2.5 h-2.5 rounded-full bg-emerald-500"></div> Hadir
+             </div>
+             <div className="flex items-center gap-1.5 text-[9px] font-bold uppercase tracking-wider text-slate-300">
+                <div className="w-2.5 h-2.5 rounded-full bg-amber-500"></div> Terlambat
+             </div>
+             <div className="flex items-center gap-1.5 text-[9px] font-bold uppercase tracking-wider text-slate-300">
+                <div className="w-2.5 h-2.5 rounded-full bg-rose-500"></div> Alpha
+             </div>
+             <div className="flex items-center gap-1.5 text-[9px] font-bold uppercase tracking-wider text-slate-300">
+                <div className="w-2.5 h-2.5 rounded-full bg-blue-500"></div> Belum Absen
              </div>
           </div>
         </div>
@@ -1472,6 +1498,10 @@ const AdminDashboardHome: React.FC = () => {
   const { startObj, endObj, FilterUI } = useDateFilter();
   const [selectedCluster, setSelectedCluster] = useState('All');
 
+  // Dynamic Total Days Calculation for robust Alpha metrics
+  const diffTime = Math.abs(endObj.getTime() - startObj.getTime());
+  const totalDaysInRange = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) || 1;
+
   // Filter Logs based on Date & Cluster (Waktu Lokal)
   const filteredLogs = logs.filter(l => {
     const logDate = new Date(l.timestamp);
@@ -2034,15 +2064,21 @@ const AdminStudents: React.FC = () => {
       )}
 
       {/* FILTER TAMPILAN TABEL */}
-      <div className="flex flex-col sm:flex-row gap-3 w-full max-w-2xl">
-         <div className="relative flex-1">
-            <SearchIcon className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-cyan-600" />
-            <input type="text" placeholder="Cari Nama atau NIM..." value={search} onChange={e=>setSearch(e.target.value)} className="w-full bg-[#0A1628]/80 border border-cyan-500/30 rounded-2xl pl-11 pr-4 py-3.5 text-cyan-50 outline-none focus:border-cyan-400 transition-colors shadow-inner font-mono text-sm" />
+      <div className="flex flex-col sm:flex-row gap-3 w-full max-w-2xl items-end">
+         <div className="flex flex-col gap-1 flex-1 w-full">
+            <label className="text-[9px] text-cyan-500 uppercase tracking-widest font-bold">Pencarian Mahasiswa</label>
+            <div className="relative">
+               <SearchIcon className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-cyan-600" />
+               <input type="text" placeholder="Cari Nama atau NIM..." value={search} onChange={e=>setSearch(e.target.value)} className="w-full bg-[#0A1628]/80 border border-cyan-500/30 rounded-2xl pl-11 pr-4 h-11 text-cyan-50 outline-none focus:border-cyan-400 transition-colors shadow-inner font-mono text-sm" />
+            </div>
          </div>
-         <select value={filterClusterDisplay} onChange={e=>setFilterClusterDisplay(e.target.value)} className="bg-[#0A1628]/80 border border-cyan-500/30 rounded-2xl px-5 py-3.5 text-cyan-50 outline-none focus:border-cyan-400 transition-colors shadow-inner w-full sm:w-56 font-bold text-xs uppercase cursor-pointer appearance-none">
-           <option value="All">Filter: Semua Kelompok</option>
-           {clusters.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-         </select>
+         <div className="flex flex-col gap-1 w-full sm:w-56">
+            <label className="text-[9px] text-cyan-500 uppercase tracking-widest font-bold">Filter Kelompok</label>
+            <select value={filterClusterDisplay} onChange={e=>setFilterClusterDisplay(e.target.value)} className="bg-[#0A1628]/80 border border-cyan-500/30 rounded-2xl px-5 h-11 text-cyan-50 outline-none focus:border-cyan-400 transition-colors shadow-inner w-full font-bold text-xs uppercase cursor-pointer appearance-none">
+              <option value="All">Semua Kelompok</option>
+              {clusters.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+            </select>
+         </div>
       </div>
 
       <div className="flex-1 bg-[#0A1628]/60 backdrop-blur-md border border-cyan-500/20 rounded-[1.5rem] overflow-hidden flex flex-col shadow-[0_15px_40px_rgba(0,0,0,0.5)] relative">
@@ -2226,16 +2262,19 @@ const AdminReports: React.FC = () => {
         </button>
       </div>
 
-      <div className="flex flex-col md:flex-row gap-3 md:gap-4 bg-[#0A1628]/60 p-4 rounded-2xl border border-cyan-500/20 shadow-lg items-center">
+      <div className="flex flex-col md:flex-row gap-3 md:gap-4 bg-[#0A1628]/60 p-4 rounded-2xl border border-cyan-500/20 shadow-lg items-end">
         <FilterUI />
         
-        <div className="relative flex-1 w-full md:w-auto">
-           <SearchIcon className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-cyan-600" />
-           <input type="text" placeholder="Cari Nama atau NIM..." value={search} onChange={e=>setSearch(e.target.value)} className="w-full bg-[#050B14] border border-cyan-500/30 rounded-xl pl-11 pr-4 h-11 text-cyan-50 outline-none focus:border-cyan-400 transition-colors shadow-inner font-mono text-sm" />
+        <div className="flex flex-col gap-1 flex-1 w-full md:w-auto">
+           <label className="text-[9px] text-cyan-500 uppercase tracking-widest font-bold">Pencarian Data</label>
+           <div className="relative w-full">
+              <SearchIcon className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-cyan-600" />
+              <input type="text" placeholder="Cari Nama atau NIM..." value={search} onChange={e=>setSearch(e.target.value)} className="w-full bg-[#050B14] border border-cyan-500/30 rounded-xl pl-11 pr-4 h-11 text-cyan-50 outline-none focus:border-cyan-400 transition-colors shadow-inner font-mono text-sm" />
+           </div>
         </div>
         
         <div className="flex flex-col gap-1 w-full sm:w-auto">
-           <label className="text-[9px] text-cyan-500 uppercase tracking-widest font-bold">Kelompok</label>
+           <label className="text-[9px] text-cyan-500 uppercase tracking-widest font-bold">Filter Kelompok</label>
            <div className="flex items-center bg-[#050B14] border border-cyan-500/30 rounded-xl px-2 h-11 w-full sm:w-auto focus-within:border-cyan-400 transition-colors">
               <select value={filterCluster} onChange={e=>setFilterCluster(e.target.value)} className="bg-transparent text-cyan-50 text-xs font-bold uppercase outline-none cursor-pointer px-3 w-full sm:w-40 h-full">
                 <option value="All">Semua Kelompok</option>
