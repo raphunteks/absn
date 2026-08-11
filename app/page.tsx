@@ -1420,7 +1420,11 @@ const AdminDashboardHome: React.FC = () => {
   const { startObj, endObj, FilterUI } = useDateFilter();
   const [selectedCluster, setSelectedCluster] = useState('All');
 
-  // Filter Logs based on Date & Cluster (Waktu Lokal)
+  // Dynamic Total Days Calculation for robust Alpha metrics
+  const diffTime = Math.abs(endObj.getTime() - startObj.getTime());
+  const totalDaysInRange = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) || 1;
+
+  // Filter Logs based on Date & Cluster
   const filteredLogs = logs.filter(l => {
     const logDate = new Date(l.timestamp);
     const inDateRange = logDate >= startObj && logDate <= endObj;
@@ -1489,7 +1493,6 @@ const AdminDashboardHome: React.FC = () => {
   const onTimeCount = filteredLogs.filter(l => l.status === 'Hadir').length;
   const lateCount = filteredLogs.filter(l => l.status === 'Terlambat').length;
   const totalAlphaCount = studentStats.reduce((acc, curr) => acc + curr.alpha, 0);
-  const totalBelumAbsenCount = studentStats.reduce((acc, curr) => acc + curr.belumAbsen, 0);
 
   // Chart 1: Daily Trend (Area Chart)
   const dailyDataMap: Record<string, { date: string; Hadir: number; Terlambat: number }> = {};
@@ -1531,22 +1534,21 @@ const AdminDashboardHome: React.FC = () => {
          </div>
       </div>
 
-      {/* STATS WIDGETS DENGAN 5 CARD */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4 md:gap-5">
+      {/* STATS WIDGETS */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 md:gap-5">
         {[
           { title: 'Total Rekam Absen', val: totalLogsCount, icon: ActivitySquare, color: 'text-cyan-400', bg: 'bg-cyan-500/10', border: 'border-cyan-500/30' },
           { title: 'Tepat Waktu', val: onTimeCount, icon: CheckCircle2, color: 'text-emerald-400', bg: 'bg-emerald-500/10', border: 'border-emerald-500/30' },
           { title: 'Terlambat Hadir', val: lateCount, icon: Clock, color: 'text-amber-400', bg: 'bg-amber-500/10', border: 'border-amber-500/30' },
-          { title: 'Data Kosong (Alpha)', val: totalAlphaCount, icon: UserX, color: 'text-rose-400', bg: 'bg-rose-500/10', border: 'border-rose-500/30' },
-          { title: 'Belum Absen (Hari Ini)', val: totalBelumAbsenCount, icon: Clock, color: 'text-purple-400', bg: 'bg-purple-500/10', border: 'border-purple-500/30' }
+          { title: 'Data Kosong (Alpha)', val: totalAlphaCount, icon: UserX, color: 'text-rose-400', bg: 'bg-rose-500/10', border: 'border-rose-500/30' }
         ].map((stat, i) => (
-          <div key={i} className={`bg-[#0A1628]/60 backdrop-blur-md border ${stat.border} p-4 sm:p-5 rounded-[1.5rem] flex items-center justify-between transition-all duration-300 hover:bg-[#0A1628] hover:-translate-y-1 shadow-lg`}>
+          <div key={i} className={`bg-[#0A1628]/60 backdrop-blur-md border ${stat.border} p-5 rounded-[1.5rem] flex items-center justify-between transition-all duration-300 hover:bg-[#0A1628] hover:-translate-y-1 shadow-lg`}>
             <div>
-               <p className="text-cyan-500/70 text-[8px] sm:text-[9px] font-bold uppercase tracking-[0.2em] mb-2 pr-2 leading-tight">{stat.title}</p>
-               <h3 className="text-2xl sm:text-3xl font-black text-white font-mono">{stat.val}</h3>
+               <p className="text-cyan-500/70 text-[9px] font-bold uppercase tracking-[0.2em] mb-2">{stat.title}</p>
+               <h3 className="text-3xl font-black text-white font-mono">{stat.val}</h3>
             </div>
-            <div className={cn("w-10 h-10 md:w-12 md:h-12 rounded-xl flex items-center justify-center shadow-inner border border-white/5 shrink-0", stat.bg)}>
-               <stat.icon className={cn("w-5 h-5 md:w-6 md:h-6", stat.color)} />
+            <div className={cn("w-12 h-12 rounded-xl flex items-center justify-center shadow-inner border border-white/5", stat.bg)}>
+               <stat.icon className={cn("w-6 h-6", stat.color)} />
             </div>
           </div>
         ))}
@@ -1612,7 +1614,7 @@ const AdminDashboardHome: React.FC = () => {
           </div>
         </div>
         
-        {/* REKAPITULASI KEHADIRAN MAHASISWA */}
+        {/* REKAPITULASI KEHADIRAN MAHASISWA (REPLACING BAR CHART BY SESSION) */}
         <div className="lg:col-span-3 bg-[#0A1628]/60 backdrop-blur-md border border-cyan-500/20 p-6 rounded-[1.5rem] flex flex-col shadow-lg relative overflow-hidden">
           <div className="absolute top-0 right-0 w-64 h-64 bg-cyan-600/5 rounded-bl-[100px] pointer-events-none"></div>
           
@@ -1640,7 +1642,7 @@ const AdminDashboardHome: React.FC = () => {
                    {studentStats.map((st, idx) => (
                       <tr key={st.id || idx} className="hover:bg-cyan-900/20 transition-colors duration-200 text-cyan-50 group">
                          <td className="p-4 font-mono text-sm tracking-wider">{st.nim}</td>
-                         <td className="p-4 font-bold text-sm uppercase max-w-[200px] truncate" title={st.name}>{st.name}</td>
+                         <td className="p-4 font-bold text-sm uppercase">{st.name}</td>
                          <td className="p-4">
                             <span className="text-[9px] uppercase font-bold tracking-widest text-cyan-300 bg-cyan-950/50 border border-cyan-500/30 px-2 py-1 rounded-md shadow-sm">
                                {clusters.find(c => c.id === st.clusterId)?.name || 'TANPA KELOMPOK'}
@@ -1656,7 +1658,7 @@ const AdminDashboardHome: React.FC = () => {
                             <span className="inline-flex items-center justify-center w-8 h-8 rounded-full bg-rose-500/10 text-rose-400 font-bold text-sm border border-rose-500/30 group-hover:bg-rose-500/20">{st.alpha}</span>
                          </td>
                          <td className="p-4 text-center">
-                            <span className="inline-flex items-center justify-center w-8 h-8 rounded-full bg-purple-500/10 text-purple-400 font-bold text-sm border border-purple-500/30 group-hover:bg-purple-500/20">{st.belumAbsen}</span>
+                            <span className="inline-flex items-center justify-center w-8 h-8 rounded-full bg-slate-500/10 text-slate-300 font-bold text-sm border border-slate-500/30 group-hover:bg-slate-500/20">{st.belumAbsen}</span>
                          </td>
                       </tr>
                    ))}
@@ -1779,7 +1781,7 @@ const AdminStudents: React.FC = () => {
 
   const handleAdd = (e: React.FormEvent) => {
     e.preventDefault();
-    addStudent({ ...newS, password: newS.password || `${newS.nim}123` });
+    addStudent({ ...newS, password: newS.password || `123` });
     setIsAdding(false);
     setNewS({ name: '', nim: '', password: '', clusterId: '' });
   };
@@ -1838,7 +1840,7 @@ const AdminStudents: React.FC = () => {
             newSt.push({ 
                name: String(name).trim(), 
                nim: String(nim).trim(), 
-               password: `${String(nim).trim()}123`,
+               password: '123', // SUPER UPGRADE: Default password 123 (Sesuai CRUD)
                clusterId: finalClusterId || ''
             });
          }
@@ -1851,7 +1853,7 @@ const AdminStudents: React.FC = () => {
            }
         }
         bulkAddStudents(newSt);
-        alert(`✅ Sistem Berhasil mengimpor ${newSt.length} mahasiswa.`);
+        alert(`✅ Sistem Berhasil mengimpor ${newSt.length} mahasiswa dengan default password '123'.`);
       } else {
         alert('❌ Gagal mendeteksi data. Pastikan format kolom baris pertama memiliki header "Nama" dan "NIM".');
       }
@@ -1928,7 +1930,7 @@ const AdminStudents: React.FC = () => {
                       <p><span className="text-emerald-400 font-bold bg-emerald-950/50 px-1 rounded">Kolom C</span> Kelompok <span className="text-emerald-300 italic">(Opsional)</span></p>
                    </div>
                 </div>
-                <p className="text-[8px] text-cyan-500 italic mt-2.5 border-t border-cyan-900/50 pt-2">*Pastikan Baris 1 pada file Excel Anda diisi dengan Header (Judul Kolom). Jika kolom C kosong, data otomatis masuk ke kelompok dropdown.</p>
+                <p className="text-[8px] text-cyan-500 italic mt-2.5 border-t border-cyan-900/50 pt-2">*Pastikan Baris 1 pada file Excel diisi Header. Jika kolom C kosong, data otomatis masuk ke kelompok dropdown. <strong className="text-emerald-400">Password default akun: 123</strong> (Ubah via Edit).</p>
              </div>
           </div>
         </div>
