@@ -410,7 +410,7 @@ const useDateFilter = () => {
   }, [datePreset, customStart, customEnd]);
 
   const FilterUI = () => (
-    <div className="flex flex-col sm:flex-row gap-3 w-full sm:w-auto">
+    <div className="flex flex-col sm:flex-row gap-3 w-full sm:w-auto items-start sm:items-end">
       <div className="flex flex-col gap-1 w-full sm:w-auto">
          <label className="text-[9px] text-cyan-500 uppercase tracking-widest font-bold">Filter Tanggal</label>
          <div className="flex items-center bg-[#050B14] border border-cyan-500/30 rounded-xl px-2 h-11 w-full sm:w-auto focus-within:border-cyan-400 transition-colors">
@@ -423,7 +423,7 @@ const useDateFilter = () => {
          </div>
       </div>
       {datePreset === 'custom' && (
-        <div className="flex flex-col sm:flex-row gap-3 w-full sm:w-auto">
+        <div className="flex flex-col sm:flex-row gap-3 w-full sm:w-auto items-start sm:items-end">
           <div className="flex flex-col gap-1 w-full sm:w-auto">
              <label className="text-[9px] text-cyan-500 uppercase tracking-widest font-bold">Mulai Tanggal</label>
              <input type="date" value={customStart} onChange={e => setCustomStart(e.target.value)} className="bg-[#050B14] border border-cyan-500/30 text-cyan-50 text-xs font-mono px-3 h-11 rounded-lg outline-none focus:border-cyan-400 w-full" />
@@ -1420,11 +1420,7 @@ const AdminDashboardHome: React.FC = () => {
   const { startObj, endObj, FilterUI } = useDateFilter();
   const [selectedCluster, setSelectedCluster] = useState('All');
 
-  // Dynamic Total Days Calculation for robust Alpha metrics
-  const diffTime = Math.abs(endObj.getTime() - startObj.getTime());
-  const totalDaysInRange = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) || 1;
-
-  // Filter Logs based on Date & Cluster
+  // Filter Logs based on Date & Cluster (Waktu Lokal)
   const filteredLogs = logs.filter(l => {
     const logDate = new Date(l.timestamp);
     const inDateRange = logDate >= startObj && logDate <= endObj;
@@ -1450,14 +1446,19 @@ const AdminDashboardHome: React.FC = () => {
      
      // Evaluate each day in the date range
      const rangeStart = new Date(startObj);
-     const rangeEnd = endObj > new Date() ? new Date() : new Date(endObj); // Don't process future days
+     const rangeEnd = new Date(endObj); 
+     const todayLocal = getLocalYYYYMMDD(new Date());
 
      for (let d = new Date(rangeStart); d <= rangeEnd; d.setDate(d.getDate() + 1)) {
-         const dateStr = d.toISOString().split('T')[0];
-         const isToday = dateStr === new Date().toISOString().split('T')[0];
+         // Stop checking if day is in the future
+         if (d > new Date()) break;
+
+         const dateStrLocal = getLocalYYYYMMDD(d);
+         const isToday = dateStrLocal === todayLocal;
          
          activeSessions.forEach(sess => {
-             const log = studentLogs.find(l => l.timestamp.startsWith(dateStr) && l.sessionName === sess.name);
+             // Sinkronisasi Bug Fix: Validasi dengan konversi ke YYYY-MM-DD Lokal
+             const log = studentLogs.find(l => getLocalYYYYMMDD(l.timestamp) === dateStrLocal && l.sessionName === sess.name);
              if (log) {
                  if (log.status === 'Hadir') hadir++;
                  else if (log.status === 'Terlambat') terlambat++;
@@ -1469,9 +1470,12 @@ const AdminDashboardHome: React.FC = () => {
                      const endWithTol = endTotal + sess.toleranceMinutes;
                      
                      if (currentMinutes > endWithTol) alpha++; // completely missed
-                     else belumAbsen++; // still has time or ongoing
+                     else belumAbsen++; // Masih punya waktu untuk absen
                  } else {
-                     alpha++; // past day missed
+                     // Check specifically if the loop date is strictly in the past
+                     if (d < new Date(new Date().setHours(0,0,0,0))) {
+                        alpha++; 
+                     }
                  }
              }
          });
@@ -1485,6 +1489,7 @@ const AdminDashboardHome: React.FC = () => {
   const onTimeCount = filteredLogs.filter(l => l.status === 'Hadir').length;
   const lateCount = filteredLogs.filter(l => l.status === 'Terlambat').length;
   const totalAlphaCount = studentStats.reduce((acc, curr) => acc + curr.alpha, 0);
+  const totalBelumAbsenCount = studentStats.reduce((acc, curr) => acc + curr.belumAbsen, 0);
 
   // Chart 1: Daily Trend (Area Chart)
   const dailyDataMap: Record<string, { date: string; Hadir: number; Terlambat: number }> = {};
@@ -1512,33 +1517,36 @@ const AdminDashboardHome: React.FC = () => {
             <h2 className="text-xl md:text-2xl font-black text-cyan-50 tracking-widest uppercase">Dashboard Absensi</h2>
             <p className="text-cyan-500/70 text-xs font-mono uppercase mt-1">Ringkasan data kehadiran mahasiswa</p>
          </div>
-         <div className="flex flex-col sm:flex-row gap-3 w-full xl:w-auto">
+         <div className="flex flex-col sm:flex-row gap-3 w-full xl:w-auto items-start sm:items-end">
             <FilterUI />
             <div className="flex flex-col gap-1 w-full sm:w-auto">
                <label className="text-[9px] text-cyan-500 uppercase tracking-widest font-bold">Filter Kelompok / Angkatan</label>
-               <select value={selectedCluster} onChange={e => setSelectedCluster(e.target.value)} className="bg-[#050B14] border border-cyan-500/30 text-cyan-50 text-xs font-bold uppercase p-2.5 rounded-xl h-11 outline-none focus:border-cyan-400 w-full sm:min-w-[150px] cursor-pointer">
-                  <option value="All">Semua Kelompok</option>
-                  {clusters.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-               </select>
+               <div className="flex items-center bg-[#050B14] border border-cyan-500/30 rounded-xl px-2 h-11 w-full sm:w-auto focus-within:border-cyan-400 transition-colors">
+                  <select value={selectedCluster} onChange={e => setSelectedCluster(e.target.value)} className="bg-transparent text-cyan-50 text-xs font-bold uppercase outline-none cursor-pointer px-3 w-full sm:min-w-[150px] h-full">
+                     <option value="All">Semua Kelompok</option>
+                     {clusters.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                  </select>
+               </div>
             </div>
          </div>
       </div>
 
-      {/* STATS WIDGETS */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 md:gap-5">
+      {/* STATS WIDGETS DENGAN 5 CARD */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4 md:gap-5">
         {[
           { title: 'Total Rekam Absen', val: totalLogsCount, icon: ActivitySquare, color: 'text-cyan-400', bg: 'bg-cyan-500/10', border: 'border-cyan-500/30' },
           { title: 'Tepat Waktu', val: onTimeCount, icon: CheckCircle2, color: 'text-emerald-400', bg: 'bg-emerald-500/10', border: 'border-emerald-500/30' },
           { title: 'Terlambat Hadir', val: lateCount, icon: Clock, color: 'text-amber-400', bg: 'bg-amber-500/10', border: 'border-amber-500/30' },
-          { title: 'Data Kosong (Alpha)', val: totalAlphaCount, icon: UserX, color: 'text-rose-400', bg: 'bg-rose-500/10', border: 'border-rose-500/30' }
+          { title: 'Data Kosong (Alpha)', val: totalAlphaCount, icon: UserX, color: 'text-rose-400', bg: 'bg-rose-500/10', border: 'border-rose-500/30' },
+          { title: 'Belum Absen (Hari Ini)', val: totalBelumAbsenCount, icon: Clock, color: 'text-purple-400', bg: 'bg-purple-500/10', border: 'border-purple-500/30' }
         ].map((stat, i) => (
-          <div key={i} className={`bg-[#0A1628]/60 backdrop-blur-md border ${stat.border} p-5 rounded-[1.5rem] flex items-center justify-between transition-all duration-300 hover:bg-[#0A1628] hover:-translate-y-1 shadow-lg`}>
+          <div key={i} className={`bg-[#0A1628]/60 backdrop-blur-md border ${stat.border} p-4 sm:p-5 rounded-[1.5rem] flex items-center justify-between transition-all duration-300 hover:bg-[#0A1628] hover:-translate-y-1 shadow-lg`}>
             <div>
-               <p className="text-cyan-500/70 text-[9px] font-bold uppercase tracking-[0.2em] mb-2">{stat.title}</p>
-               <h3 className="text-3xl font-black text-white font-mono">{stat.val}</h3>
+               <p className="text-cyan-500/70 text-[8px] sm:text-[9px] font-bold uppercase tracking-[0.2em] mb-2 pr-2 leading-tight">{stat.title}</p>
+               <h3 className="text-2xl sm:text-3xl font-black text-white font-mono">{stat.val}</h3>
             </div>
-            <div className={cn("w-12 h-12 rounded-xl flex items-center justify-center shadow-inner border border-white/5", stat.bg)}>
-               <stat.icon className={cn("w-6 h-6", stat.color)} />
+            <div className={cn("w-10 h-10 md:w-12 md:h-12 rounded-xl flex items-center justify-center shadow-inner border border-white/5 shrink-0", stat.bg)}>
+               <stat.icon className={cn("w-5 h-5 md:w-6 md:h-6", stat.color)} />
             </div>
           </div>
         ))}
@@ -1604,7 +1612,7 @@ const AdminDashboardHome: React.FC = () => {
           </div>
         </div>
         
-        {/* REKAPITULASI KEHADIRAN MAHASISWA (REPLACING BAR CHART BY SESSION) */}
+        {/* REKAPITULASI KEHADIRAN MAHASISWA */}
         <div className="lg:col-span-3 bg-[#0A1628]/60 backdrop-blur-md border border-cyan-500/20 p-6 rounded-[1.5rem] flex flex-col shadow-lg relative overflow-hidden">
           <div className="absolute top-0 right-0 w-64 h-64 bg-cyan-600/5 rounded-bl-[100px] pointer-events-none"></div>
           
@@ -1632,7 +1640,7 @@ const AdminDashboardHome: React.FC = () => {
                    {studentStats.map((st, idx) => (
                       <tr key={st.id || idx} className="hover:bg-cyan-900/20 transition-colors duration-200 text-cyan-50 group">
                          <td className="p-4 font-mono text-sm tracking-wider">{st.nim}</td>
-                         <td className="p-4 font-bold text-sm uppercase">{st.name}</td>
+                         <td className="p-4 font-bold text-sm uppercase max-w-[200px] truncate" title={st.name}>{st.name}</td>
                          <td className="p-4">
                             <span className="text-[9px] uppercase font-bold tracking-widest text-cyan-300 bg-cyan-950/50 border border-cyan-500/30 px-2 py-1 rounded-md shadow-sm">
                                {clusters.find(c => c.id === st.clusterId)?.name || 'TANPA KELOMPOK'}
@@ -1648,7 +1656,7 @@ const AdminDashboardHome: React.FC = () => {
                             <span className="inline-flex items-center justify-center w-8 h-8 rounded-full bg-rose-500/10 text-rose-400 font-bold text-sm border border-rose-500/30 group-hover:bg-rose-500/20">{st.alpha}</span>
                          </td>
                          <td className="p-4 text-center">
-                            <span className="inline-flex items-center justify-center w-8 h-8 rounded-full bg-slate-500/10 text-slate-300 font-bold text-sm border border-slate-500/30 group-hover:bg-slate-500/20">{st.belumAbsen}</span>
+                            <span className="inline-flex items-center justify-center w-8 h-8 rounded-full bg-purple-500/10 text-purple-400 font-bold text-sm border border-purple-500/30 group-hover:bg-purple-500/20">{st.belumAbsen}</span>
                          </td>
                       </tr>
                    ))}
@@ -2148,15 +2156,25 @@ const AdminReports: React.FC = () => {
            <input type="text" placeholder="Cari Nama atau NIM..." value={search} onChange={e=>setSearch(e.target.value)} className="w-full bg-[#050B14] border border-cyan-500/30 rounded-xl pl-11 pr-4 h-11 text-cyan-50 outline-none focus:border-cyan-400 transition-colors shadow-inner font-mono text-sm" />
         </div>
         
-        <select value={filterCluster} onChange={e=>setFilterCluster(e.target.value)} className="bg-[#050B14] border border-cyan-500/30 rounded-xl px-5 h-11 text-cyan-50 outline-none focus:border-cyan-400 transition-colors shadow-inner w-full md:w-40 font-bold text-xs uppercase cursor-pointer appearance-none">
-          <option value="All">Semua Kelompok</option>
-          {clusters.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-        </select>
-        
-        <select value={filterSession} onChange={e=>setFilterSession(e.target.value)} className="bg-[#050B14] border border-cyan-500/30 rounded-xl px-5 h-11 text-cyan-50 outline-none focus:border-cyan-400 transition-colors shadow-inner w-full md:w-40 font-bold text-xs uppercase cursor-pointer appearance-none">
-          <option value="All">Semua Jadwal Shift</option>
-          {sessions.map(s => <option key={s.id} value={s.name}>{s.name}</option>)}
-        </select>
+        <div className="flex flex-col gap-1 w-full sm:w-auto">
+           <label className="text-[9px] text-cyan-500 uppercase tracking-widest font-bold">Kelompok</label>
+           <div className="flex items-center bg-[#050B14] border border-cyan-500/30 rounded-xl px-2 h-11 w-full sm:w-auto focus-within:border-cyan-400 transition-colors">
+              <select value={filterCluster} onChange={e=>setFilterCluster(e.target.value)} className="bg-transparent text-cyan-50 text-xs font-bold uppercase outline-none cursor-pointer px-3 w-full sm:w-40 h-full">
+                <option value="All">Semua Kelompok</option>
+                {clusters.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+              </select>
+           </div>
+        </div>
+
+        <div className="flex flex-col gap-1 w-full sm:w-auto">
+           <label className="text-[9px] text-cyan-500 uppercase tracking-widest font-bold">Jadwal Shift</label>
+           <div className="flex items-center bg-[#050B14] border border-cyan-500/30 rounded-xl px-2 h-11 w-full sm:w-auto focus-within:border-cyan-400 transition-colors">
+              <select value={filterSession} onChange={e=>setFilterSession(e.target.value)} className="bg-transparent text-cyan-50 text-xs font-bold uppercase outline-none cursor-pointer px-3 w-full sm:w-40 h-full">
+                <option value="All">Semua Shift</option>
+                {sessions.map(s => <option key={s.id} value={s.name}>{s.name}</option>)}
+              </select>
+           </div>
+        </div>
       </div>
 
       <div className="flex-1 bg-[#0A1628]/60 backdrop-blur-md border border-cyan-500/20 rounded-[1.5rem] overflow-hidden flex flex-col shadow-xl">
