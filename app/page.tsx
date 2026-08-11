@@ -1516,6 +1516,7 @@ const AdminDashboardHome: React.FC = () => {
                <label className="text-[9px] text-cyan-500 uppercase tracking-widest font-bold">Filter Kelompok / Angkatan</label>
                <select value={selectedCluster} onChange={e => setSelectedCluster(e.target.value)} className="bg-[#050B14] border border-cyan-500/30 text-cyan-50 text-xs font-bold uppercase p-2.5 rounded-xl h-11 outline-none focus:border-cyan-400 w-full sm:min-w-[150px] cursor-pointer">
                   <option value="All">Semua Kelompok</option>
+                  <option value="All">Semua Kelompok</option>
                   {clusters.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
                </select>
             </div>
@@ -1789,50 +1790,66 @@ const AdminStudents: React.FC = () => {
      }
   };
 
-  // EXCEL (XLSX) BULK UPLOAD SUPPORT - DYNAMIC LOAD
+  // EXCEL (XLSX) BULK UPLOAD SUPPORT - DYNAMIC LOAD (SUPER UPGRADE)
   const handleBulkUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-
-    if (!selectedClusterForBulk) {
-       alert("Pilih Kelompok (Angkatan) terlebih dahulu di tombol 'PILIH KELOMPOK (IMPORT)' sebelum upload file Excel.");
-       e.target.value = ''; // reset input
-       return;
-    }
 
     try {
       const XLSX = await loadXlsx();
       const data = await file.arrayBuffer();
       const workbook = XLSX.read(data);
       const worksheet = workbook.Sheets[workbook.SheetNames[0]];
-      // Expecting standard columns, row 1 as header. (Nama, NIM)
+      // Expecting standard columns, row 1 as header. (Nama, NIM, Kelompok)
       const jsonData: any[] = XLSX.utils.sheet_to_json(worksheet);
       
       const newSt: Omit<Student, 'id'>[] = [];
+      let missingClusterCount = 0;
+
       jsonData.forEach(row => {
          // Flexible matching for typical column names in Indonesia
          const name = row['Nama'] || row['NAMA'] || row['nama'] || row['Nama Lengkap'] || row['Name'];
-         const nim = row['NIM'] || row['nim'] || row['Nomor Induk'];
+         const nim = row['NIM'] || row['NIM '] || row['nim'] || row['Nomor Induk'];
+         const clusterCol = row['Kelompok'] || row['KELOMPOK'] || row['Cluster'] || row['Angkatan'];
          
          if (name && nim) {
+            let finalClusterId = selectedClusterForBulk;
+            
+            // SUPER UPGRADE: Prioritaskan Kelompok dari File Excel jika kolom tersedia
+            if (clusterCol) {
+                const found = clusters.find(c => c.name.toLowerCase().trim() === String(clusterCol).toLowerCase().trim());
+                if (found) {
+                   finalClusterId = found.id;
+                }
+            }
+
+            if (!finalClusterId) {
+                missingClusterCount++;
+            }
+
             newSt.push({ 
                name: String(name).trim(), 
                nim: String(nim).trim(), 
                password: `${String(nim).trim()}123`,
-               clusterId: selectedClusterForBulk
+               clusterId: finalClusterId || ''
             });
          }
       });
 
       if (newSt.length > 0) {
+        if (missingClusterCount > 0 && !selectedClusterForBulk) {
+           if(!confirm(`⚠️ Peringatan Sistem: Terdapat ${missingClusterCount} data mahasiswa tanpa informasi kelompok (tidak ada di Excel & tidak dipilih di dropdown). Lanjutkan import?`)) {
+               e.target.value = ''; return;
+           }
+        }
         bulkAddStudents(newSt);
-        alert(`Berhasil mengimpor ${newSt.length} mahasiswa ke dalam sistem.`);
+        alert(`✅ Sistem Berhasil mengimpor ${newSt.length} mahasiswa.`);
       } else {
-        alert('Gagal mendeteksi data. Pastikan format kolom memiliki header "Nama" dan "NIM".');
+        alert('❌ Gagal mendeteksi data. Pastikan format kolom baris pertama memiliki header "Nama" dan "NIM".');
       }
     } catch (err) {
        console.error("Bulk Upload Error:", err);
-       alert("Terjadi kesalahan saat membaca file .xlsx");
+       alert("❌ Terjadi kesalahan saat membaca file .xlsx");
     }
     
     e.target.value = ''; // reset input
@@ -1846,31 +1863,64 @@ const AdminStudents: React.FC = () => {
 
   return (
     <div className="space-y-6 animate-in fade-in duration-500 h-full flex flex-col w-full relative pb-10">
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-        <div>
+      <div className="flex flex-col md:flex-row justify-between items-start lg:items-center gap-4">
+        <div className="shrink-0">
           <h2 className="text-2xl md:text-3xl font-black text-cyan-50 tracking-widest uppercase">Data Mahasiswa</h2>
           <p className="text-cyan-500/70 text-xs md:text-sm font-mono mt-1 uppercase">Kelola Data Mahasiswa dan Kartu Absen (QR)</p>
         </div>
         
-        <div className="flex flex-col sm:flex-row gap-3 w-full md:w-auto bg-[#0A1628]/80 p-2 rounded-2xl border border-cyan-500/20 shadow-lg">
-           
-           <div className="flex flex-col w-full md:w-auto gap-1">
-             <div className="flex items-center bg-[#050B14] border border-purple-500/30 rounded-xl px-2 h-11 w-full focus-within:border-purple-400 transition-colors">
-                <select value={selectedClusterForBulk} onChange={e=>setSelectedClusterForBulk(e.target.value)} className="bg-transparent text-purple-100 text-xs font-bold uppercase outline-none w-full md:w-40 cursor-pointer appearance-none px-2">
-                   <option value="" disabled>PILIH KELOMPOK (IMPORT)</option>
-                   {clusters.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-                </select>
+        <div className="flex flex-col gap-3 w-full lg:w-auto">
+          {/* Action Buttons Row */}
+          <div className="flex flex-col sm:flex-row gap-3 w-full lg:w-auto bg-[#0A1628]/80 p-2 rounded-2xl border border-cyan-500/20 shadow-lg items-center">
+             
+             <div className="flex flex-col w-full sm:w-auto gap-1">
+               <div className="flex items-center bg-[#050B14] border border-purple-500/30 rounded-xl px-2 h-11 w-full focus-within:border-purple-400 transition-colors">
+                  <select value={selectedClusterForBulk} onChange={e=>setSelectedClusterForBulk(e.target.value)} className="bg-transparent text-purple-100 text-xs font-bold uppercase outline-none w-full sm:w-44 cursor-pointer appearance-none px-2 text-center sm:text-left">
+                     <option value="" disabled>PILIH KELOMPOK (DEFAULT)</option>
+                     {clusters.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                  </select>
+               </div>
              </div>
-           </div>
-           
-           <label className="flex flex-1 md:flex-none justify-center items-center gap-2 px-5 py-2.5 bg-purple-600/20 text-purple-400 hover:bg-purple-600/40 border border-purple-500/50 rounded-xl transition-all duration-300 font-black uppercase text-[10px] md:text-xs cursor-pointer active:scale-95 shadow-[0_0_10px_rgba(147,51,234,0.3)] whitespace-nowrap">
-              <Upload className="w-4 h-4" /> Import Excel
-              <input type="file" accept=".xlsx, .xls" className="hidden" onChange={handleBulkUpload} />
-           </label>
-           
-           <button onClick={() => setIsAdding(!isAdding)} className="flex flex-1 md:flex-none justify-center items-center gap-2 px-5 py-2.5 bg-cyan-600/20 text-cyan-400 hover:bg-cyan-600/40 border border-cyan-500/50 rounded-xl transition-all duration-300 font-black uppercase text-[10px] md:text-xs active:scale-95 shadow-[0_0_10px_rgba(6,182,212,0.3)] whitespace-nowrap">
-             <Plus className="w-4 h-4" /> Input Manual
-           </button>
+             
+             <label className="flex flex-1 sm:flex-none w-full sm:w-auto justify-center items-center gap-2 px-6 py-3 sm:py-2.5 bg-gradient-to-r from-purple-600/30 to-fuchsia-600/30 text-purple-300 hover:from-purple-500/50 hover:to-fuchsia-500/50 border border-purple-400/50 rounded-xl transition-all duration-300 font-black uppercase text-[10px] md:text-xs cursor-pointer active:scale-95 shadow-[0_0_15px_rgba(147,51,234,0.3)] whitespace-nowrap">
+                <Upload className="w-4 h-4" /> Import Excel
+                <input type="file" accept=".xlsx, .xls" className="hidden" onChange={handleBulkUpload} />
+             </label>
+             
+             <button onClick={() => setIsAdding(!isAdding)} className="flex flex-1 sm:flex-none w-full sm:w-auto justify-center items-center gap-2 px-6 py-3 sm:py-2.5 bg-cyan-600/20 text-cyan-400 hover:bg-cyan-600/40 border border-cyan-500/50 rounded-xl transition-all duration-300 font-black uppercase text-[10px] md:text-xs active:scale-95 shadow-[0_0_10px_rgba(6,182,212,0.3)] whitespace-nowrap">
+               <Plus className="w-4 h-4" /> Input Manual
+             </button>
+          </div>
+
+          {/* COMPREHENSIVE SYSTEMATIC GUIDE FOR EXCEL IMPORT */}
+          <div className="bg-gradient-to-br from-[#050B14]/90 to-[#0A1628]/90 p-3.5 md:p-4 rounded-2xl border border-purple-500/40 flex flex-col sm:flex-row items-start sm:items-center gap-3 md:gap-4 shadow-[0_10px_30px_rgba(147,51,234,0.15)] relative overflow-hidden group">
+             <div className="absolute top-0 right-0 w-32 h-32 bg-purple-600/10 rounded-bl-[100px] pointer-events-none transition-transform group-hover:scale-110"></div>
+             <div className="bg-purple-950/60 p-2.5 rounded-xl border border-purple-500/50 shrink-0 relative z-10 shadow-[inset_0_0_15px_rgba(147,51,234,0.3)]">
+                <FileText className="w-5 h-5 text-purple-400" />
+             </div>
+             <div className="flex-1 relative z-10 w-full">
+                <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-2 gap-2">
+                   <p className="text-[11px] md:text-xs text-purple-200 font-black uppercase tracking-[0.15em] flex items-center gap-2 drop-shadow-md">
+                      Panduan Format Excel 
+                   </p>
+                   <span className="bg-gradient-to-r from-purple-600 to-fuchsia-600 text-white border border-purple-400/50 px-2.5 py-1 rounded-lg text-[8px] font-black tracking-[0.2em] shadow-[0_0_15px_rgba(192,38,211,0.5)]">
+                      ✨ SUPER UPGRADE
+                   </span>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-x-4 gap-y-2 text-[9px] md:text-[10px] text-cyan-100/80 font-mono leading-relaxed">
+                   <div className="space-y-1">
+                      <p><span className="text-purple-400 font-bold bg-purple-950/50 px-1 rounded">Kolom A</span> Nama Lengkap <span className="text-purple-300 font-bold">*Wajib</span></p>
+                   </div>
+                   <div className="space-y-1">
+                      <p><span className="text-purple-400 font-bold bg-purple-950/50 px-1 rounded">Kolom B</span> NIM / Stambuk <span className="text-purple-300 font-bold">*Wajib</span></p>
+                   </div>
+                   <div className="space-y-1 sm:col-span-2 md:col-span-1">
+                      <p><span className="text-emerald-400 font-bold bg-emerald-950/50 px-1 rounded">Kolom C</span> Kelompok <span className="text-emerald-300 italic">(Opsional)</span></p>
+                   </div>
+                </div>
+                <p className="text-[8px] text-cyan-500 italic mt-2.5 border-t border-cyan-900/50 pt-2">*Pastikan Baris 1 pada file Excel Anda diisi dengan Header (Judul Kolom). Jika kolom C kosong, data otomatis masuk ke kelompok dropdown.</p>
+             </div>
+          </div>
         </div>
       </div>
 
