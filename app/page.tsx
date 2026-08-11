@@ -445,12 +445,13 @@ const useDateFilter = () => {
 // STUDENT DASHBOARD (SUPER UPGRADE)
 // ==========================================
 const StudentDashboard: React.FC<{ onStartAbsen: () => void, linkedNim: string | null }> = ({ onStartAbsen, linkedNim }) => {
-  const { logs, students, clusters } = useAppContext();
+  const { logs, students, clusters, sessions } = useAppContext();
 
   const student = students.find(s => s.nim === linkedNim);
   const studentName = student?.name;
   const firstName = studentName ? studentName.split(' ')[0] : 'Mahasiswa Baru';
   const myCluster = clusters.find(c => c.id === student?.clusterId);
+  const activeSessions = useMemo(() => sessions.filter(s => s.isActive), [sessions]);
   
   const myLogs = useMemo(() => {
     if (!linkedNim) return [];
@@ -467,26 +468,53 @@ const StudentDashboard: React.FC<{ onStartAbsen: () => void, linkedNim: string |
   const hasClockedInToday = todayLogs.length > 0;
   const lastClockInTime = hasClockedInToday ? new Date(todayLogs[0].timestamp).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }) : null;
 
-  const staseData = useMemo(() => {
+  const { chartData: staseDataList, alpha: myAlpha, belumAbsen: myBelumAbsen } = useMemo(() => {
      let startD = new Date(); 
-     startD.setDate(startD.getDate() - 6); // default 7 days
+     startD.setDate(startD.getDate() - 6); 
      let endD = new Date();
 
      if (myCluster?.startDate && myCluster?.endDate) {
          startD = new Date(myCluster.startDate);
          const staseEnd = new Date(myCluster.endDate);
-         endD = staseEnd > new Date() ? new Date() : staseEnd; // cap to today so chart isn't empty
+         endD = staseEnd > new Date() ? new Date() : staseEnd; 
      }
 
      const data = [];
+     const todayLocal = getLocalYYYYMMDD(new Date());
+     let tempAlpha = 0;
+     let tempBelumAbsen = 0;
+
      for (let d = new Date(startD); d <= endD; d.setDate(d.getDate() + 1)) {
+         if (d > new Date()) break;
+
          const dateStrLocal = getLocalYYYYMMDD(d);
+         const isToday = dateStrLocal === todayLocal;
          const label = d.toLocaleDateString('id-ID', { day: '2-digit', month: 'short' });
          const count = myLogs.filter(l => getLocalYYYYMMDD(l.timestamp) === dateStrLocal).length;
+         
          data.push({ day: label, count: count });
+
+         activeSessions.forEach(sess => {
+             const log = myLogs.find(l => getLocalYYYYMMDD(l.timestamp) === dateStrLocal && l.sessionName === sess.name);
+             if (!log) {
+                 if (isToday) {
+                     const currentMinutes = new Date().getHours() * 60 + new Date().getMinutes();
+                     const [endH, endM] = sess.endTime.split(':').map(Number);
+                     const endTotal = endH * 60 + endM;
+                     const endWithTol = endTotal + sess.toleranceMinutes;
+                     
+                     if (currentMinutes > endWithTol) tempAlpha++;
+                     else tempBelumAbsen++;
+                 } else {
+                     if (d < new Date(new Date().setHours(0,0,0,0))) {
+                        tempAlpha++; 
+                     }
+                 }
+             }
+         });
      }
-     return data;
-  }, [myLogs, myCluster]);
+     return { chartData: data, alpha: tempAlpha, belumAbsen: tempBelumAbsen };
+  }, [myLogs, myCluster, activeSessions]);
 
   const recentLogs = myLogs.slice(0, 4);
 
@@ -512,48 +540,72 @@ const StudentDashboard: React.FC<{ onStartAbsen: () => void, linkedNim: string |
         <p className="text-cyan-500/70 text-xs md:text-sm font-mono mt-2">{new Date().toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })} • Ringkasan kehadiran live</p>
       </div>
 
-      {/* Stats Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
-        {/* Card 1 */}
-        <div className="bg-[#0A1628]/80 backdrop-blur-xl border border-cyan-500/20 p-6 rounded-[2rem] shadow-lg relative overflow-hidden group hover:border-cyan-400/50 transition-all">
-          <div className="flex items-center gap-3 mb-4">
-             <div className="w-10 h-10 rounded-full bg-cyan-500/10 flex items-center justify-center text-cyan-400"><Clock className="w-5 h-5"/></div>
-             <span className="text-xs font-black uppercase tracking-widest text-cyan-500">Total Hadir</span>
-          </div>
-          <div className="flex items-end gap-2">
-             <h3 className="text-5xl font-black text-white leading-none">{totalHadir}</h3>
-             <span className="text-cyan-400 text-xs font-bold mb-1 tracking-wider bg-cyan-500/10 px-2 py-1 rounded-md">Total Sesi</span>
-          </div>
+      {/* Stats Cards (SUPER UPGRADE TO 5 WIDGETS) */}
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
+        {/* Card 1: Total Hadir */}
+        <div className="bg-[#0A1628]/80 backdrop-blur-xl border border-cyan-500/20 p-5 rounded-[1.5rem] shadow-lg relative overflow-hidden group hover:border-cyan-400/50 transition-all flex flex-col justify-between">
+           <div className="flex items-center gap-3 mb-4">
+              <div className="w-8 h-8 md:w-10 md:h-10 rounded-full bg-cyan-500/10 flex items-center justify-center text-cyan-400 shrink-0"><Clock className="w-4 h-4 md:w-5 md:h-5"/></div>
+              <span className="text-[10px] md:text-xs font-black uppercase tracking-widest text-cyan-500 leading-tight">Total Hadir</span>
+           </div>
+           <div className="flex items-end gap-2 mt-auto">
+              <h3 className="text-4xl md:text-5xl font-black text-white leading-none">{totalHadir}</h3>
+              <span className="text-cyan-400 text-[9px] md:text-xs font-bold mb-1 tracking-wider bg-cyan-500/10 px-2 py-1 rounded-md whitespace-nowrap">Total Sesi</span>
+           </div>
         </div>
         
-        {/* Card 2 */}
-        <div className="bg-[#0A1628]/80 backdrop-blur-xl border border-cyan-500/20 p-6 rounded-[2rem] shadow-lg relative overflow-hidden group hover:border-emerald-400/50 transition-all">
-          <div className="flex items-center gap-3 mb-4">
-             <div className="w-10 h-10 rounded-full bg-emerald-500/10 flex items-center justify-center text-emerald-400"><CheckCircle2 className="w-5 h-5"/></div>
-             <span className="text-xs font-black uppercase tracking-widest text-emerald-500">Tepat Waktu</span>
-          </div>
-          <div className="flex items-end gap-2">
-             <h3 className="text-5xl font-black text-white leading-none">{onTimePercent}<span className="text-2xl">%</span></h3>
-             <span className="text-emerald-400 text-xs font-bold mb-1 tracking-wider bg-emerald-500/10 px-2 py-1 rounded-md">Rata-rata</span>
-          </div>
+        {/* Card 2: Tepat Waktu */}
+        <div className="bg-[#0A1628]/80 backdrop-blur-xl border border-cyan-500/20 p-5 rounded-[1.5rem] shadow-lg relative overflow-hidden group hover:border-emerald-400/50 transition-all flex flex-col justify-between">
+           <div className="flex items-center gap-3 mb-4">
+              <div className="w-8 h-8 md:w-10 md:h-10 rounded-full bg-emerald-500/10 flex items-center justify-center text-emerald-400 shrink-0"><CheckCircle2 className="w-4 h-4 md:w-5 md:h-5"/></div>
+              <span className="text-[10px] md:text-xs font-black uppercase tracking-widest text-emerald-500 leading-tight">Tepat Waktu</span>
+           </div>
+           <div className="flex items-end gap-2 mt-auto">
+              <h3 className="text-4xl md:text-5xl font-black text-white leading-none">{onTimePercent}<span className="text-xl md:text-2xl">%</span></h3>
+              <span className="text-emerald-400 text-[9px] md:text-xs font-bold mb-1 tracking-wider bg-emerald-500/10 px-2 py-1 rounded-md whitespace-nowrap">Rata-rata</span>
+           </div>
         </div>
 
-        {/* Card 3 (Purple theme) */}
-        <div className="bg-gradient-to-br from-[#4c1d95]/90 to-[#7e22ce]/90 backdrop-blur-xl border border-purple-500/50 p-6 rounded-[2rem] shadow-[0_10px_40px_rgba(126,34,206,0.3)] relative overflow-hidden group">
-          <div className="absolute top-0 right-0 w-32 h-32 bg-white/5 rounded-full blur-2xl pointer-events-none"></div>
-          <div className="flex items-center gap-3 mb-4 relative z-10">
-             <div className="w-10 h-10 rounded-full bg-white/20 flex items-center justify-center text-white"><AlertCircle className="w-5 h-5"/></div>
-             <span className="text-xs font-black uppercase tracking-widest text-purple-100">Terlambat</span>
-          </div>
-          <div className="flex items-end gap-2 relative z-10">
-             <h3 className="text-5xl font-black text-white leading-none">{late}</h3>
-             <span className="text-purple-200 text-xs font-bold mb-1 tracking-wider bg-white/20 px-2 py-1 rounded-md">Sesi</span>
-          </div>
+        {/* Card 3: Terlambat (Purple Theme) */}
+        <div className="bg-gradient-to-br from-[#4c1d95]/90 to-[#7e22ce]/90 backdrop-blur-xl border border-purple-500/50 p-5 rounded-[1.5rem] shadow-[0_10px_40px_rgba(126,34,206,0.3)] relative overflow-hidden group flex flex-col justify-between col-span-2 md:col-span-1">
+           <div className="absolute top-0 right-0 w-32 h-32 bg-white/5 rounded-full blur-2xl pointer-events-none"></div>
+           <div className="flex items-center gap-3 mb-4 relative z-10">
+              <div className="w-8 h-8 md:w-10 md:h-10 rounded-full bg-white/20 flex items-center justify-center text-white shrink-0"><AlertCircle className="w-4 h-4 md:w-5 md:h-5"/></div>
+              <span className="text-[10px] md:text-xs font-black uppercase tracking-widest text-purple-100 leading-tight">Terlambat</span>
+           </div>
+           <div className="flex items-end gap-2 relative z-10 mt-auto">
+              <h3 className="text-4xl md:text-5xl font-black text-white leading-none">{late}</h3>
+              <span className="text-purple-200 text-[9px] md:text-xs font-bold mb-1 tracking-wider bg-white/20 px-2 py-1 rounded-md whitespace-nowrap">Sesi</span>
+           </div>
+        </div>
+
+        {/* Card 4: Tidak Hadir (Alpha) (Rose Theme) */}
+        <div className="bg-[#0A1628]/80 backdrop-blur-xl border border-rose-500/20 p-5 rounded-[1.5rem] shadow-lg relative overflow-hidden group hover:border-rose-400/50 transition-all flex flex-col justify-between">
+           <div className="flex items-center gap-3 mb-4">
+              <div className="w-8 h-8 md:w-10 md:h-10 rounded-full bg-rose-500/10 flex items-center justify-center text-rose-400 shrink-0"><UserX className="w-4 h-4 md:w-5 md:h-5"/></div>
+              <span className="text-[10px] md:text-xs font-black uppercase tracking-widest text-rose-500 leading-tight">Tidak Hadir (Alpha)</span>
+           </div>
+           <div className="flex items-end gap-2 mt-auto">
+              <h3 className="text-4xl md:text-5xl font-black text-white leading-none">{myAlpha}</h3>
+              <span className="text-rose-400 text-[9px] md:text-[10px] font-bold mb-1 tracking-wider bg-rose-500/10 px-2 py-1 rounded-md whitespace-nowrap">Total Sesi</span>
+           </div>
+        </div>
+
+        {/* Card 5: Belum Absen (Blue/Amber Theme) */}
+        <div className="bg-[#0A1628]/80 backdrop-blur-xl border border-blue-500/20 p-5 rounded-[1.5rem] shadow-lg relative overflow-hidden group hover:border-blue-400/50 transition-all flex flex-col justify-between">
+           <div className="flex items-center gap-3 mb-4">
+              <div className="w-8 h-8 md:w-10 md:h-10 rounded-full bg-blue-500/10 flex items-center justify-center text-blue-400 shrink-0"><ActivitySquare className="w-4 h-4 md:w-5 md:h-5"/></div>
+              <span className="text-[10px] md:text-xs font-black uppercase tracking-widest text-blue-500 leading-tight">Belum Absen</span>
+           </div>
+           <div className="flex items-end gap-2 mt-auto">
+              <h3 className="text-4xl md:text-5xl font-black text-white leading-none">{myBelumAbsen}</h3>
+              <span className="text-blue-400 text-[9px] md:text-[10px] font-bold mb-1 tracking-wider bg-blue-500/10 px-2 py-1 rounded-md whitespace-nowrap">Sesi Hari Ini</span>
+           </div>
         </div>
       </div>
 
       {/* Middle Section */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-5 mt-8">
         {/* Chart */}
         <div className="lg:col-span-2 bg-[#0A1628]/80 backdrop-blur-xl border border-cyan-500/20 p-6 md:p-8 rounded-[2rem] shadow-lg flex flex-col overflow-hidden">
           <h3 className="text-base font-black text-white mb-1 tracking-widest uppercase truncate">{myCluster?.startDate ? 'Kehadiran Periode Stase' : 'Kehadiran Mingguan'}</h3>
@@ -561,11 +613,11 @@ const StudentDashboard: React.FC<{ onStartAbsen: () => void, linkedNim: string |
           <div className="flex-1 w-full min-h-[200px] overflow-x-auto custom-scrollbar">
              <div className="min-w-[400px] h-full">
                  <ResponsiveContainer width="100%" height="100%">
-                   <BarChart data={staseData} margin={{ top: 0, right: 0, left: 0, bottom: 0 }}>
+                   <BarChart data={staseDataList} margin={{ top: 0, right: 0, left: 0, bottom: 0 }}>
                      <XAxis dataKey="day" axisLine={false} tickLine={false} tick={{fill: '#64748b', fontSize: 10, fontWeight: 'bold'}} dy={10} interval="preserveStartEnd" minTickGap={20} />
                      <Tooltip cursor={{fill: '#1e293b', opacity: 0.4}} contentStyle={{backgroundColor: '#050B14', borderColor: '#8b5cf6', color: '#f8fafc', borderRadius: '1rem', fontSize: '12px'}} />
-                     <Bar dataKey="count" fill="#8b5cf6" radius={[8, 8, 8, 8]} barSize={staseData.length > 15 ? 15 : 40}>
-                       {staseData.map((entry, index) => (
+                     <Bar dataKey="count" fill="#8b5cf6" radius={[8, 8, 8, 8]} barSize={staseDataList.length > 15 ? 15 : 40}>
+                       {staseDataList.map((entry, index) => (
                          <Cell key={`cell-${index}`} fill={entry.count > 0 ? '#8b5cf6' : '#2e1065'} opacity={entry.count > 0 ? 1 : 0.3} />
                        ))}
                      </Bar>
@@ -1420,7 +1472,7 @@ const AdminDashboardHome: React.FC = () => {
   const { startObj, endObj, FilterUI } = useDateFilter();
   const [selectedCluster, setSelectedCluster] = useState('All');
 
-  // Filter Logs based on Date & Cluster
+  // Filter Logs based on Date & Cluster (Waktu Lokal)
   const filteredLogs = logs.filter(l => {
     const logDate = new Date(l.timestamp);
     const inDateRange = logDate >= startObj && logDate <= endObj;
