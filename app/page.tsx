@@ -1420,10 +1420,6 @@ const AdminDashboardHome: React.FC = () => {
   const { startObj, endObj, FilterUI } = useDateFilter();
   const [selectedCluster, setSelectedCluster] = useState('All');
 
-  // Dynamic Total Days Calculation for robust Alpha metrics
-  const diffTime = Math.abs(endObj.getTime() - startObj.getTime());
-  const totalDaysInRange = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) || 1;
-
   // Filter Logs based on Date & Cluster
   const filteredLogs = logs.filter(l => {
     const logDate = new Date(l.timestamp);
@@ -1493,6 +1489,7 @@ const AdminDashboardHome: React.FC = () => {
   const onTimeCount = filteredLogs.filter(l => l.status === 'Hadir').length;
   const lateCount = filteredLogs.filter(l => l.status === 'Terlambat').length;
   const totalAlphaCount = studentStats.reduce((acc, curr) => acc + curr.alpha, 0);
+  const totalBelumAbsenCount = studentStats.reduce((acc, curr) => acc + curr.belumAbsen, 0);
 
   // Chart 1: Daily Trend (Area Chart)
   const dailyDataMap: Record<string, { date: string; Hadir: number; Terlambat: number }> = {};
@@ -1534,21 +1531,22 @@ const AdminDashboardHome: React.FC = () => {
          </div>
       </div>
 
-      {/* STATS WIDGETS */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 md:gap-5">
+      {/* STATS WIDGETS DENGAN 5 CARD */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4 md:gap-5">
         {[
           { title: 'Total Rekam Absen', val: totalLogsCount, icon: ActivitySquare, color: 'text-cyan-400', bg: 'bg-cyan-500/10', border: 'border-cyan-500/30' },
           { title: 'Tepat Waktu', val: onTimeCount, icon: CheckCircle2, color: 'text-emerald-400', bg: 'bg-emerald-500/10', border: 'border-emerald-500/30' },
           { title: 'Terlambat Hadir', val: lateCount, icon: Clock, color: 'text-amber-400', bg: 'bg-amber-500/10', border: 'border-amber-500/30' },
-          { title: 'Data Kosong (Alpha)', val: totalAlphaCount, icon: UserX, color: 'text-rose-400', bg: 'bg-rose-500/10', border: 'border-rose-500/30' }
+          { title: 'Data Kosong (Alpha)', val: totalAlphaCount, icon: UserX, color: 'text-rose-400', bg: 'bg-rose-500/10', border: 'border-rose-500/30' },
+          { title: 'Belum Absen (Hari Ini)', val: totalBelumAbsenCount, icon: Clock, color: 'text-purple-400', bg: 'bg-purple-500/10', border: 'border-purple-500/30' }
         ].map((stat, i) => (
-          <div key={i} className={`bg-[#0A1628]/60 backdrop-blur-md border ${stat.border} p-5 rounded-[1.5rem] flex items-center justify-between transition-all duration-300 hover:bg-[#0A1628] hover:-translate-y-1 shadow-lg`}>
+          <div key={i} className={`bg-[#0A1628]/60 backdrop-blur-md border ${stat.border} p-4 sm:p-5 rounded-[1.5rem] flex items-center justify-between transition-all duration-300 hover:bg-[#0A1628] hover:-translate-y-1 shadow-lg`}>
             <div>
-               <p className="text-cyan-500/70 text-[9px] font-bold uppercase tracking-[0.2em] mb-2">{stat.title}</p>
-               <h3 className="text-3xl font-black text-white font-mono">{stat.val}</h3>
+               <p className="text-cyan-500/70 text-[8px] sm:text-[9px] font-bold uppercase tracking-[0.2em] mb-2 pr-2 leading-tight">{stat.title}</p>
+               <h3 className="text-2xl sm:text-3xl font-black text-white font-mono">{stat.val}</h3>
             </div>
-            <div className={cn("w-12 h-12 rounded-xl flex items-center justify-center shadow-inner border border-white/5", stat.bg)}>
-               <stat.icon className={cn("w-6 h-6", stat.color)} />
+            <div className={cn("w-10 h-10 md:w-12 md:h-12 rounded-xl flex items-center justify-center shadow-inner border border-white/5 shrink-0", stat.bg)}>
+               <stat.icon className={cn("w-5 h-5 md:w-6 md:h-6", stat.color)} />
             </div>
           </div>
         ))}
@@ -1614,7 +1612,7 @@ const AdminDashboardHome: React.FC = () => {
           </div>
         </div>
         
-        {/* REKAPITULASI KEHADIRAN MAHASISWA (REPLACING BAR CHART BY SESSION) */}
+        {/* REKAPITULASI KEHADIRAN MAHASISWA */}
         <div className="lg:col-span-3 bg-[#0A1628]/60 backdrop-blur-md border border-cyan-500/20 p-6 rounded-[1.5rem] flex flex-col shadow-lg relative overflow-hidden">
           <div className="absolute top-0 right-0 w-64 h-64 bg-cyan-600/5 rounded-bl-[100px] pointer-events-none"></div>
           
@@ -1642,7 +1640,7 @@ const AdminDashboardHome: React.FC = () => {
                    {studentStats.map((st, idx) => (
                       <tr key={st.id || idx} className="hover:bg-cyan-900/20 transition-colors duration-200 text-cyan-50 group">
                          <td className="p-4 font-mono text-sm tracking-wider">{st.nim}</td>
-                         <td className="p-4 font-bold text-sm uppercase">{st.name}</td>
+                         <td className="p-4 font-bold text-sm uppercase max-w-[200px] truncate" title={st.name}>{st.name}</td>
                          <td className="p-4">
                             <span className="text-[9px] uppercase font-bold tracking-widest text-cyan-300 bg-cyan-950/50 border border-cyan-500/30 px-2 py-1 rounded-md shadow-sm">
                                {clusters.find(c => c.id === st.clusterId)?.name || 'TANPA KELOMPOK'}
@@ -1658,7 +1656,7 @@ const AdminDashboardHome: React.FC = () => {
                             <span className="inline-flex items-center justify-center w-8 h-8 rounded-full bg-rose-500/10 text-rose-400 font-bold text-sm border border-rose-500/30 group-hover:bg-rose-500/20">{st.alpha}</span>
                          </td>
                          <td className="p-4 text-center">
-                            <span className="inline-flex items-center justify-center w-8 h-8 rounded-full bg-slate-500/10 text-slate-300 font-bold text-sm border border-slate-500/30 group-hover:bg-slate-500/20">{st.belumAbsen}</span>
+                            <span className="inline-flex items-center justify-center w-8 h-8 rounded-full bg-purple-500/10 text-purple-400 font-bold text-sm border border-purple-500/30 group-hover:bg-purple-500/20">{st.belumAbsen}</span>
                          </td>
                       </tr>
                    ))}
@@ -1775,13 +1773,24 @@ const AdminStudents: React.FC = () => {
   
   const [search, setSearch] = useState('');
   const [selectedClusterForBulk, setSelectedClusterForBulk] = useState('');
-  const [filterClusterDisplay, setFilterClusterDisplay] = useState('All'); // Real display filter
+  const [filterClusterDisplay, setFilterClusterDisplay] = useState('All'); 
+  const [defaultBulkPassword, setDefaultBulkPassword] = useState('123'); // SUPER UPGRADE
   
   const [selectedStudentForKTM, setSelectedStudentForKTM] = useState<Student | null>(null);
 
+  useEffect(() => {
+     const savedPass = localStorage.getItem('axaxyz_default_bulk_pass');
+     if (savedPass) setDefaultBulkPassword(savedPass);
+  }, []);
+
+  const handleDefaultPassChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+     setDefaultBulkPassword(e.target.value);
+     localStorage.setItem('axaxyz_default_bulk_pass', e.target.value);
+  }
+
   const handleAdd = (e: React.FormEvent) => {
     e.preventDefault();
-    addStudent({ ...newS, password: newS.password || `123` });
+    addStudent({ ...newS, password: newS.password || defaultBulkPassword });
     setIsAdding(false);
     setNewS({ name: '', nim: '', password: '', clusterId: '' });
   };
@@ -1825,7 +1834,7 @@ const AdminStudents: React.FC = () => {
          if (name && nim) {
             let finalClusterId = selectedClusterForBulk;
             
-            // SUPER UPGRADE: Prioritaskan Kelompok dari File Excel jika kolom tersedia
+            // Prioritaskan Kelompok dari File Excel jika kolom tersedia
             if (clusterCol) {
                 const found = clusters.find(c => c.name.toLowerCase().trim() === String(clusterCol).toLowerCase().trim());
                 if (found) {
@@ -1840,7 +1849,7 @@ const AdminStudents: React.FC = () => {
             newSt.push({ 
                name: String(name).trim(), 
                nim: String(nim).trim(), 
-               password: '123', // SUPER UPGRADE: Default password 123 (Sesuai CRUD)
+               password: defaultBulkPassword, // Menggunakan state dari input box
                clusterId: finalClusterId || ''
             });
          }
@@ -1853,7 +1862,7 @@ const AdminStudents: React.FC = () => {
            }
         }
         bulkAddStudents(newSt);
-        alert(`✅ Sistem Berhasil mengimpor ${newSt.length} mahasiswa dengan default password '123'.`);
+        alert(`✅ Sistem Berhasil mengimpor ${newSt.length} mahasiswa dengan default password '${defaultBulkPassword}'.`);
       } else {
         alert('❌ Gagal mendeteksi data. Pastikan format kolom baris pertama memiliki header "Nama" dan "NIM".');
       }
@@ -1885,12 +1894,27 @@ const AdminStudents: React.FC = () => {
           {/* Action Buttons Row */}
           <div className="flex flex-col sm:flex-row gap-3 w-full xl:w-auto bg-[#0A1628]/80 p-3 rounded-2xl border border-cyan-500/20 shadow-lg items-center shrink-0">
              
+             {/* KELOMPOK DROPDOWN */}
              <div className="flex flex-col w-full sm:w-auto gap-1">
-               <div className="flex items-center bg-[#050B14] border border-purple-500/30 rounded-xl px-2 h-11 w-full sm:w-52 focus-within:border-purple-400 transition-colors">
+               <div className="flex items-center bg-[#050B14] border border-purple-500/30 rounded-xl px-2 h-11 w-full sm:w-44 focus-within:border-purple-400 transition-colors">
                   <select value={selectedClusterForBulk} onChange={e=>setSelectedClusterForBulk(e.target.value)} className="bg-transparent text-purple-100 text-xs font-bold uppercase outline-none w-full cursor-pointer appearance-none px-2 text-center sm:text-left">
                      <option value="" disabled>PILIH KELOMPOK (DEFAULT)</option>
                      {clusters.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
                   </select>
+               </div>
+             </div>
+
+             {/* SUPER UPGRADE: INPUT DEFAULT PASSWORD */}
+             <div className="flex flex-col w-full sm:w-auto gap-1">
+               <div className="flex items-center bg-[#050B14] border border-purple-500/30 rounded-xl px-3 h-11 w-full sm:w-32 focus-within:border-purple-400 transition-colors" title="Sandi ini otomatis jadi password akun yang di-import dari Excel">
+                  <Key className="w-3.5 h-3.5 text-purple-400 mr-2 shrink-0" />
+                  <input 
+                    type="text" 
+                    value={defaultBulkPassword} 
+                    onChange={handleDefaultPassChange} 
+                    className="bg-transparent text-purple-100 text-xs font-bold w-full outline-none placeholder-purple-500/50"
+                    placeholder="Sandi Default"
+                  />
                </div>
              </div>
              
@@ -1930,7 +1954,7 @@ const AdminStudents: React.FC = () => {
                       <p><span className="text-emerald-400 font-bold bg-emerald-950/50 px-1 rounded">Kolom C</span> Kelompok <span className="text-emerald-300 italic">(Opsional)</span></p>
                    </div>
                 </div>
-                <p className="text-[8px] text-cyan-500 italic mt-2.5 border-t border-cyan-900/50 pt-2">*Pastikan Baris 1 pada file Excel diisi Header. Jika kolom C kosong, data otomatis masuk ke kelompok dropdown. <strong className="text-emerald-400">Password default akun: 123</strong> (Ubah via Edit).</p>
+                <p className="text-[8px] text-cyan-500 italic mt-2.5 border-t border-cyan-900/50 pt-2">*Pastikan Baris 1 pada file Excel diisi Header. Jika kolom C kosong, data otomatis masuk ke kelompok dropdown. <strong className="text-emerald-400">Password default menyesuaikan input box di atas.</strong></p>
              </div>
           </div>
         </div>
