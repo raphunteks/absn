@@ -15,6 +15,17 @@ import { twMerge } from 'tailwind-merge';
 import { format, startOfDay, endOfDay } from 'date-fns';
 
 // ==========================================
+// DATE HELPER UNTUK MENGHINDARI BUG TIMEZONE UTC
+// ==========================================
+const getLocalYYYYMMDD = (dateInput: Date | string) => {
+  const d = new Date(dateInput);
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+};
+
+// ==========================================
 // DYNAMIC SCRIPT LOADER UNTUK EXCEL (XLSX)
 // ==========================================
 const loadXlsx = async () => {
@@ -131,7 +142,7 @@ const exportToExcel = async (logs: Log[]) => {
     const worksheet = XLSX.utils.json_to_sheet(dataToExport);
     const workbook = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(workbook, worksheet, "Riwayat Absensi");
-    XLSX.writeFile(workbook, `Laporan_Absensi_${new Date().toISOString().split('T')[0]}.xlsx`);
+    XLSX.writeFile(workbook, `Laporan_Absensi_${getLocalYYYYMMDD(new Date())}.xlsx`);
   } catch (error) {
     alert("Gagal memuat file Excel. Pastikan Anda memiliki koneksi internet.");
   }
@@ -373,7 +384,7 @@ const useAppContext = () => {
 // DATE FILTER UTILITY HOOK
 // ==========================================
 const useDateFilter = () => {
-  const todayStr = new Date().toISOString().split('T')[0];
+  const todayStr = getLocalYYYYMMDD(new Date());
   const [datePreset, setDatePreset] = useState('today');
   const [customStart, setCustomStart] = useState(todayStr);
   const [customEnd, setCustomEnd] = useState(todayStr);
@@ -400,23 +411,26 @@ const useDateFilter = () => {
 
   const FilterUI = () => (
     <div className="flex flex-col sm:flex-row gap-3 w-full sm:w-auto">
-      <div className="flex items-center bg-[#050B14] border border-cyan-500/30 rounded-xl px-2 h-11 w-full sm:w-auto focus-within:border-cyan-400 transition-colors">
-         <select value={datePreset} onChange={e=>setDatePreset(e.target.value)} className="bg-transparent text-cyan-50 text-xs font-bold uppercase outline-none cursor-pointer px-3 w-full sm:w-40 h-full">
-           <option value="today">Hari Ini</option>
-           <option value="week">1 Minggu Terakhir</option>
-           <option value="month">1 Bulan Terakhir</option>
-           <option value="custom">Custom Tanggal</option>
-         </select>
+      <div className="flex flex-col gap-1 w-full sm:w-auto">
+         <label className="text-[9px] text-cyan-500 uppercase tracking-widest font-bold">Filter Tanggal</label>
+         <div className="flex items-center bg-[#050B14] border border-cyan-500/30 rounded-xl px-2 h-11 w-full sm:w-auto focus-within:border-cyan-400 transition-colors">
+            <select value={datePreset} onChange={e=>setDatePreset(e.target.value)} className="bg-transparent text-cyan-50 text-xs font-bold uppercase outline-none cursor-pointer px-3 w-full sm:w-40 h-full">
+              <option value="today">Hari Ini</option>
+              <option value="week">1 Minggu Terakhir</option>
+              <option value="month">1 Bulan Terakhir</option>
+              <option value="custom">Custom Tanggal</option>
+            </select>
+         </div>
       </div>
       {datePreset === 'custom' && (
         <div className="flex flex-col sm:flex-row gap-3 w-full sm:w-auto">
           <div className="flex flex-col gap-1 w-full sm:w-auto">
              <label className="text-[9px] text-cyan-500 uppercase tracking-widest font-bold">Mulai Tanggal</label>
-             <input type="date" value={customStart} onChange={e => setCustomStart(e.target.value)} className="bg-[#050B14] border border-cyan-500/30 text-cyan-50 text-xs font-mono p-2.5 rounded-lg outline-none focus:border-cyan-400 w-full" />
+             <input type="date" value={customStart} onChange={e => setCustomStart(e.target.value)} className="bg-[#050B14] border border-cyan-500/30 text-cyan-50 text-xs font-mono px-3 h-11 rounded-lg outline-none focus:border-cyan-400 w-full" />
           </div>
           <div className="flex flex-col gap-1 w-full sm:w-auto">
              <label className="text-[9px] text-cyan-500 uppercase tracking-widest font-bold">Hingga Tanggal</label>
-             <input type="date" value={customEnd} onChange={e => setCustomEnd(e.target.value)} className="bg-[#050B14] border border-cyan-500/30 text-cyan-50 text-xs font-mono p-2.5 rounded-lg outline-none focus:border-cyan-400 w-full" />
+             <input type="date" value={customEnd} onChange={e => setCustomEnd(e.target.value)} className="bg-[#050B14] border border-cyan-500/30 text-cyan-50 text-xs font-mono px-3 h-11 rounded-lg outline-none focus:border-cyan-400 w-full" />
           </div>
         </div>
       )}
@@ -448,8 +462,8 @@ const StudentDashboard: React.FC<{ onStartAbsen: () => void, linkedNim: string |
   const late = myLogs.filter(l => l.status === 'Terlambat').length;
   const onTimePercent = totalHadir > 0 ? Math.round((onTime / totalHadir) * 100) : 0;
 
-  const todayStr = new Date().toISOString().split('T')[0];
-  const todayLogs = myLogs.filter(l => l.timestamp.startsWith(todayStr));
+  const todayStr = getLocalYYYYMMDD(new Date());
+  const todayLogs = myLogs.filter(l => getLocalYYYYMMDD(l.timestamp) === todayStr);
   const hasClockedInToday = todayLogs.length > 0;
   const lastClockInTime = hasClockedInToday ? new Date(todayLogs[0].timestamp).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }) : null;
 
@@ -466,9 +480,9 @@ const StudentDashboard: React.FC<{ onStartAbsen: () => void, linkedNim: string |
 
      const data = [];
      for (let d = new Date(startD); d <= endD; d.setDate(d.getDate() + 1)) {
-         const dateStr = d.toISOString().split('T')[0];
+         const dateStrLocal = getLocalYYYYMMDD(d);
          const label = d.toLocaleDateString('id-ID', { day: '2-digit', month: 'short' });
-         const count = myLogs.filter(l => l.timestamp.startsWith(dateStr)).length;
+         const count = myLogs.filter(l => getLocalYYYYMMDD(l.timestamp) === dateStrLocal).length;
          data.push({ day: label, count: count });
      }
      return data;
@@ -803,8 +817,8 @@ const QRScanner: React.FC<{ activeSessionName: string, onComplete: (data: {nim: 
         if (ownerNim && finalDeviceId && students.length > 0) {
            const foundStudent = students.find(s => s.nim === ownerNim);
            if (foundStudent && foundStudent.deviceId === finalDeviceId) {
-              const today = new Date().toISOString().split('T')[0];
-              const alreadyAttended = logs.some(l => l.nim === ownerNim && l.sessionName === activeSessionName && l.timestamp.startsWith(today));
+              const todayLocal = getLocalYYYYMMDD(new Date());
+              const alreadyAttended = logs.some(l => l.nim === ownerNim && l.sessionName === activeSessionName && getLocalYYYYMMDD(l.timestamp) === todayLocal);
               
               if (alreadyAttended) {
                  setError(`⚠️ Halo ${foundStudent.name}, Anda sudah melakukan absensi pada sesi ${activeSessionName} untuk hari ini.`);
@@ -832,8 +846,8 @@ const QRScanner: React.FC<{ activeSessionName: string, onComplete: (data: {nim: 
     const targetNim = scannedNim || nimInput;
     if (!targetNim) { setError('Mohon masukkan atau scan NIM Anda terlebih dahulu.'); return; }
 
-    const today = new Date().toISOString().split('T')[0];
-    const alreadyAttended = logs.some(l => l.nim === targetNim && l.sessionName === activeSessionName && l.timestamp.startsWith(today));
+    const todayLocal = getLocalYYYYMMDD(new Date());
+    const alreadyAttended = logs.some(l => l.nim === targetNim && l.sessionName === activeSessionName && getLocalYYYYMMDD(l.timestamp) === todayLocal);
     
     let studentName = 'Mahasiswa Belum Terdaftar';
     
@@ -1406,11 +1420,7 @@ const AdminDashboardHome: React.FC = () => {
   const { startObj, endObj, FilterUI } = useDateFilter();
   const [selectedCluster, setSelectedCluster] = useState('All');
 
-  // Dynamic Total Days Calculation for robust Alpha metrics
-  const diffTime = Math.abs(endObj.getTime() - startObj.getTime());
-  const totalDaysInRange = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) || 1;
-
-  // Filter Logs based on Date & Cluster
+  // Filter Logs based on Date & Cluster (Waktu Lokal)
   const filteredLogs = logs.filter(l => {
     const logDate = new Date(l.timestamp);
     const inDateRange = logDate >= startObj && logDate <= endObj;
@@ -1439,11 +1449,12 @@ const AdminDashboardHome: React.FC = () => {
      const rangeEnd = endObj > new Date() ? new Date() : new Date(endObj); // Don't process future days
 
      for (let d = new Date(rangeStart); d <= rangeEnd; d.setDate(d.getDate() + 1)) {
-         const dateStr = d.toISOString().split('T')[0];
-         const isToday = dateStr === new Date().toISOString().split('T')[0];
+         const dateStrLocal = getLocalYYYYMMDD(d);
+         const isToday = dateStrLocal === getLocalYYYYMMDD(new Date());
          
          activeSessions.forEach(sess => {
-             const log = studentLogs.find(l => l.timestamp.startsWith(dateStr) && l.sessionName === sess.name);
+             // Pencocokan Log Menggunakan Format Waktu Lokal (Bukan UTC)
+             const log = studentLogs.find(l => getLocalYYYYMMDD(l.timestamp) === dateStrLocal && l.sessionName === sess.name);
              if (log) {
                  if (log.status === 'Hadir') hadir++;
                  else if (log.status === 'Terlambat') terlambat++;
@@ -1455,7 +1466,7 @@ const AdminDashboardHome: React.FC = () => {
                      const endWithTol = endTotal + sess.toleranceMinutes;
                      
                      if (currentMinutes > endWithTol) alpha++; // completely missed
-                     else belumAbsen++; // still has time or ongoing
+                     else belumAbsen++; // Masih punya waktu untuk absen
                  } else {
                      alpha++; // past day missed
                  }
@@ -1471,6 +1482,7 @@ const AdminDashboardHome: React.FC = () => {
   const onTimeCount = filteredLogs.filter(l => l.status === 'Hadir').length;
   const lateCount = filteredLogs.filter(l => l.status === 'Terlambat').length;
   const totalAlphaCount = studentStats.reduce((acc, curr) => acc + curr.alpha, 0);
+  const totalBelumAbsenCount = studentStats.reduce((acc, curr) => acc + curr.belumAbsen, 0);
 
   // Chart 1: Daily Trend (Area Chart)
   const dailyDataMap: Record<string, { date: string; Hadir: number; Terlambat: number }> = {};
@@ -1510,21 +1522,22 @@ const AdminDashboardHome: React.FC = () => {
          </div>
       </div>
 
-      {/* STATS WIDGETS */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 md:gap-5">
+      {/* STATS WIDGETS DENGAN 5 CARD */}
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4 md:gap-5">
         {[
           { title: 'Total Rekam Absen', val: totalLogsCount, icon: ActivitySquare, color: 'text-cyan-400', bg: 'bg-cyan-500/10', border: 'border-cyan-500/30' },
           { title: 'Tepat Waktu', val: onTimeCount, icon: CheckCircle2, color: 'text-emerald-400', bg: 'bg-emerald-500/10', border: 'border-emerald-500/30' },
-          { title: 'Terlambat Hadir', val: lateCount, icon: Clock, color: 'text-amber-400', bg: 'bg-amber-500/10', border: 'border-amber-500/30' },
-          { title: 'Data Kosong (Alpha)', val: totalAlphaCount, icon: UserX, color: 'text-rose-400', bg: 'bg-rose-500/10', border: 'border-rose-500/30' }
+          { title: 'Terlambat Hadir', val: lateCount, icon: AlertCircle, color: 'text-amber-400', bg: 'bg-amber-500/10', border: 'border-amber-500/30' },
+          { title: 'Data Kosong (Alpha)', val: totalAlphaCount, icon: UserX, color: 'text-rose-400', bg: 'bg-rose-500/10', border: 'border-rose-500/30' },
+          { title: 'Belum Absen (Shift Saat Ini)', val: totalBelumAbsenCount, icon: Clock, color: 'text-purple-400', bg: 'bg-purple-500/10', border: 'border-purple-500/30' }
         ].map((stat, i) => (
           <div key={i} className={`bg-[#0A1628]/60 backdrop-blur-md border ${stat.border} p-5 rounded-[1.5rem] flex items-center justify-between transition-all duration-300 hover:bg-[#0A1628] hover:-translate-y-1 shadow-lg`}>
             <div>
-               <p className="text-cyan-500/70 text-[9px] font-bold uppercase tracking-[0.2em] mb-2">{stat.title}</p>
+               <p className="text-cyan-500/70 text-[9px] font-bold uppercase tracking-[0.2em] mb-2 pr-2 leading-tight">{stat.title}</p>
                <h3 className="text-3xl font-black text-white font-mono">{stat.val}</h3>
             </div>
-            <div className={cn("w-12 h-12 rounded-xl flex items-center justify-center shadow-inner border border-white/5", stat.bg)}>
-               <stat.icon className={cn("w-6 h-6", stat.color)} />
+            <div className={cn("w-10 h-10 md:w-12 md:h-12 rounded-xl flex items-center justify-center shadow-inner border border-white/5 shrink-0", stat.bg)}>
+               <stat.icon className={cn("w-5 h-5 md:w-6 md:h-6", stat.color)} />
             </div>
           </div>
         ))}
@@ -1590,7 +1603,7 @@ const AdminDashboardHome: React.FC = () => {
           </div>
         </div>
         
-        {/* REKAPITULASI KEHADIRAN MAHASISWA (REPLACING BAR CHART BY SESSION) */}
+        {/* REKAPITULASI KEHADIRAN MAHASISWA */}
         <div className="lg:col-span-3 bg-[#0A1628]/60 backdrop-blur-md border border-cyan-500/20 p-6 rounded-[1.5rem] flex flex-col shadow-lg relative overflow-hidden">
           <div className="absolute top-0 right-0 w-64 h-64 bg-cyan-600/5 rounded-bl-[100px] pointer-events-none"></div>
           
@@ -1618,7 +1631,7 @@ const AdminDashboardHome: React.FC = () => {
                    {studentStats.map((st, idx) => (
                       <tr key={st.id || idx} className="hover:bg-cyan-900/20 transition-colors duration-200 text-cyan-50 group">
                          <td className="p-4 font-mono text-sm tracking-wider">{st.nim}</td>
-                         <td className="p-4 font-bold text-sm uppercase">{st.name}</td>
+                         <td className="p-4 font-bold text-sm uppercase max-w-[200px] truncate" title={st.name}>{st.name}</td>
                          <td className="p-4">
                             <span className="text-[9px] uppercase font-bold tracking-widest text-cyan-300 bg-cyan-950/50 border border-cyan-500/30 px-2 py-1 rounded-md shadow-sm">
                                {clusters.find(c => c.id === st.clusterId)?.name || 'TANPA KELOMPOK'}
@@ -1634,7 +1647,7 @@ const AdminDashboardHome: React.FC = () => {
                             <span className="inline-flex items-center justify-center w-8 h-8 rounded-full bg-rose-500/10 text-rose-400 font-bold text-sm border border-rose-500/30 group-hover:bg-rose-500/20">{st.alpha}</span>
                          </td>
                          <td className="p-4 text-center">
-                            <span className="inline-flex items-center justify-center w-8 h-8 rounded-full bg-slate-500/10 text-slate-300 font-bold text-sm border border-slate-500/30 group-hover:bg-slate-500/20">{st.belumAbsen}</span>
+                            <span className="inline-flex items-center justify-center w-8 h-8 rounded-full bg-purple-500/10 text-purple-400 font-bold text-sm border border-purple-500/30 group-hover:bg-purple-500/20">{st.belumAbsen}</span>
                          </td>
                       </tr>
                    ))}
@@ -2056,7 +2069,7 @@ const AdminReports: React.FC = () => {
     const clusterName = clusters.find(c => c.id === filterCluster)?.name;
     const matchCluster = filterCluster === 'All' || log.clusterName === clusterName;
     
-    // Add Date Filter from Dropdown
+    // Add Date Filter from Dropdown (sudah tersinkronisasi)
     const logDate = new Date(log.timestamp);
     const inDateRange = logDate >= startObj && logDate <= endObj;
 
