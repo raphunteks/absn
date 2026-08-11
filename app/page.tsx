@@ -1502,7 +1502,7 @@ const AdminDashboardHome: React.FC = () => {
   const diffTime = Math.abs(endObj.getTime() - startObj.getTime());
   const totalDaysInRange = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) || 1;
 
-  // Filter Logs based on Date & Cluster
+  // Filter Logs based on Date & Cluster (Waktu Lokal)
   const filteredLogs = logs.filter(l => {
     const logDate = new Date(l.timestamp);
     const inDateRange = logDate >= startObj && logDate <= endObj;
@@ -1571,6 +1571,7 @@ const AdminDashboardHome: React.FC = () => {
   const onTimeCount = filteredLogs.filter(l => l.status === 'Hadir').length;
   const lateCount = filteredLogs.filter(l => l.status === 'Terlambat').length;
   const totalAlphaCount = studentStats.reduce((acc, curr) => acc + curr.alpha, 0);
+  const totalBelumAbsenCount = studentStats.reduce((acc, curr) => acc + curr.belumAbsen, 0);
 
   // Chart 1: Daily Trend (Area Chart)
   const dailyDataMap: Record<string, { date: string; Hadir: number; Terlambat: number }> = {};
@@ -1612,21 +1613,22 @@ const AdminDashboardHome: React.FC = () => {
          </div>
       </div>
 
-      {/* STATS WIDGETS */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 md:gap-5">
+      {/* STATS WIDGETS DENGAN 5 CARD */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4 md:gap-5">
         {[
           { title: 'Total Rekam Absen', val: totalLogsCount, icon: ActivitySquare, color: 'text-cyan-400', bg: 'bg-cyan-500/10', border: 'border-cyan-500/30' },
           { title: 'Tepat Waktu', val: onTimeCount, icon: CheckCircle2, color: 'text-emerald-400', bg: 'bg-emerald-500/10', border: 'border-emerald-500/30' },
           { title: 'Terlambat Hadir', val: lateCount, icon: Clock, color: 'text-amber-400', bg: 'bg-amber-500/10', border: 'border-amber-500/30' },
-          { title: 'Data Kosong (Alpha)', val: totalAlphaCount, icon: UserX, color: 'text-rose-400', bg: 'bg-rose-500/10', border: 'border-rose-500/30' }
+          { title: 'Data Kosong (Alpha)', val: totalAlphaCount, icon: UserX, color: 'text-rose-400', bg: 'bg-rose-500/10', border: 'border-rose-500/30' },
+          { title: 'Belum Absen (Hari Ini)', val: totalBelumAbsenCount, icon: Clock, color: 'text-purple-400', bg: 'bg-purple-500/10', border: 'border-purple-500/30' }
         ].map((stat, i) => (
-          <div key={i} className={`bg-[#0A1628]/60 backdrop-blur-md border ${stat.border} p-5 rounded-[1.5rem] flex items-center justify-between transition-all duration-300 hover:bg-[#0A1628] hover:-translate-y-1 shadow-lg`}>
+          <div key={i} className={`bg-[#0A1628]/60 backdrop-blur-md border ${stat.border} p-4 sm:p-5 rounded-[1.5rem] flex items-center justify-between transition-all duration-300 hover:bg-[#0A1628] hover:-translate-y-1 shadow-lg`}>
             <div>
-               <p className="text-cyan-500/70 text-[9px] font-bold uppercase tracking-[0.2em] mb-2">{stat.title}</p>
-               <h3 className="text-3xl font-black text-white font-mono">{stat.val}</h3>
+               <p className="text-cyan-500/70 text-[8px] sm:text-[9px] font-bold uppercase tracking-[0.2em] mb-2 pr-2 leading-tight">{stat.title}</p>
+               <h3 className="text-2xl sm:text-3xl font-black text-white font-mono">{stat.val}</h3>
             </div>
-            <div className={cn("w-12 h-12 rounded-xl flex items-center justify-center shadow-inner border border-white/5", stat.bg)}>
-               <stat.icon className={cn("w-6 h-6", stat.color)} />
+            <div className={cn("w-10 h-10 md:w-12 md:h-12 rounded-xl flex items-center justify-center shadow-inner border border-white/5 shrink-0", stat.bg)}>
+               <stat.icon className={cn("w-5 h-5 md:w-6 md:h-6", stat.color)} />
             </div>
           </div>
         ))}
@@ -2044,11 +2046,11 @@ const AdminStudents: React.FC = () => {
         <form onSubmit={handleAdd} className="bg-[#0A1628]/90 backdrop-blur-md border border-cyan-500/50 p-5 md:p-6 rounded-[1.5rem] grid grid-cols-1 md:grid-cols-5 gap-4 items-end animate-in slide-in-from-top-4 shadow-[0_10px_30px_rgba(0,0,0,0.5)]">
           <div className="space-y-1.5 md:col-span-2">
             <label className="text-[9px] md:text-[10px] text-cyan-500 font-bold uppercase tracking-widest ml-1">Nama Mahasiswa</label>
-            <input required type="text" value={newS.name} onChange={e=>setNewS({...newS, name: e.target.value})} className="w-full bg-[#050B14] border border-cyan-500/30 rounded-xl px-4 py-3 text-cyan-50 outline-none focus:border-cyan-400 font-mono text-sm placeholder="Nama Lengkap..." />
+            <input required type="text" value={newS.name} onChange={e=>setNewS({...newS, name: e.target.value})} className="w-full bg-[#050B14] border border-cyan-500/30 rounded-xl px-4 py-3 text-cyan-50 outline-none focus:border-cyan-400 font-mono text-sm" placeholder="Nama Lengkap..." />
           </div>
           <div className="space-y-1.5">
             <label className="text-[9px] md:text-[10px] text-cyan-500 font-bold uppercase tracking-widest ml-1">NIM</label>
-            <input required type="text" value={newS.nim} onChange={e=>setNewS({...newS, nim: e.target.value})} className="w-full bg-[#050B14] border border-cyan-500/30 rounded-xl px-4 py-3 text-cyan-50 outline-none focus:border-cyan-400 font-mono text-sm placeholder="Nomor Induk Mahasiswa..." />
+            <input required type="text" value={newS.nim} onChange={e=>setNewS({...newS, nim: e.target.value})} className="w-full bg-[#050B14] border border-cyan-500/30 rounded-xl px-4 py-3 text-cyan-50 outline-none focus:border-cyan-400 font-mono text-sm" placeholder="Nomor Induk Mahasiswa..." />
           </div>
           <div className="space-y-1.5">
             <label className="text-[9px] md:text-[10px] text-cyan-500 font-bold uppercase tracking-widest ml-1">Kelompok</label>
