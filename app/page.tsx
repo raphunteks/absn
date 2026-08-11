@@ -632,7 +632,7 @@ const StudentDashboard: React.FC<{ onStartAbsen: () => void, linkedNim: string |
                      <Bar dataKey="Hadir" stackId="a" fill="#10b981" barSize={staseDataList.length > 15 ? 15 : 40} />
                      <Bar dataKey="Terlambat" stackId="a" fill="#f59e0b" />
                      <Bar dataKey="Alpha" stackId="a" fill="#f43f5e" />
-                     <Bar dataKey="BelumAbsen" stackId="a" fill="#3b82f6" />
+                     <Bar dataKey="Belum Absen" stackId="a" fill="#3b82f6" />
                    </BarChart>
                  </ResponsiveContainer>
              </div>
@@ -2732,7 +2732,7 @@ const AdminLayout: React.FC<{ children: React.ReactNode, activeRoute: string, se
 
         <footer className="text-center py-6 text-[10px] md:text-xs text-cyan-600/60 font-mono tracking-widest mt-auto relative z-50 w-full">
           <a href="/ourteam" className="hover:text-cyan-400 hover:drop-shadow-[0_0_8px_rgba(6,182,212,0.8)] transition-all duration-300 cursor-pointer">
-            Copyright © 2026 DEPT. RKG RSIGM UMI— All Rights Reserved. Made with ❤️
+            Copyright © 2026 DEPT. RKG RSIGM UMI — All Rights Reserved. Made with ❤️
           </a>
         </footer>
       </main>
