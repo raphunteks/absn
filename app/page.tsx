@@ -469,6 +469,11 @@ const StudentDashboard: React.FC<{ onStartAbsen: () => void, linkedNim: string |
   const lastClockInTime = hasClockedInToday ? new Date(todayLogs[0].timestamp).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }) : null;
 
   const { chartData: staseDataList, alpha: myAlpha, belumAbsen: myBelumAbsen } = useMemo(() => {
+     // FIX: Hanya hitung Alpha/Belum Absen jika ada Mhs yang login
+     if (!linkedNim) {
+         return { chartData: [], alpha: 0, belumAbsen: 0 };
+     }
+
      let startD = new Date(); 
      startD.setDate(startD.getDate() - 6); 
      let endD = new Date();
@@ -527,7 +532,7 @@ const StudentDashboard: React.FC<{ onStartAbsen: () => void, linkedNim: string |
          });
      }
      return { chartData: data, alpha: tempAlpha, belumAbsen: tempBelumAbsen };
-  }, [myLogs, myCluster, activeSessions]);
+  }, [myLogs, myCluster, activeSessions, linkedNim]);
 
   const recentLogs = myLogs.slice(0, 4);
 
@@ -625,16 +630,20 @@ const StudentDashboard: React.FC<{ onStartAbsen: () => void, linkedNim: string |
           <p className="text-[10px] md:text-xs text-cyan-500/70 font-mono uppercase mb-6">Jam tervalidasi, sinkronisasi otomatis ke sistem</p>
           <div className="flex-1 w-full min-h-[200px] overflow-x-auto custom-scrollbar">
              <div className="min-w-[400px] h-full">
-                 <ResponsiveContainer width="100%" height="100%">
-                   <BarChart data={staseDataList} margin={{ top: 0, right: 0, left: 0, bottom: 0 }}>
-                     <XAxis dataKey="day" axisLine={false} tickLine={false} tick={{fill: '#64748b', fontSize: 10, fontWeight: 'bold'}} dy={10} interval="preserveStartEnd" minTickGap={20} />
-                     <Tooltip cursor={{fill: '#1e293b', opacity: 0.4}} contentStyle={{backgroundColor: '#050B14', borderColor: '#8b5cf6', color: '#f8fafc', borderRadius: '1rem', fontSize: '12px'}} />
-                     <Bar dataKey="Hadir" stackId="a" fill="#10b981" barSize={staseDataList.length > 15 ? 15 : 40} />
-                     <Bar dataKey="Terlambat" stackId="a" fill="#f59e0b" />
-                     <Bar dataKey="Alpha" stackId="a" fill="#f43f5e" />
-                     <Bar dataKey="Belum Absen" stackId="a" fill="#3b82f6" />
-                   </BarChart>
-                 </ResponsiveContainer>
+                 {staseDataList.length > 0 ? (
+                   <ResponsiveContainer width="100%" height="100%">
+                     <BarChart data={staseDataList} margin={{ top: 0, right: 0, left: 0, bottom: 0 }}>
+                       <XAxis dataKey="day" axisLine={false} tickLine={false} tick={{fill: '#64748b', fontSize: 10, fontWeight: 'bold'}} dy={10} interval="preserveStartEnd" minTickGap={20} />
+                       <Tooltip cursor={{fill: '#1e293b', opacity: 0.4}} contentStyle={{backgroundColor: '#050B14', borderColor: '#8b5cf6', color: '#f8fafc', borderRadius: '1rem', fontSize: '12px'}} />
+                       <Bar dataKey="Hadir" stackId="a" fill="#10b981" barSize={staseDataList.length > 15 ? 15 : 40} />
+                       <Bar dataKey="Terlambat" stackId="a" fill="#f59e0b" />
+                       <Bar dataKey="Alpha" stackId="a" fill="#f43f5e" />
+                       <Bar dataKey="BelumAbsen" stackId="a" fill="#3b82f6" />
+                     </BarChart>
+                   </ResponsiveContainer>
+                 ) : (
+                   <div className="h-full flex items-center justify-center text-cyan-800 font-mono text-xs uppercase tracking-widest">Data Kosong (Belum Login)</div>
+                 )}
              </div>
           </div>
           <div className="flex justify-center gap-4 mt-6 flex-wrap">
@@ -2732,7 +2741,7 @@ const AdminLayout: React.FC<{ children: React.ReactNode, activeRoute: string, se
 
         <footer className="text-center py-6 text-[10px] md:text-xs text-cyan-600/60 font-mono tracking-widest mt-auto relative z-50 w-full">
           <a href="/ourteam" className="hover:text-cyan-400 hover:drop-shadow-[0_0_8px_rgba(6,182,212,0.8)] transition-all duration-300 cursor-pointer">
-            Copyright © 2026 DEPT. RKG RSIGM UMI — All Rights Reserved. Made with ❤️
+            Copyright © 2026 DEPT. RKG RSIGM UMI— All Rights Reserved. Made with ❤️
           </a>
         </footer>
       </main>
