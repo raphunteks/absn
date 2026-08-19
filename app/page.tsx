@@ -6,7 +6,8 @@ import {
   BarChart3, Settings, FileText, LogOut, Users, Download, Plus, Trash2,
   RefreshCcw, ChevronRight, Fingerprint, Map, Activity, Key, Upload, Database, Navigation,
   Printer, X, CreditCard, Eye, EyeOff, Lock, ShieldCheck, Loader2, User, Cloud, CloudOff,
-  ServerCrash, Maximize, Menu, Network, Edit, Calendar, UserX, ScanFace, ActivitySquare, MessageSquare, Megaphone, Send
+  ServerCrash, Maximize, Menu, Network, Edit, Calendar, UserX, ScanFace, ActivitySquare, MessageSquare, Megaphone, Send,
+  ChevronLeft, ChevronRight as ChevronRightIcon
 } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, AreaChart, Area } from 'recharts';
 
@@ -121,6 +122,7 @@ const calculateDistance = (lat1: number, lon1: number, lat2: number, lon2: numbe
   return R * c; 
 };
 
+// EXPORT TO EXCEL DYNAMICALLY
 const exportToExcel = async (logs: Log[]) => {
   try {
     const XLSX = await loadXlsx();
@@ -300,7 +302,7 @@ const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
       setAdmins(ad || []);
       setFormats(fw && fw.length > 0 ? fw : initialDefaultFormatsWA);
       
-      // Default Hari Libur (Sabtu & Minggu otomatis ditambah jika belum ada)
+      // Default Hari Libur
       const defaultHolidaysList: Holiday[] = hd || [
          { id: 'h1', date: '2026-08-17', name: 'HUT Kemerdekaan RI' }
       ];
@@ -431,15 +433,14 @@ const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
 
      const cronInterval = setInterval(async () => {
          const now = new Date();
-         const dayOfWeek = now.getDay(); // 0 = Minggu, 6 = Sabtu
+         const dayOfWeek = now.getDay(); 
          const todayStr = getLocalYYYYMMDD(now);
 
-         // CEK APAKAH HARI INI LIBUR (Sabtu, Minggu, atau terdaftar di Manajemen Kalender)
          const isWeekend = (dayOfWeek === 0 || dayOfWeek === 6);
          const isCustomHoliday = holidays.some(h => h.date === todayStr);
 
          if (isWeekend || isCustomHoliday) {
-             return; // Bot WA TIDAK AKAN MENGIRIM PESAN APA PUN PADA HARI LIBUR / WEEKEND
+             return; 
          }
 
          const currentHHMM = now.toLocaleTimeString('id-ID', {hour: '2-digit', minute:'2-digit', hour12: false});
@@ -520,6 +521,12 @@ const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
                                  for (let d = new Date(startD); d <= endD; d.setDate(d.getDate() + 1)) {
                                      if (d > new Date()) break;
                                      const dateStrLocal = getLocalYYYYMMDD(d);
+                                     
+                                     const loopDayOfWeek = d.getDay();
+                                     const loopIsWeekend = (loopDayOfWeek === 0 || loopDayOfWeek === 6);
+                                     const loopIsCustomHoliday = holidays.some(h => h.date === dateStrLocal);
+                                     if (loopIsWeekend || loopIsCustomHoliday) continue;
+
                                      sessions.forEach(s => {
                                          if (s.isActive) {
                                              const pastLog = logs.find(l => l.nim === st.nim && getLocalYYYYMMDD(l.timestamp) === dateStrLocal && l.sessionName === s.name);
@@ -560,7 +567,6 @@ const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
              }
          }
 
-         // SKENARIO 17: HARI TERAKHIR STASE
          if (currentHHMM === '10:00') {
              const flagKey = `wa_scen17_${todayStr}`;
              const isSent = await CloudStore.get(flagKey);
@@ -575,7 +581,6 @@ const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
              }
          }
 
-         // SKENARIO 20: REKAP ADMIN
          if (currentHHMM === '23:50') {
              const flagKey = `wa_scen20_${todayStr}`;
              const isSent = await CloudStore.get(flagKey);
@@ -874,23 +879,21 @@ const StudentDashboard: React.FC<{ onStartAbsen: () => void, linkedNim: string |
         <div className="lg:col-span-2 bg-[#0A1628]/80 backdrop-blur-xl border border-cyan-500/20 p-6 md:p-8 rounded-[2rem] shadow-lg flex flex-col overflow-hidden">
           <h3 className="text-base font-black text-white mb-1 tracking-widest uppercase truncate">{myCluster?.startDate ? 'Kehadiran Periode Stase' : 'Kehadiran Mingguan'}</h3>
           <p className="text-[10px] md:text-xs text-cyan-500/70 font-mono uppercase mb-6">Jam tervalidasi, sinkronisasi otomatis ke sistem</p>
-          <div className="flex-1 w-full min-h-[200px] overflow-x-auto custom-scrollbar">
-             <div className="min-w-[400px] h-full">
-                 {staseDataList.length > 0 ? (
-                   <ResponsiveContainer width="100%" height="100%">
-                     <BarChart data={staseDataList} margin={{ top: 0, right: 0, left: 0, bottom: 0 }}>
-                       <XAxis dataKey="day" axisLine={false} tickLine={false} tick={{fill: '#64748b', fontSize: 10, fontWeight: 'bold'}} dy={10} interval="preserveStartEnd" minTickGap={20} />
-                       <Tooltip cursor={{fill: '#1e293b', opacity: 0.4}} contentStyle={{backgroundColor: '#050B14', borderColor: '#8b5cf6', color: '#f8fafc', borderRadius: '1rem', fontSize: '12px'}} />
-                       <Bar dataKey="Hadir" stackId="a" fill="#10b981" barSize={staseDataList.length > 15 ? 15 : 40} />
-                       <Bar dataKey="Terlambat" stackId="a" fill="#f59e0b" />
-                       <Bar dataKey="Alpha" stackId="a" fill="#f43f5e" />
-                       <Bar dataKey="BelumAbsen" stackId="a" fill="#3b82f6" />
-                     </BarChart>
-                   </ResponsiveContainer>
-                 ) : (
-                   <div className="h-full flex items-center justify-center text-cyan-800 font-mono text-xs uppercase tracking-widest">Data Kosong (Belum Login)</div>
-                 )}
-             </div>
+          <div className="w-full mt-4 relative z-10 h-[300px]">
+             {staseDataList.length > 0 ? (
+               <ResponsiveContainer width="100%" height="100%">
+                 <BarChart data={staseDataList} margin={{ top: 0, right: 0, left: 0, bottom: 0 }}>
+                   <XAxis dataKey="day" axisLine={false} tickLine={false} tick={{fill: '#64748b', fontSize: 10, fontWeight: 'bold'}} dy={10} interval="preserveStartEnd" minTickGap={20} />
+                   <Tooltip cursor={{fill: '#1e293b', opacity: 0.4}} contentStyle={{backgroundColor: '#050B14', borderColor: '#8b5cf6', color: '#f8fafc', borderRadius: '1rem', fontSize: '12px'}} />
+                   <Bar dataKey="Hadir" stackId="a" fill="#10b981" barSize={staseDataList.length > 15 ? 15 : 40} />
+                   <Bar dataKey="Terlambat" stackId="a" fill="#f59e0b" />
+                   <Bar dataKey="Alpha" stackId="a" fill="#f43f5e" />
+                   <Bar dataKey="BelumAbsen" stackId="a" fill="#3b82f6" />
+                 </BarChart>
+               </ResponsiveContainer>
+             ) : (
+               <div className="h-full flex items-center justify-center text-cyan-800 font-mono text-xs uppercase tracking-widest">Data Kosong (Belum Login)</div>
+             )}
           </div>
           <div className="flex justify-center gap-4 mt-6 flex-wrap">
              <div className="flex items-center gap-1.5 text-[9px] font-bold uppercase tracking-wider text-slate-300">
@@ -1570,6 +1573,7 @@ const AdminDashboardHome: React.FC = () => {
   });
 
   const filteredStudents = selectedCluster === 'All' ? students : students.filter(s => s.clusterId === selectedCluster);
+
   const activeSessions = sessions.filter(s => s.isActive);
   
   const studentStats = filteredStudents.map(student => {
@@ -1692,7 +1696,8 @@ const AdminDashboardHome: React.FC = () => {
         <div className="lg:col-span-2 bg-[#0A1628]/60 backdrop-blur-md border border-cyan-500/20 p-6 rounded-[1.5rem] flex flex-col shadow-lg relative overflow-hidden">
           <div className="absolute top-0 right-0 w-32 h-32 bg-cyan-600/10 rounded-bl-[100px] pointer-events-none"></div>
           <h3 className="text-sm font-black text-cyan-50 mb-6 tracking-widest uppercase flex items-center gap-2"><Activity className="w-4 h-4 text-cyan-400"/> Tren Absensi Harian</h3>
-          <div className="flex-1 w-full min-h-[300px] h-[300px] relative z-10">
+          
+          <div className="w-full h-[300px] relative z-10 flex flex-col">
             <ResponsiveContainer width="100%" height="100%">
               <AreaChart data={trendData} margin={{ top: 0, right: 0, left: -20, bottom: 0 }}>
                 <defs>
@@ -1719,7 +1724,7 @@ const AdminDashboardHome: React.FC = () => {
         {/* PIE CHART */}
         <div className="bg-[#0A1628]/60 backdrop-blur-md border border-cyan-500/20 p-6 rounded-[1.5rem] flex flex-col shadow-lg">
           <h3 className="text-sm font-black text-cyan-50 mb-6 tracking-widest uppercase">Komposisi Kehadiran</h3>
-          <div className="flex-1 w-full min-h-[300px] h-[300px]">
+          <div className="w-full h-[250px]">
              {pieData.length > 0 ? (
                 <ResponsiveContainer width="100%" height="100%">
                   <PieChart>
@@ -1732,7 +1737,7 @@ const AdminDashboardHome: React.FC = () => {
              ) : <div className="h-full flex flex-col items-center justify-center text-cyan-800 font-mono text-xs uppercase tracking-widest"><ActivitySquare className="w-12 h-12 mb-2 opacity-50"/>Grafik Kosong</div>}
           </div>
           
-          <div className="flex justify-center gap-4 mt-2">
+          <div className="flex justify-center gap-4 mt-auto pt-4">
              {pieData.map(d => (
                 <div key={d.name} className="flex items-center gap-1.5 text-[9px] font-bold uppercase tracking-wider text-slate-300">
                    <div className="w-2.5 h-2.5 rounded-full" style={{backgroundColor: d.color}}></div>
@@ -2421,360 +2426,6 @@ const AdminStudents: React.FC = () => {
   );
 };
 
-
-// ==========================================
-// ADMIN FORMATS (WA TEMPLATE CRUD)
-// ==========================================
-const AdminFormats: React.FC = () => {
-   const { formats, updateFormat } = useAppContext();
-   const [editingFormat, setEditingFormat] = useState<FormatWA | null>(null);
-
-   const handleSave = (e: React.FormEvent) => {
-      e.preventDefault();
-      if(editingFormat) {
-         updateFormat(editingFormat.id, { template: editingFormat.template });
-         setEditingFormat(null);
-         alert("✅ Template pesan WhatsApp berhasil diperbarui.");
-      }
-   };
-
-   return (
-      <div className="space-y-6 animate-in fade-in duration-500 pb-10">
-         <div>
-            <h2 className="text-2xl md:text-3xl font-black text-cyan-50 tracking-widest uppercase">Manajemen Format WA</h2>
-            <p className="text-cyan-500/70 text-xs md:text-sm font-mono mt-1 uppercase">Ubah Template Pesan Bot Whatsapp Secara Real-Time</p>
-         </div>
-
-         <div className="bg-[#0A1628]/80 backdrop-blur-md border border-cyan-500/30 p-5 md:p-6 rounded-3xl shadow-lg relative overflow-hidden">
-            <div className="absolute top-0 right-0 w-32 h-32 bg-cyan-600/10 rounded-bl-[100px] pointer-events-none"></div>
-            <div className="flex items-center gap-3 mb-4 relative z-10">
-               <FileText className="w-5 h-5 text-cyan-400" />
-               <h3 className="text-xs md:text-sm font-black text-cyan-50 tracking-widest uppercase">Variabel Dinamis (Gunakan Ini Di Dalam Teks):</h3>
-            </div>
-            <div className="flex flex-wrap gap-3 relative z-10">
-               {['[Nama Lengkap]', '[NIM]', '[Kelompok]', '[Shift]', '[Jam Sesi]', '[Jam Tutup]', '[Jam Absen]', '[Tanggal Mulai]', '[Tanggal Akhir]', '[Password]', '[Link]'].map(v => (
-                  <span key={v} className="bg-[#050B14] border border-cyan-500/40 text-cyan-300 px-3 py-1.5 rounded-lg text-xs font-mono font-bold shadow-inner cursor-pointer hover:bg-cyan-900/50 hover:text-cyan-50 transition-colors" title="Klik untuk copy" onClick={()=>{navigator.clipboard.writeText(v); alert(`Tercopy: ${v}`)}}>{v}</span>
-               ))}
-            </div>
-         </div>
-
-         {editingFormat && (
-            <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/90 backdrop-blur-xl p-4 animate-in fade-in zoom-in-95 duration-200">
-               <form onSubmit={handleSave} className="bg-[#0A1628] border border-cyan-500/40 p-6 md:p-8 rounded-3xl w-full max-w-3xl shadow-[0_0_50px_rgba(6,182,212,0.3)] relative radiology-bg flex flex-col h-[90vh] md:h-[80vh]">
-                  <div className="flex justify-between items-center mb-6 shrink-0">
-                     <div>
-                        <h3 className="text-xl md:text-2xl font-black text-cyan-50 tracking-widest uppercase mb-1">Edit ID Skenario: {editingFormat.id}</h3>
-                        <p className="text-cyan-400 text-xs font-mono">{editingFormat.title}</p>
-                     </div>
-                     <button type="button" onClick={() => setEditingFormat(null)} className="p-2 bg-rose-950/50 hover:bg-rose-500 hover:text-white border border-rose-500/30 rounded-xl transition-colors text-rose-400"><X className="w-5 h-5"/></button>
-                  </div>
-                  
-                  <div className="flex-1 overflow-hidden flex flex-col gap-4">
-                     <div className="bg-[#050B14] p-4 rounded-xl border border-cyan-500/30 shrink-0">
-                        <p className="text-cyan-500 text-xs font-bold uppercase tracking-widest mb-1">Deskripsi Pemicu Bot:</p>
-                        <p className="text-cyan-50 text-sm font-mono">{editingFormat.description}</p>
-                     </div>
-                     
-                     <div className="flex flex-col flex-1 relative group">
-                        <textarea 
-                           required 
-                           value={editingFormat.template} 
-                           onChange={e=>setEditingFormat({...editingFormat, template: e.target.value})} 
-                           className="w-full flex-1 bg-[#050B14] border border-cyan-500/50 rounded-2xl p-5 text-cyan-100 outline-none focus:border-cyan-300 font-mono text-sm shadow-inner resize-none custom-scrollbar leading-relaxed transition-colors"
-                           placeholder="Ketik template pesan WhatsApp di sini..."
-                        />
-                        <div className="absolute top-4 right-4 bg-cyan-900/50 px-2 py-1 rounded text-[10px] text-cyan-400 font-bold uppercase pointer-events-none opacity-50 group-focus-within:opacity-100 transition-opacity">Editor Mode</div>
-                     </div>
-                  </div>
-
-                  <div className="mt-6 shrink-0 flex justify-end">
-                     <button type="submit" className="w-full md:w-auto px-10 py-4 bg-cyan-600 hover:bg-cyan-500 text-white font-black tracking-widest uppercase text-xs rounded-2xl transition-all duration-300 shadow-[0_10px_20px_rgba(6,182,212,0.4)] active:scale-95 border border-cyan-400/50 flex justify-center items-center gap-3">
-                        <CheckCircle2 className="w-5 h-5"/> Simpan Perubahan Template
-                     </button>
-                  </div>
-               </form>
-            </div>
-         )}
-
-         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            {formats.map(f => (
-               <div key={f.id} className="bg-[#0A1628]/60 backdrop-blur-md border border-cyan-500/20 p-6 rounded-3xl flex flex-col group hover:border-cyan-500/50 transition-all duration-300 shadow-[0_10px_30px_rgba(0,0,0,0.3)] relative overflow-hidden h-[400px]">
-                  <div className="absolute top-0 right-0 w-32 h-32 bg-blue-600/5 rounded-bl-[100px] pointer-events-none group-hover:scale-110 transition-transform"></div>
-                  
-                  <div className="flex justify-between items-start mb-4 relative z-10 shrink-0">
-                     <div>
-                        <div className="inline-block px-3 py-1 bg-cyan-950/60 border border-cyan-500/30 text-cyan-300 text-[10px] font-black tracking-widest uppercase rounded-lg mb-3 shadow-sm">
-                           ID Skenario: {f.id}
-                        </div>
-                        <h3 className="font-black text-white text-lg tracking-widest uppercase">{f.title}</h3>
-                        <p className="text-xs text-cyan-500/80 font-mono mt-1 pr-4">{f.description}</p>
-                     </div>
-                     <button onClick={() => setEditingFormat(f)} className="p-2.5 bg-blue-950/40 hover:bg-blue-600 hover:text-white text-blue-400 border border-blue-500/30 rounded-xl transition-all duration-300 active:scale-95 shadow-sm">
-                        <Edit className="w-4 h-4"/>
-                     </button>
-                  </div>
-
-                  <div className="flex-1 bg-[#050B14] p-5 rounded-2xl border border-cyan-500/10 overflow-y-auto custom-scrollbar relative z-10 shadow-inner group-hover:border-cyan-500/30 transition-colors">
-                     <pre className="text-[11px] font-mono text-cyan-100/90 whitespace-pre-wrap break-words leading-relaxed font-medium">
-                        {f.template}
-                     </pre>
-                  </div>
-               </div>
-            ))}
-         </div>
-      </div>
-   );
-};
-
-// ==========================================
-// ADMIN CALENDAR (NEW MODULE)
-// ==========================================
-const AdminCalendar: React.FC = () => {
-   const { holidays, addHoliday, deleteHoliday } = useAppContext();
-   const [isAdding, setIsAdding] = useState(false);
-   const [newDate, setNewDate] = useState('');
-   const [newName, setNewName] = useState('');
-
-   const handleAdd = (e: React.FormEvent) => {
-      e.preventDefault();
-      if(newDate && newName.trim()) {
-         addHoliday({ date: newDate, name: newName });
-         setIsAdding(false);
-         setNewDate(''); setNewName('');
-      }
-   };
-
-   // Urutkan kalender dari yang paling dekat (recent)
-   const sortedHolidays = [...holidays].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-
-   return (
-      <div className="space-y-6 animate-in fade-in duration-500 pb-10">
-         <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-            <div>
-               <h2 className="text-2xl md:text-3xl font-black text-cyan-50 tracking-widest uppercase">Manajemen Kalender</h2>
-               <p className="text-cyan-500/70 text-xs md:text-sm font-mono mt-1 uppercase">Atur Hari Libur Nasional & Cuti Bersama</p>
-            </div>
-            <button onClick={() => setIsAdding(!isAdding)} className="flex items-center gap-2 px-5 py-3 bg-cyan-600/20 text-cyan-400 hover:bg-cyan-500/30 border border-cyan-500/50 rounded-xl transition-all duration-300 font-black uppercase tracking-widest text-xs shadow-[0_0_15px_rgba(6,182,212,0.2)]">
-               <Plus className="w-4 h-4" /> Tambah Hari Libur
-            </button>
-         </div>
-
-         <div className="bg-[#0A1628]/80 backdrop-blur-md border border-rose-500/30 p-5 md:p-6 rounded-3xl shadow-lg relative overflow-hidden flex items-start gap-4">
-            <div className="bg-rose-950/60 p-3 rounded-xl border border-rose-500/50 shrink-0">
-               <Calendar className="w-6 h-6 text-rose-400" />
-            </div>
-            <div>
-               <h3 className="text-sm font-black text-rose-200 tracking-widest uppercase mb-1">Akhir Pekan (Sabtu & Minggu) Otomatis Libur</h3>
-               <p className="text-xs text-rose-200/70 font-mono leading-relaxed">
-                  Sistem Bot WA Cron Job telah dikonfigurasi untuk <strong className="text-rose-400">TIDAK mengirimkan tagihan absensi / buka shift</strong> pada setiap hari Sabtu & Minggu secara otomatis. Anda hanya perlu menambahkan hari libur di luar akhir pekan (misal: Tanggal Merah) ke dalam daftar di bawah ini.
-               </p>
-            </div>
-         </div>
-
-         {isAdding && (
-            <form onSubmit={handleAdd} className="bg-[#0A1628]/80 backdrop-blur-md border border-cyan-500/30 p-5 md:p-6 rounded-2xl flex flex-col md:flex-row gap-4 items-end shadow-xl animate-in slide-in-from-top-4">
-               <div className="space-y-1.5 w-full md:w-64 shrink-0">
-                  <label className="text-[10px] md:text-xs text-cyan-500 font-bold uppercase tracking-widest ml-1">Tanggal Libur</label>
-                  <input required type="date" value={newDate} onChange={e=>setNewDate(e.target.value)} className="w-full bg-[#050B14] border border-cyan-500/30 rounded-xl px-4 py-3.5 text-white outline-none focus:border-cyan-400 transition-colors text-sm font-mono" />
-               </div>
-               <div className="flex-1 space-y-1.5 w-full">
-                  <label className="text-[10px] md:text-xs text-cyan-500 font-bold uppercase tracking-widest ml-1">Keterangan / Nama Hari Libur</label>
-                  <input required type="text" value={newName} onChange={e=>setNewName(e.target.value)} className="w-full bg-[#050B14] border border-cyan-500/30 rounded-xl px-4 py-3.5 text-white outline-none focus:border-cyan-400 transition-colors text-sm font-mono" placeholder="Contoh: Hari Raya Idul Fitri" />
-               </div>
-               <button type="submit" className="w-full md:w-auto px-8 py-3.5 bg-cyan-600 hover:bg-cyan-500 text-white font-black uppercase tracking-widest text-xs rounded-xl transition-all duration-300 shadow-lg active:scale-95">Simpan</button>
-            </form>
-         )}
-
-         <div className="bg-[#0A1628]/60 backdrop-blur-md border border-cyan-500/20 rounded-[1.5rem] overflow-hidden flex flex-col shadow-xl">
-            <div className="overflow-x-auto custom-scrollbar">
-               <table className="w-full text-left border-collapse min-w-[600px]">
-                  <thead>
-                     <tr className="bg-[#050B14]/80 border-b border-cyan-500/30 text-cyan-500 text-[10px] tracking-[0.2em] uppercase font-black">
-                        <th className="p-4 md:p-5 w-48">Tanggal</th>
-                        <th className="p-4 md:p-5">Keterangan Libur</th>
-                        <th className="p-4 md:p-5 text-right w-32">Opsi</th>
-                     </tr>
-                  </thead>
-                  <tbody className="divide-y divide-cyan-900/30">
-                     {sortedHolidays.map((h, i) => (
-                        <tr key={h.id || i} className="hover:bg-cyan-900/20 transition-colors duration-200 text-cyan-50 group">
-                           <td className="p-4 md:p-5">
-                              <span className="font-mono text-sm tracking-widest font-bold text-rose-300 bg-rose-950/40 px-3 py-1.5 rounded-lg border border-rose-500/30 inline-flex items-center gap-2">
-                                 <Calendar className="w-3.5 h-3.5"/>
-                                 {new Date(h.date).toLocaleDateString('id-ID', {day: '2-digit', month: 'long', year: 'numeric'})}
-                              </span>
-                           </td>
-                           <td className="p-4 md:p-5 font-bold text-sm uppercase tracking-wide">{h.name}</td>
-                           <td className="p-4 md:p-5 text-right">
-                              <button onClick={() => {if(confirm(`Hapus kalender libur ${h.name}?`)) deleteHoliday(h.id);}} className="p-2.5 text-rose-500 hover:text-white hover:bg-rose-600 rounded-xl transition-all duration-300 border border-transparent hover:border-rose-500/50 hover:shadow-[0_0_15px_rgba(244,63,94,0.4)] active:scale-95">
-                                 <Trash2 className="w-5 h-5" />
-                              </button>
-                           </td>
-                        </tr>
-                     ))}
-                     {sortedHolidays.length === 0 && (
-                        <tr><td colSpan={3} className="p-16 text-center text-cyan-800 font-mono text-sm uppercase tracking-widest">Belum ada hari libur yang ditambahkan.</td></tr>
-                     )}
-                  </tbody>
-               </table>
-            </div>
-         </div>
-      </div>
-   );
-};
-
-// ==========================================
-// ADMIN OTHER COMPONENTS
-// ==========================================
-
-const AdminReports: React.FC = () => {
-  const { logs, sessions, clusters, students, deleteLog, sendWA } = useAppContext();
-  const [search, setSearch] = useState('');
-  const [filterSession, setFilterSession] = useState('All');
-  const [filterCluster, setFilterCluster] = useState('All');
-  const { startObj, endObj, FilterUI } = useDateFilter();
-  const [previewImage, setPreviewImage] = useState<string | null>(null);
-
-  const filteredLogs = logs.filter(log => {
-    const matchSearch = log.name.toLowerCase().includes(search.toLowerCase()) || log.nim.includes(search);
-    const matchSession = filterSession === 'All' || log.sessionName === filterSession;
-    const clusterName = clusters.find(c => c.id === filterCluster)?.name;
-    const matchCluster = filterCluster === 'All' || log.clusterName === clusterName;
-    const logDate = new Date(log.timestamp);
-    const inDateRange = logDate >= startObj && logDate <= endObj;
-    return matchSearch && matchSession && matchCluster && inDateRange;
-  });
-
-  return (
-    <div className="space-y-6 animate-in fade-in duration-500 h-full flex flex-col relative w-full pb-10">
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-        <div>
-           <h2 className="text-2xl md:text-3xl font-black text-cyan-50 tracking-widest uppercase">Riwayat Kehadiran</h2>
-           <p className="text-cyan-500/70 text-xs md:text-sm font-mono mt-1 uppercase">Data waktu, lokasi, dan foto absensi mahasiswa</p>
-        </div>
-        <button onClick={() => exportToExcel(filteredLogs)} className="w-full md:w-auto flex items-center justify-center gap-3 px-8 py-3.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white rounded-xl transition-all duration-300 font-black tracking-widest uppercase text-xs shadow-[0_0_20px_rgba(16,185,129,0.4)] active:scale-95">
-           <Download className="w-4 h-4" /> Download Laporan (Excel)
-        </button>
-      </div>
-
-      <div className="flex flex-col md:flex-row gap-3 md:gap-4 bg-[#0A1628]/60 p-4 rounded-2xl border border-cyan-500/20 shadow-lg items-end">
-        <FilterUI />
-        <div className="flex flex-col gap-1 flex-1 w-full md:w-auto">
-           <label className="text-[9px] text-cyan-500 uppercase tracking-widest font-bold">Pencarian Data</label>
-           <div className="relative w-full">
-              <SearchIcon className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-cyan-600" />
-              <input type="text" placeholder="Cari Nama atau NIM..." value={search} onChange={e=>setSearch(e.target.value)} className="w-full bg-[#050B14] border border-cyan-500/30 rounded-xl pl-11 pr-4 h-11 text-cyan-50 outline-none focus:border-cyan-400 transition-colors shadow-inner font-mono text-sm" />
-           </div>
-        </div>
-        <div className="flex flex-col gap-1 w-full sm:w-auto">
-           <label className="text-[9px] text-cyan-500 uppercase tracking-widest font-bold">Filter Kelompok</label>
-           <div className="flex items-center bg-[#050B14] border border-cyan-500/30 rounded-xl px-2 h-11 w-full sm:w-auto focus-within:border-cyan-400 transition-colors">
-              <select value={filterCluster} onChange={e=>setFilterCluster(e.target.value)} className="bg-transparent text-cyan-50 text-xs font-bold uppercase outline-none cursor-pointer px-3 w-full sm:w-40 h-full">
-                <option value="All">Semua Kelompok</option>
-                {clusters.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-              </select>
-           </div>
-        </div>
-        <div className="flex flex-col gap-1 w-full sm:w-auto">
-           <label className="text-[9px] text-cyan-500 uppercase tracking-widest font-bold">Jadwal Shift</label>
-           <div className="flex items-center bg-[#050B14] border border-cyan-500/30 rounded-xl px-2 h-11 w-full sm:w-auto focus-within:border-cyan-400 transition-colors">
-              <select value={filterSession} onChange={e=>setFilterSession(e.target.value)} className="bg-transparent text-cyan-50 text-xs font-bold uppercase outline-none cursor-pointer px-3 w-full sm:w-40 h-full">
-                <option value="All">Semua Shift</option>
-                {sessions.map(s => <option key={s.id} value={s.name}>{s.name}</option>)}
-              </select>
-           </div>
-        </div>
-      </div>
-
-      <div className="flex-1 bg-[#0A1628]/60 backdrop-blur-md border border-cyan-500/20 rounded-[1.5rem] overflow-hidden flex flex-col shadow-xl">
-        <div className="overflow-x-auto custom-scrollbar">
-          <table className="w-full text-left border-collapse min-w-[1000px]">
-            <thead>
-              <tr className="bg-[#050B14]/80 border-b border-cyan-500/30 text-cyan-500 text-[10px] tracking-[0.2em] uppercase font-black">
-                <th className="p-4 md:p-5">Foto Absen</th>
-                <th className="p-4 md:p-5">Data Mahasiswa</th>
-                <th className="p-4 md:p-5">Waktu Kehadiran</th>
-                <th className="p-4 md:p-5">Jadwal Shift</th>
-                <th className="p-4 md:p-5">Lokasi Absen</th>
-                <th className="p-4 md:p-5 text-right">Opsi</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-cyan-900/30">
-              {filteredLogs.map(log => (
-                <tr key={log.id} className="hover:bg-cyan-900/20 transition-colors duration-200">
-                  <td className="p-4 md:p-5">
-                    <div onClick={() => setPreviewImage(log.photoBase64)} className="w-16 h-16 rounded-xl overflow-hidden border-2 border-cyan-500/40 bg-black relative group cursor-pointer shadow-md hover:shadow-[0_0_15px_rgba(6,182,212,0.6)] hover:border-cyan-300 transition-all duration-300">
-                      <img src={log.photoBase64} alt="Selfie" className="w-full h-full object-cover" />
-                      <div className="absolute inset-0 bg-[#0A1628]/60 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity backdrop-blur-sm">
-                        <Maximize className="w-5 h-5 text-cyan-400" />
-                      </div>
-                    </div>
-                  </td>
-                  <td className="p-4 md:p-5">
-                     <p className="font-bold text-cyan-50 text-sm uppercase tracking-wide truncate max-w-[200px] mb-1">{log.name}</p>
-                     <p className="text-xs text-cyan-400/80 font-mono tracking-widest">{log.nim}</p>
-                     <p className="text-[9px] mt-2 inline-block px-2 py-0.5 bg-cyan-950 text-cyan-300 rounded border border-cyan-500/20 font-bold uppercase tracking-wider">{log.clusterName || 'Tanpa Kelompok'}</p>
-                  </td>
-                  <td className="p-4 md:p-5">
-                     <p className="text-cyan-50 font-black font-mono text-base tracking-wider mb-1 drop-shadow-md">{new Date(log.timestamp).toLocaleTimeString('id-ID')}</p>
-                     <p className="text-[10px] md:text-xs text-cyan-500/80 font-mono uppercase tracking-widest">{new Date(log.timestamp).toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'short' })}</p>
-                  </td>
-                  <td className="p-4 md:p-5">
-                     <p className="text-cyan-200 text-xs font-bold uppercase tracking-widest mb-2">{log.sessionName}</p>
-                     <span className={cn("px-3 py-1 text-[9px] font-black uppercase tracking-[0.2em] rounded-md border shadow-sm", log.status === 'Hadir' ? "bg-emerald-950/50 text-emerald-400 border-emerald-500/40 shadow-[0_0_10px_rgba(16,185,129,0.2)]" : "bg-amber-950/50 text-amber-400 border-amber-500/40 shadow-[0_0_10px_rgba(245,158,11,0.2)]")}>{log.status}</span>
-                  </td>
-                  <td className="p-4 md:p-5">
-                    <a href={`https://www.google.com/maps?q=${log.location.lat},${log.location.lng}`} target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 px-3 py-2 bg-cyan-950/50 hover:bg-cyan-600 hover:text-white text-cyan-400 text-[9px] font-black uppercase tracking-[0.2em] rounded-lg border border-cyan-500/40 transition-all duration-300 shadow-sm active:scale-95">
-                      <MapPin className="w-3 h-3" /> Buka Peta
-                    </a>
-                    <p className="text-[9px] text-cyan-600/70 mt-2.5 font-mono uppercase tracking-widest bg-[#050B14] inline-block px-2 py-1 rounded-md border border-cyan-900/50">{log.location.lat.toFixed(5)}, {log.location.lng.toFixed(5)}</p>
-                  </td>
-                  <td className="p-4 md:p-5 text-right">
-                    <button onClick={() => { 
-                       if(confirm(`Yakin ingin menghapus riwayat kehadiran ${log.name}?`)) {
-                          deleteLog(log.id); 
-                          
-                          // TRIGGER WA SKENARIO 12: PENGHAPUSAN ADMIN
-                          const st = students.find(s => s.nim === log.nim);
-                          if(st?.noHp) {
-                             sendWA(st.noHp, 12, {
-                                namaLengkap: log.name,
-                                kelompok: log.clusterName,
-                                shift: log.sessionName,
-                                tanggal: new Date(log.timestamp).toLocaleDateString('id-ID')
-                             });
-                          }
-                       }
-                    }} title="Hapus Riwayat" className="p-2.5 text-rose-500 hover:text-white hover:bg-rose-600 rounded-xl transition-all duration-300 border border-transparent hover:border-rose-500/50 hover:shadow-[0_0_15px_rgba(244,63,94,0.4)] active:scale-95">
-                      <Trash2 className="w-5 h-5" />
-                    </button>
-                  </td>
-                </tr>
-              ))}
-              {filteredLogs.length === 0 && <tr><td colSpan={6} className="p-16 text-center text-cyan-800 font-mono text-sm uppercase tracking-widest">Belum ada riwayat absensi.</td></tr>}
-            </tbody>
-          </table>
-        </div>
-      </div>
-      
-      {previewImage && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-[#050B14]/95 backdrop-blur-2xl p-4 animate-in fade-in zoom-in-95 duration-300" onClick={() => setPreviewImage(null)}>
-          <div className="relative max-w-3xl w-full flex flex-col items-center justify-center">
-            <button onClick={() => setPreviewImage(null)} className="absolute -top-14 md:-top-16 right-0 md:-right-8 p-3 bg-rose-950/50 hover:bg-rose-500 hover:text-white rounded-xl transition-all duration-300 text-rose-400 shadow-[0_0_15px_rgba(244,63,94,0.2)] active:scale-90 border border-rose-500/30">
-              <X className="w-6 h-6"/>
-            </button>
-            <div className="relative w-full overflow-hidden rounded-[2rem] border-[4px] md:border-[8px] border-cyan-500/30 shadow-[0_0_80px_rgba(6,182,212,0.4)] bg-black">
-                <div className="absolute inset-0 pointer-events-none bg-[linear-gradient(transparent_95%,rgba(6,182,212,0.2)_100%),linear-gradient(90deg,transparent_95%,rgba(6,182,212,0.2)_100%)] bg-[length:40px_40px] mix-blend-screen opacity-50"></div>
-                <img src={previewImage} alt="Preview Foto Absen" className="max-w-full max-h-[75vh] md:max-h-[85vh] w-full object-contain mx-auto" onClick={e => e.stopPropagation()} />
-            </div>
-            <p className="mt-5 text-cyan-400 text-[10px] font-mono tracking-[0.2em] bg-[#0A1628] px-4 py-2 rounded-lg border border-cyan-500/20 uppercase">Ketuk area luar untuk menutup foto</p>
-          </div>
-        </div>
-      )}
-    </div>
-  );
-};
-
 const AdminGeofence: React.FC = () => {
   const { geofence, updateGeofence, students, sendWA } = useAppContext();
   const [lat, setLat] = useState(geofence.lat.toString());
@@ -3091,6 +2742,447 @@ const AdminManagement: React.FC = () => {
   );
 };
 
+const AdminFormats: React.FC = () => {
+   const { formats, updateFormat } = useAppContext();
+   const [editingFormat, setEditingFormat] = useState<FormatWA | null>(null);
+
+   const handleSave = (e: React.FormEvent) => {
+      e.preventDefault();
+      if(editingFormat) {
+         updateFormat(editingFormat.id, { template: editingFormat.template });
+         setEditingFormat(null);
+         alert("✅ Template pesan WhatsApp berhasil diperbarui.");
+      }
+   };
+
+   return (
+      <div className="space-y-6 animate-in fade-in duration-500 pb-10">
+         <div>
+            <h2 className="text-2xl md:text-3xl font-black text-cyan-50 tracking-widest uppercase">Manajemen Format WA</h2>
+            <p className="text-cyan-500/70 text-xs md:text-sm font-mono mt-1 uppercase">Ubah Template Pesan Bot Whatsapp Secara Real-Time</p>
+         </div>
+
+         <div className="bg-[#0A1628]/80 backdrop-blur-md border border-cyan-500/30 p-5 md:p-6 rounded-3xl shadow-lg relative overflow-hidden">
+            <div className="absolute top-0 right-0 w-32 h-32 bg-cyan-600/10 rounded-bl-[100px] pointer-events-none"></div>
+            <div className="flex items-center gap-3 mb-4 relative z-10">
+               <FileText className="w-5 h-5 text-cyan-400" />
+               <h3 className="text-xs md:text-sm font-black text-cyan-50 tracking-widest uppercase">Variabel Dinamis (Gunakan Ini Di Dalam Teks):</h3>
+            </div>
+            <div className="flex flex-wrap gap-3 relative z-10">
+               {['[Nama Lengkap]', '[NIM]', '[Kelompok]', '[Shift]', '[Jam Sesi]', '[Jam Tutup]', '[Jam Absen]', '[Tanggal Mulai]', '[Tanggal Akhir]', '[Password]', '[Link]'].map(v => (
+                  <span key={v} className="bg-[#050B14] border border-cyan-500/40 text-cyan-300 px-3 py-1.5 rounded-lg text-xs font-mono font-bold shadow-inner cursor-pointer hover:bg-cyan-900/50 hover:text-cyan-50 transition-colors" title="Klik untuk copy" onClick={()=>{navigator.clipboard.writeText(v); alert(`Tercopy: ${v}`)}}>{v}</span>
+               ))}
+            </div>
+         </div>
+
+         {editingFormat && (
+            <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/90 backdrop-blur-xl p-4 animate-in fade-in zoom-in-95 duration-200">
+               <form onSubmit={handleSave} className="bg-[#0A1628] border border-cyan-500/40 p-6 md:p-8 rounded-3xl w-full max-w-3xl shadow-[0_0_50px_rgba(6,182,212,0.3)] relative radiology-bg flex flex-col h-[90vh] md:h-[80vh]">
+                  <div className="flex justify-between items-center mb-6 shrink-0">
+                     <div>
+                        <h3 className="text-xl md:text-2xl font-black text-cyan-50 tracking-widest uppercase mb-1">Edit ID Skenario: {editingFormat.id}</h3>
+                        <p className="text-cyan-400 text-xs font-mono">{editingFormat.title}</p>
+                     </div>
+                     <button type="button" onClick={() => setEditingFormat(null)} className="p-2 bg-rose-950/50 hover:bg-rose-500 hover:text-white border border-rose-500/30 rounded-xl transition-colors text-rose-400"><X className="w-5 h-5"/></button>
+                  </div>
+                  
+                  <div className="flex-1 overflow-hidden flex flex-col gap-4">
+                     <div className="bg-[#050B14] p-4 rounded-xl border border-cyan-500/30 shrink-0">
+                        <p className="text-cyan-500 text-xs font-bold uppercase tracking-widest mb-1">Deskripsi Pemicu Bot:</p>
+                        <p className="text-cyan-50 text-sm font-mono">{editingFormat.description}</p>
+                     </div>
+                     
+                     <div className="flex flex-col flex-1 relative group">
+                        <textarea 
+                           required 
+                           value={editingFormat.template} 
+                           onChange={e=>setEditingFormat({...editingFormat, template: e.target.value})} 
+                           className="w-full flex-1 bg-[#050B14] border border-cyan-500/50 rounded-2xl p-5 text-cyan-100 outline-none focus:border-cyan-300 font-mono text-sm shadow-inner resize-none custom-scrollbar leading-relaxed transition-colors"
+                           placeholder="Ketik template pesan WhatsApp di sini..."
+                        />
+                        <div className="absolute top-4 right-4 bg-cyan-900/50 px-2 py-1 rounded text-[10px] text-cyan-400 font-bold uppercase pointer-events-none opacity-50 group-focus-within:opacity-100 transition-opacity">Editor Mode</div>
+                     </div>
+                  </div>
+
+                  <div className="mt-6 shrink-0 flex justify-end">
+                     <button type="submit" className="w-full md:w-auto px-10 py-4 bg-cyan-600 hover:bg-cyan-500 text-white font-black tracking-widest uppercase text-xs rounded-2xl transition-all duration-300 shadow-[0_10px_20px_rgba(6,182,212,0.4)] active:scale-95 border border-cyan-400/50 flex justify-center items-center gap-3">
+                        <CheckCircle2 className="w-5 h-5"/> Simpan Perubahan Template
+                     </button>
+                  </div>
+               </form>
+            </div>
+         )}
+
+         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {formats.map(f => (
+               <div key={f.id} className="bg-[#0A1628]/60 backdrop-blur-md border border-cyan-500/20 p-6 rounded-3xl flex flex-col group hover:border-cyan-500/50 transition-all duration-300 shadow-[0_10px_30px_rgba(0,0,0,0.3)] relative overflow-hidden h-[400px]">
+                  <div className="absolute top-0 right-0 w-32 h-32 bg-blue-600/5 rounded-bl-[100px] pointer-events-none group-hover:scale-110 transition-transform"></div>
+                  
+                  <div className="flex justify-between items-start mb-4 relative z-10 shrink-0">
+                     <div>
+                        <div className="inline-block px-3 py-1 bg-cyan-950/60 border border-cyan-500/30 text-cyan-300 text-[10px] font-black tracking-widest uppercase rounded-lg mb-3 shadow-sm">
+                           ID Skenario: {f.id}
+                        </div>
+                        <h3 className="font-black text-white text-lg tracking-widest uppercase">{f.title}</h3>
+                        <p className="text-xs text-cyan-500/80 font-mono mt-1 pr-4">{f.description}</p>
+                     </div>
+                     <button onClick={() => setEditingFormat(f)} className="p-2.5 bg-blue-950/40 hover:bg-blue-600 hover:text-white text-blue-400 border border-blue-500/30 rounded-xl transition-all duration-300 active:scale-95 shadow-sm">
+                        <Edit className="w-4 h-4"/>
+                     </button>
+                  </div>
+
+                  <div className="flex-1 bg-[#050B14] p-5 rounded-2xl border border-cyan-500/10 overflow-y-auto custom-scrollbar relative z-10 shadow-inner group-hover:border-cyan-500/30 transition-colors">
+                     <pre className="text-[11px] font-mono text-cyan-100/90 whitespace-pre-wrap break-words leading-relaxed font-medium">
+                        {f.template}
+                     </pre>
+                  </div>
+               </div>
+            ))}
+         </div>
+      </div>
+   );
+};
+
+// ==========================================
+// ADMIN CALENDAR (NEW MODULE)
+// ==========================================
+const AdminCalendar: React.FC = () => {
+   const { holidays, addHoliday, deleteHoliday } = useAppContext();
+   const [isAdding, setIsAdding] = useState(false);
+   const [newDate, setNewDate] = useState('');
+   const [newName, setNewName] = useState('');
+   const [currentMonth, setCurrentMonth] = useState(new Date());
+
+   const handleAdd = (e: React.FormEvent) => {
+      e.preventDefault();
+      if(newDate && newName.trim()) {
+         addHoliday({ date: newDate, name: newName });
+         setIsAdding(false);
+         setNewDate(''); setNewName('');
+      }
+   };
+
+   // Navigasi Bulan
+   const nextMonth = () => setCurrentMonth(new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1, 1));
+   const prevMonth = () => setCurrentMonth(new Date(currentMonth.getFullYear(), currentMonth.getMonth() - 1, 1));
+
+   // Logika Pembuatan Grid Kalender Manual
+   const daysInMonth = new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1, 0).getDate();
+   const firstDayOfMonth = new Date(currentMonth.getFullYear(), currentMonth.getMonth(), 1).getDay(); // 0 = Minggu
+
+   const daysArray = [];
+   for (let i = 0; i < firstDayOfMonth; i++) {
+       daysArray.push(null);
+   }
+   for (let i = 1; i <= daysInMonth; i++) {
+       daysArray.push(i);
+   }
+
+   const monthNames = ["JANUARI", "FEBRUARI", "MARET", "APRIL", "MEI", "JUNI", "JULI", "AGUSTUS", "SEPTEMBER", "OKTOBER", "NOVEMBER", "DESEMBER"];
+   const dayNames = ["MIN", "SEN", "SEL", "RAB", "KAM", "JUM", "SAB"];
+
+   // Filter agenda libur hanya untuk bulan yang aktif dilihat
+   const monthHolidays = holidays.filter(h => {
+       const d = new Date(h.date);
+       return d.getMonth() === currentMonth.getMonth() && d.getFullYear() === currentMonth.getFullYear();
+   }).sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+
+   return (
+      <div className="space-y-6 animate-in fade-in duration-500 pb-10">
+         <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+            <div>
+               <h2 className="text-2xl md:text-3xl font-black text-cyan-50 tracking-widest uppercase">Manajemen Kalender</h2>
+               <p className="text-cyan-500/70 text-xs md:text-sm font-mono mt-1 uppercase">Atur Hari Libur Nasional & Cuti Bersama</p>
+            </div>
+            <button onClick={() => setIsAdding(!isAdding)} className="flex items-center gap-2 px-5 py-3 bg-cyan-600/20 text-cyan-400 hover:bg-cyan-500/30 border border-cyan-500/50 rounded-xl transition-all duration-300 font-black uppercase tracking-widest text-xs shadow-[0_0_15px_rgba(6,182,212,0.2)]">
+               <Plus className="w-4 h-4" /> Tambah Hari Libur
+            </button>
+         </div>
+
+         <div className="bg-[#0A1628]/80 backdrop-blur-md border border-rose-500/30 p-5 md:p-6 rounded-3xl shadow-lg relative overflow-hidden flex items-start gap-4">
+            <div className="bg-rose-950/60 p-3 rounded-xl border border-rose-500/50 shrink-0">
+               <Calendar className="w-6 h-6 text-rose-400" />
+            </div>
+            <div>
+               <h3 className="text-sm font-black text-rose-200 tracking-widest uppercase mb-1">Akhir Pekan (Sabtu & Minggu) Otomatis Libur</h3>
+               <p className="text-xs text-rose-200/70 font-mono leading-relaxed">
+                  Sistem Bot WA Cron Job telah dikonfigurasi untuk <strong className="text-rose-400">TIDAK mengirimkan tagihan absensi / buka shift</strong> pada setiap hari Sabtu & Minggu secara otomatis. Anda hanya perlu menambahkan hari libur di luar akhir pekan (misal: Tanggal Merah) ke dalam daftar di bawah ini.
+               </p>
+            </div>
+         </div>
+
+         {isAdding && (
+            <form onSubmit={handleAdd} className="bg-[#0A1628]/80 backdrop-blur-md border border-cyan-500/30 p-5 md:p-6 rounded-2xl flex flex-col md:flex-row gap-4 items-end shadow-xl animate-in slide-in-from-top-4">
+               <div className="space-y-1.5 w-full md:w-64 shrink-0">
+                  <label className="text-[10px] md:text-xs text-cyan-500 font-bold uppercase tracking-widest ml-1">Tanggal Libur</label>
+                  <input required type="date" value={newDate} onChange={e=>setNewDate(e.target.value)} className="w-full bg-[#050B14] border border-cyan-500/30 rounded-xl px-4 py-3.5 text-white outline-none focus:border-cyan-400 transition-colors text-sm font-mono" />
+               </div>
+               <div className="flex-1 space-y-1.5 w-full">
+                  <label className="text-[10px] md:text-xs text-cyan-500 font-bold uppercase tracking-widest ml-1">Keterangan / Nama Hari Libur</label>
+                  <input required type="text" value={newName} onChange={e=>setNewName(e.target.value)} className="w-full bg-[#050B14] border border-cyan-500/30 rounded-xl px-4 py-3.5 text-white outline-none focus:border-cyan-400 transition-colors text-sm font-mono" placeholder="Contoh: Hari Raya Idul Fitri" />
+               </div>
+               <button type="submit" className="w-full md:w-auto px-8 py-3.5 bg-cyan-600 hover:bg-cyan-500 text-white font-black uppercase tracking-widest text-xs rounded-xl transition-all duration-300 shadow-lg active:scale-95">Simpan</button>
+            </form>
+         )}
+
+         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            
+            {/* LEFT PANEL: CALENDAR GRID */}
+            <div className="lg:col-span-2 bg-gradient-to-br from-[#050B14] to-[#0A1628] rounded-[2rem] border border-cyan-500/30 p-6 md:p-8 shadow-[0_15px_40px_rgba(0,0,0,0.5)]">
+               
+               {/* Header Calendar */}
+               <div className="flex justify-between items-center mb-8">
+                  <button onClick={prevMonth} className="p-3 bg-cyan-950/50 hover:bg-cyan-600 text-cyan-400 hover:text-white rounded-xl border border-cyan-500/30 transition-all active:scale-90">
+                     <ChevronLeft className="w-5 h-5" />
+                  </button>
+                  <h3 className="text-xl md:text-2xl font-black text-cyan-50 tracking-widest uppercase">
+                     {monthNames[currentMonth.getMonth()]} {currentMonth.getFullYear()}
+                  </h3>
+                  <button onClick={nextMonth} className="p-3 bg-cyan-950/50 hover:bg-cyan-600 text-cyan-400 hover:text-white rounded-xl border border-cyan-500/30 transition-all active:scale-90">
+                     <ChevronRightIcon className="w-5 h-5" />
+                  </button>
+               </div>
+
+               {/* Day Headers */}
+               <div className="grid grid-cols-7 gap-2 mb-4 text-center">
+                  {dayNames.map((day, idx) => (
+                     <div key={day} className={cn("text-[10px] md:text-xs font-black tracking-widest", (idx === 0 || idx === 6) ? "text-rose-400" : "text-cyan-500")}>
+                        {day}
+                     </div>
+                  ))}
+               </div>
+
+               {/* Day Grid */}
+               <div className="grid grid-cols-7 gap-2 md:gap-3">
+                  {daysArray.map((day, idx) => {
+                     if (day === null) {
+                        return <div key={`empty-${idx}`} className="aspect-square"></div>;
+                     }
+                     
+                     // Cek Status Hari
+                     const cellDateStr = getLocalYYYYMMDD(new Date(currentMonth.getFullYear(), currentMonth.getMonth(), day));
+                     const cellDayOfWeek = new Date(currentMonth.getFullYear(), currentMonth.getMonth(), day).getDay();
+                     
+                     const isWeekend = (cellDayOfWeek === 0 || cellDayOfWeek === 6);
+                     const isCustomHoliday = holidays.some(h => h.date === cellDateStr);
+                     const isToday = cellDateStr === getLocalYYYYMMDD(new Date());
+
+                     const isOffDay = isWeekend || isCustomHoliday;
+
+                     return (
+                        <div key={day} className="relative aspect-square flex items-center justify-center">
+                           <div className={cn(
+                              "w-full h-full flex flex-col items-center justify-center rounded-2xl font-bold text-sm md:text-base transition-all duration-300 border shadow-inner",
+                              isToday ? "bg-cyan-600 text-white border-cyan-400 shadow-[0_0_15px_rgba(6,182,212,0.5)]" : 
+                              isOffDay ? "bg-rose-950/20 text-rose-300 border-rose-500/20" : 
+                              "bg-[#0A1628]/50 text-cyan-50 border-cyan-500/10 hover:border-cyan-500/40"
+                           )}>
+                              {day}
+                              {isCustomHoliday && (
+                                 <div className="w-1.5 h-1.5 rounded-full bg-rose-500 mt-1 md:mt-2 shadow-[0_0_5px_rgba(244,63,94,1)]"></div>
+                              )}
+                              {isWeekend && !isCustomHoliday && (
+                                 <div className="w-1 h-1 rounded-full bg-rose-900 mt-1 md:mt-2"></div>
+                              )}
+                           </div>
+                        </div>
+                     );
+                  })}
+               </div>
+            </div>
+
+            {/* RIGHT PANEL: AGENDA / LEGEND */}
+            <div className="bg-[#0A1628]/80 rounded-[2rem] border border-cyan-500/20 p-6 md:p-8 flex flex-col h-full shadow-[0_15px_40px_rgba(0,0,0,0.5)] relative overflow-hidden">
+               <div className="absolute top-0 right-0 w-32 h-32 bg-rose-600/10 rounded-bl-[100px] pointer-events-none"></div>
+               
+               <h4 className="text-[10px] text-cyan-500 font-black tracking-[0.2em] uppercase mb-1">Daftar Agenda Bulan Ini</h4>
+               <h3 className="text-xl font-black text-cyan-50 tracking-widest uppercase mb-6 pb-4 border-b border-cyan-500/20">
+                  {monthNames[currentMonth.getMonth()]} {currentMonth.getFullYear()}
+               </h3>
+
+               <div className="flex-1 overflow-y-auto custom-scrollbar pr-2 space-y-4">
+                  
+                  {/* Default Note for Weekends */}
+                  <div className="p-4 rounded-2xl bg-rose-950/30 border border-rose-500/20 relative group">
+                     <div className="absolute top-0 left-0 w-1 h-full bg-rose-900 rounded-l-2xl"></div>
+                     <h4 className="font-bold text-rose-300 text-sm tracking-wider uppercase mb-1 ml-2">Akhir Pekan</h4>
+                     <p className="text-[10px] font-mono text-rose-400/80 ml-2">Hari Sabtu & Minggu (Default Libur)</p>
+                  </div>
+
+                  {/* Custom Holidays List */}
+                  {monthHolidays.length === 0 ? (
+                     <div className="text-center py-8">
+                        <Calendar className="w-8 h-8 mx-auto text-cyan-800 mb-2 opacity-50" />
+                        <p className="text-[10px] text-cyan-600 font-mono tracking-widest uppercase">Tidak ada hari libur nasional tambahan bulan ini.</p>
+                     </div>
+                  ) : (
+                     monthHolidays.map((h, i) => (
+                        <div key={h.id || i} className="p-4 rounded-2xl bg-[#050B14] border border-rose-500/40 relative group hover:shadow-[0_0_15px_rgba(244,63,94,0.2)] transition-shadow">
+                           <div className="absolute top-0 left-0 w-1 h-full bg-rose-500 rounded-l-2xl shadow-[0_0_5px_rgba(244,63,94,0.8)]"></div>
+                           <button onClick={() => {if(confirm(`Hapus hari libur: ${h.name}?`)) deleteHoliday(h.id);}} className="absolute top-4 right-4 text-rose-500/50 hover:text-rose-400"><Trash2 className="w-4 h-4"/></button>
+                           <div className="ml-2">
+                              <span className="inline-block px-2 py-1 bg-rose-950/80 text-rose-400 text-[8px] font-black tracking-widest uppercase rounded mb-2 border border-rose-500/20">Tanggal Merah</span>
+                              <h4 className="font-bold text-rose-100 text-sm tracking-wider uppercase mb-1 pr-6">{h.name}</h4>
+                              <p className="text-[10px] font-mono text-rose-400/80 flex items-center gap-1.5"><Calendar className="w-3 h-3"/> {new Date(h.date).toLocaleDateString('id-ID', {weekday:'long', day:'numeric', month:'long', year:'numeric'})}</p>
+                           </div>
+                        </div>
+                     ))
+                  )}
+               </div>
+
+            </div>
+         </div>
+      </div>
+   );
+};
+
+const AdminReports: React.FC = () => {
+  const { logs, sessions, clusters, students, deleteLog, sendWA } = useAppContext();
+  const [search, setSearch] = useState('');
+  const [filterSession, setFilterSession] = useState('All');
+  const [filterCluster, setFilterCluster] = useState('All');
+  const { startObj, endObj, FilterUI } = useDateFilter();
+  const [previewImage, setPreviewImage] = useState<string | null>(null);
+
+  const filteredLogs = logs.filter(log => {
+    const matchSearch = log.name.toLowerCase().includes(search.toLowerCase()) || log.nim.includes(search);
+    const matchSession = filterSession === 'All' || log.sessionName === filterSession;
+    const clusterName = clusters.find(c => c.id === filterCluster)?.name;
+    const matchCluster = filterCluster === 'All' || log.clusterName === clusterName;
+    const logDate = new Date(log.timestamp);
+    const inDateRange = logDate >= startObj && logDate <= endObj;
+    return matchSearch && matchSession && matchCluster && inDateRange;
+  });
+
+  return (
+    <div className="space-y-6 animate-in fade-in duration-500 h-full flex flex-col relative w-full pb-10">
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+        <div>
+           <h2 className="text-2xl md:text-3xl font-black text-cyan-50 tracking-widest uppercase">Riwayat Kehadiran</h2>
+           <p className="text-cyan-500/70 text-xs md:text-sm font-mono mt-1 uppercase">Data waktu, lokasi, dan foto absensi mahasiswa</p>
+        </div>
+        <button onClick={() => exportToExcel(filteredLogs)} className="w-full md:w-auto flex items-center justify-center gap-3 px-8 py-3.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white rounded-xl transition-all duration-300 font-black tracking-widest uppercase text-xs shadow-[0_0_20px_rgba(16,185,129,0.4)] active:scale-95">
+           <Download className="w-4 h-4" /> Download Laporan (Excel)
+        </button>
+      </div>
+
+      <div className="flex flex-col md:flex-row gap-3 md:gap-4 bg-[#0A1628]/60 p-4 rounded-2xl border border-cyan-500/20 shadow-lg items-end">
+        <FilterUI />
+        <div className="flex flex-col gap-1 flex-1 w-full md:w-auto">
+           <label className="text-[9px] text-cyan-500 uppercase tracking-widest font-bold">Pencarian Data</label>
+           <div className="relative w-full">
+              <SearchIcon className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-cyan-600" />
+              <input type="text" placeholder="Cari Nama atau NIM..." value={search} onChange={e=>setSearch(e.target.value)} className="w-full bg-[#050B14] border border-cyan-500/30 rounded-xl pl-11 pr-4 h-11 text-cyan-50 outline-none focus:border-cyan-400 transition-colors shadow-inner font-mono text-sm" />
+           </div>
+        </div>
+        <div className="flex flex-col gap-1 w-full sm:w-auto">
+           <label className="text-[9px] text-cyan-500 uppercase tracking-widest font-bold">Filter Kelompok</label>
+           <div className="flex items-center bg-[#050B14] border border-cyan-500/30 rounded-xl px-2 h-11 w-full sm:w-auto focus-within:border-cyan-400 transition-colors">
+              <select value={filterCluster} onChange={e=>setFilterCluster(e.target.value)} className="bg-transparent text-cyan-50 text-xs font-bold uppercase outline-none cursor-pointer px-3 w-full sm:w-40 h-full">
+                <option value="All">Semua Kelompok</option>
+                {clusters.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+              </select>
+           </div>
+        </div>
+        <div className="flex flex-col gap-1 w-full sm:w-auto">
+           <label className="text-[9px] text-cyan-500 uppercase tracking-widest font-bold">Jadwal Shift</label>
+           <div className="flex items-center bg-[#050B14] border border-cyan-500/30 rounded-xl px-2 h-11 w-full sm:w-auto focus-within:border-cyan-400 transition-colors">
+              <select value={filterSession} onChange={e=>setFilterSession(e.target.value)} className="bg-transparent text-cyan-50 text-xs font-bold uppercase outline-none cursor-pointer px-3 w-full sm:w-40 h-full">
+                <option value="All">Semua Shift</option>
+                {sessions.map(s => <option key={s.id} value={s.name}>{s.name}</option>)}
+              </select>
+           </div>
+        </div>
+      </div>
+
+      <div className="flex-1 bg-[#0A1628]/60 backdrop-blur-md border border-cyan-500/20 rounded-[1.5rem] overflow-hidden flex flex-col shadow-xl">
+        <div className="overflow-x-auto custom-scrollbar">
+          <table className="w-full text-left border-collapse min-w-[1000px]">
+            <thead>
+              <tr className="bg-[#050B14]/80 border-b border-cyan-500/30 text-cyan-500 text-[10px] tracking-[0.2em] uppercase font-black">
+                <th className="p-4 md:p-5">Foto Absen</th>
+                <th className="p-4 md:p-5">Data Mahasiswa</th>
+                <th className="p-4 md:p-5">Waktu Kehadiran</th>
+                <th className="p-4 md:p-5">Jadwal Shift</th>
+                <th className="p-4 md:p-5">Lokasi Absen</th>
+                <th className="p-4 md:p-5 text-right">Opsi</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-cyan-900/30">
+              {filteredLogs.map(log => (
+                <tr key={log.id} className="hover:bg-cyan-900/20 transition-colors duration-200">
+                  <td className="p-4 md:p-5">
+                    <div onClick={() => setPreviewImage(log.photoBase64)} className="w-16 h-16 rounded-xl overflow-hidden border-2 border-cyan-500/40 bg-black relative group cursor-pointer shadow-md hover:shadow-[0_0_15px_rgba(6,182,212,0.6)] hover:border-cyan-300 transition-all duration-300">
+                      <img src={log.photoBase64} alt="Selfie" className="w-full h-full object-cover" />
+                      <div className="absolute inset-0 bg-[#0A1628]/60 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity backdrop-blur-sm">
+                        <Maximize className="w-5 h-5 text-cyan-400" />
+                      </div>
+                    </div>
+                  </td>
+                  <td className="p-4 md:p-5">
+                     <p className="font-bold text-cyan-50 text-sm uppercase tracking-wide truncate max-w-[200px] mb-1">{log.name}</p>
+                     <p className="text-xs text-cyan-400/80 font-mono tracking-widest">{log.nim}</p>
+                     <p className="text-[9px] mt-2 inline-block px-2 py-0.5 bg-cyan-950 text-cyan-300 rounded border border-cyan-500/20 font-bold uppercase tracking-wider">{log.clusterName || 'Tanpa Kelompok'}</p>
+                  </td>
+                  <td className="p-4 md:p-5">
+                     <p className="text-cyan-50 font-black font-mono text-base tracking-wider mb-1 drop-shadow-md">{new Date(log.timestamp).toLocaleTimeString('id-ID')}</p>
+                     <p className="text-[10px] md:text-xs text-cyan-500/80 font-mono uppercase tracking-widest">{new Date(log.timestamp).toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'short' })}</p>
+                  </td>
+                  <td className="p-4 md:p-5">
+                     <p className="text-cyan-200 text-xs font-bold uppercase tracking-widest mb-2">{log.sessionName}</p>
+                     <span className={cn("px-3 py-1 text-[9px] font-black uppercase tracking-[0.2em] rounded-md border shadow-sm", log.status === 'Hadir' ? "bg-emerald-950/50 text-emerald-400 border-emerald-500/40 shadow-[0_0_10px_rgba(16,185,129,0.2)]" : "bg-amber-950/50 text-amber-400 border-amber-500/40 shadow-[0_0_10px_rgba(245,158,11,0.2)]")}>{log.status}</span>
+                  </td>
+                  <td className="p-4 md:p-5">
+                    <a href={`https://www.google.com/maps?q=${log.location.lat},${log.location.lng}`} target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 px-3 py-2 bg-cyan-950/50 hover:bg-cyan-600 hover:text-white text-cyan-400 text-[9px] font-black uppercase tracking-[0.2em] rounded-lg border border-cyan-500/40 transition-all duration-300 shadow-sm active:scale-95">
+                      <MapPin className="w-3 h-3" /> Buka Peta
+                    </a>
+                    <p className="text-[9px] text-cyan-600/70 mt-2.5 font-mono uppercase tracking-widest bg-[#050B14] inline-block px-2 py-1 rounded-md border border-cyan-900/50">{log.location.lat.toFixed(5)}, {log.location.lng.toFixed(5)}</p>
+                  </td>
+                  <td className="p-4 md:p-5 text-right">
+                    <button onClick={() => { 
+                       if(confirm(`Yakin ingin menghapus riwayat kehadiran ${log.name}?`)) {
+                          deleteLog(log.id); 
+                          
+                          // TRIGGER WA SKENARIO 12: PENGHAPUSAN ADMIN
+                          const st = students.find(s => s.nim === log.nim);
+                          if(st?.noHp) {
+                             sendWA(st.noHp, 12, {
+                                namaLengkap: log.name,
+                                kelompok: log.clusterName,
+                                shift: log.sessionName,
+                                tanggal: new Date(log.timestamp).toLocaleDateString('id-ID')
+                             });
+                          }
+                       }
+                    }} title="Hapus Riwayat" className="p-2.5 text-rose-500 hover:text-white hover:bg-rose-600 rounded-xl transition-all duration-300 border border-transparent hover:border-rose-500/50 hover:shadow-[0_0_15px_rgba(244,63,94,0.4)] active:scale-95">
+                      <Trash2 className="w-5 h-5" />
+                    </button>
+                  </td>
+                </tr>
+              ))}
+              {filteredLogs.length === 0 && <tr><td colSpan={6} className="p-16 text-center text-cyan-800 font-mono text-sm uppercase tracking-widest">Belum ada riwayat absensi.</td></tr>}
+            </tbody>
+          </table>
+        </div>
+      </div>
+      
+      {previewImage && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-[#050B14]/95 backdrop-blur-2xl p-4 animate-in fade-in zoom-in-95 duration-300" onClick={() => setPreviewImage(null)}>
+          <div className="relative max-w-3xl w-full flex flex-col items-center justify-center">
+            <button onClick={() => setPreviewImage(null)} className="absolute -top-14 md:-top-16 right-0 md:-right-8 p-3 bg-rose-950/50 hover:bg-rose-500 hover:text-white rounded-xl transition-all duration-300 text-rose-400 shadow-[0_0_15px_rgba(244,63,94,0.2)] active:scale-90 border border-rose-500/30">
+              <X className="w-6 h-6"/>
+            </button>
+            <div className="relative w-full overflow-hidden rounded-[2rem] border-[4px] md:border-[8px] border-cyan-500/30 shadow-[0_0_80px_rgba(6,182,212,0.4)] bg-black">
+                <div className="absolute inset-0 pointer-events-none bg-[linear-gradient(transparent_95%,rgba(6,182,212,0.2)_100%),linear-gradient(90deg,transparent_95%,rgba(6,182,212,0.2)_100%)] bg-[length:40px_40px] mix-blend-screen opacity-50"></div>
+                <img src={previewImage} alt="Preview Foto Absen" className="max-w-full max-h-[75vh] md:max-h-[85vh] w-full object-contain mx-auto" onClick={e => e.stopPropagation()} />
+            </div>
+            <p className="mt-5 text-cyan-400 text-[10px] font-mono tracking-[0.2em] bg-[#0A1628] px-4 py-2 rounded-lg border border-cyan-500/20 uppercase">Ketuk area luar untuk menutup foto</p>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
 
 const SearchIcon = ({ className }: { className?: string }) => (
   <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
@@ -3156,6 +3248,7 @@ const AdminLayout: React.FC<{ children: React.ReactNode, activeRoute: string, se
         </div>
       </aside>
 
+      {/* UPDATE PENTING GBR 2: OVERFLOW-X-HIDDEN UNTUK MENCEGAH SCROLL KE SAMPING */}
       <main className="flex-1 flex flex-col relative overflow-y-auto overflow-x-hidden w-full h-screen custom-scrollbar">
         {/* RESPONSIVE HEADER & STATUS BADGE */}
         <header className="sticky top-0 p-4 md:p-6 flex justify-between md:justify-end items-center z-30 w-full bg-[#0A1628]/80 backdrop-blur-xl border-b border-cyan-900/50 shadow-[0_4px_30px_rgba(0,0,0,0.5)]">
