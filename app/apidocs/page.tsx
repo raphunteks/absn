@@ -1,12 +1,82 @@
 "use client";
 
 import React, { useState, useEffect } from 'react';
-import { Terminal, Copy, CheckCircle2, Zap, Send, FileJson, Server, Activity, ArrowRight } from 'lucide-react';
+import { Terminal, Copy, CheckCircle2, Zap, Send, FileJson, Server, Activity, ArrowRight, Loader2 } from 'lucide-react';
+
+// ==========================================
+// UPSTASH REDIS CLOUD CLIENT (For Dynamic Fetch)
+// ==========================================
+class Redis {
+  url: string;
+  token: string;
+  
+  constructor(config: { url: string; token: string }) {
+    this.url = config.url || '';
+    this.token = config.token || '';
+    if (this.url.endsWith('/')) this.url = this.url.slice(0, -1);
+  }
+  
+  static fromEnv() {
+    let url = '';
+    let token = '';
+    if (typeof process !== 'undefined' && process.env) {
+      url = process.env.NEXT_PUBLIC_UPSTASH_REDIS_REST_URL || process.env.NEXT_PUBLIC_KV_REST_API_URL || '';
+      token = process.env.NEXT_PUBLIC_UPSTASH_REDIS_REST_TOKEN || process.env.NEXT_PUBLIC_KV_REST_API_TOKEN || '';
+    }
+    return new Redis({ url, token });
+  }
+
+  async get(key: string) {
+    if (!this.url || !this.token) return null;
+    try {
+      const res = await fetch(this.url, { 
+        method: 'POST',
+        headers: { Authorization: `Bearer ${this.token}`, 'Content-Type': 'application/json' }, 
+        body: JSON.stringify(["GET", key]), 
+        cache: 'no-store' 
+      });
+      if (!res.ok) throw new Error('Fetch failed');
+      const data = await res.json();
+      if (data.error) throw new Error(data.error);
+      if (data.result === null || data.result === undefined) return null;
+      try {
+        return typeof data.result === 'string' ? JSON.parse(data.result) : data.result;
+      } catch (e) {
+        return data.result; 
+      }
+    } catch (e) { 
+      return null; 
+    }
+  }
+}
+
+interface FormatWA { id: number; title: string; description: string; template: string; }
 
 export default function ApiDocs() {
   const [copiedReq, setCopiedReq] = useState(false);
   const [copiedRes, setCopiedRes] = useState(false);
-  const [selectedScenario, setSelectedScenario] = useState<number>(25);
+  const [selectedScenario, setSelectedScenario] = useState<number>(1);
+  const [formats, setFormats] = useState<FormatWA[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+
+  // Fetch Formats from Redis dynamically
+  useEffect(() => {
+    const fetchFormats = async () => {
+      const redis = Redis.fromEnv();
+      const dbFormats = await redis.get('axaxyz_formats');
+      if (dbFormats && dbFormats.length > 0) {
+         setFormats(dbFormats);
+         // Set default selected to the first one available
+         if (!dbFormats.find((f:any) => f.id === 25)) {
+             setSelectedScenario(dbFormats[0].id);
+         } else {
+             setSelectedScenario(25);
+         }
+      }
+      setIsLoading(false);
+    };
+    fetchFormats();
+  }, []);
 
   // Set Favicon & Title
   useEffect(() => {
@@ -23,103 +93,72 @@ export default function ApiDocs() {
     }
   }, []);
 
+  // Dummy Data for Generator Preview
+  const dummyData = {
+     namaLengkap: "M. Azhar Arsyad",
+     nim: "161202300030",
+     kelompok: "Cluster II 2025",
+     shift: "Shift Pagi",
+     jamSesi: "07:30",
+     jamTutup: "08:55",
+     jamAbsen: "07:45",
+     tanggalMulai: "01/08/2026",
+     tanggalAkhir: "31/08/2026",
+     tanggal: "19/08/2026",
+     password: "123",
+     radius: "500",
+     lokasiGeofence: "Gedung Rektorat",
+     pesanCustom: "Praktikum dialihkan ke Ruang B lantai 2 (Skenario 18)",
+     link: "https://absensi.maksaarsyad.xyz/",
+     totalMhs: "120",
+     totalHadir: "110",
+     totalTerlambat: "5",
+     totalAlpha: "5"
+  };
+
   // Dynamic JSON Generator
   const getScenarioData = (id: number) => {
     const baseReq: any = {
       no_hp: "081234567890",
       scenario: id,
-      data: {
-        namaLengkap: "M. Azhar Arsyad",
-        nim: "161202300030",
-        kelompok: "Cluster II 2025",
-        link: "https://absensi.maksaarsyad.xyz/"
-      }
+      data: dummyData
     };
 
-    let specificData = {};
-    let expectedResMsg = "";
+    const targetFormat = formats.find(f => f.id === id);
+    let expectedResMsg = targetFormat ? targetFormat.template : "Template tidak ditemukan di database...";
 
-    switch (id) {
-      case 1:
-        specificData = { shift: "Shift Pagi", jamSesi: "07:30 - 08:45", jamTutup: "08:55" };
-        expectedResMsg = "🔔 *NOTIFIKASI ABSENSI DIBUKA* 🔔\\n\\nHalo *M. Azhar Arsyad*...";
-        break;
-      case 2:
-        specificData = { shift: "Shift Pagi", jamTutup: "08:55" };
-        expectedResMsg = "⚠️ *PENGINGAT TERAKHIR ABSENSI* ⚠️\\n\\nPanggilan kepada *M. Azhar Arsyad*!...";
-        break;
-      case 3:
-         specificData = { shift: "Shift Pagi", jamAbsen: "07:45" };
-         expectedResMsg = "✅ *ABSENSI BERHASIL DITERIMA* ✅\\n\\nTerima kasih *M. Azhar Arsyad*!...";
-         break;
-      case 4:
-         specificData = { shift: "Shift Pagi", jamTutup: "08:55", statusAkhir: "Hadir", jamAbsen: "07:45" };
-         expectedResMsg = "📊 *STATUS AKHIR KEHADIRAN* 📊\\n\\nHalo *M. Azhar Arsyad*...";
-         break;
-      case 5:
-         specificData = { jamAbsen: "09:00" };
-         expectedResMsg = "🛡️ *PEMBERITAHUAN KEAMANAN SISTEM* 🛡️\\n\\nHalo *M. Azhar Arsyad*...";
-         break;
-      case 6:
-         specificData = { tanggalMulai: "01/08/2026", tanggalAkhir: "31/08/2026" };
-         expectedResMsg = "👋 *SELAMAT DATANG DI DEPT. RKG!* 🏥\\n\\nHalo *M. Azhar Arsyad*...";
-         break;
-      case 7:
-         specificData = { totalHadir: 10, totalTerlambat: 0, totalAlpha: 0 };
-         expectedResMsg = "📊 *RAPOR KEHADIRAN DEPT. RKG* 📊\\n\\nHalo *M. Azhar Arsyad*...";
-         break;
-      case 8:
-         specificData = { shift: "Shift Pagi", jamSesi: "07:00 - 08:00", jamTutup: "08:15" };
-         expectedResMsg = "🔄 *INFO PERUBAHAN JADWAL ABSENSI* 🔄\\n\\nPerhatian *M. Azhar Arsyad*...";
-         break;
-      case 9:
-         specificData = { totalAlpha: 3, totalTerlambat: 2 };
-         expectedResMsg = "🚨 *SURAT PERINGATAN KEHADIRAN (SISTEM)* 🚨\\n\\nHalo *M. Azhar Arsyad*...";
-         break;
-      case 10:
-         specificData = { shift: "Shift Pagi", jamSesi: "07:30 - 08:45", jamTutup: "08:55" };
-         expectedResMsg = "Halo *M. Azhar Arsyad*, sesi *Shift Pagi*...";
-         break;
-      case 11:
-         specificData = { jamAbsen: "07:35" };
-         expectedResMsg = "🛑 *PERINGATAN KEAMANAN AKUN* 🛑\\n\\nHalo *M. Azhar Arsyad*...";
-         break;
-      case 12:
-         specificData = { shift: "Shift Pagi", tanggal: "19/08/2026" };
-         expectedResMsg = "❌ *PEMBATALAN RIWAYAT KEHADIRAN* ❌\\n\\nPerhatian *M. Azhar Arsyad*...";
-         break;
-      case 13:
-         specificData = { lokasiGeofence: "Gedung Rektorat", radius: "500" };
-         expectedResMsg = "📍 *PEMBARUAN TITIK LOKASI ABSENSI* 📍\\n\\nHalo rekan-rekan...";
-         break;
-      case 14:
-         specificData = { password: "NewPassword123" };
-         expectedResMsg = "🔑 *PEMBARUAN KATA SANDI AKUN* 🔑\\n\\nHalo *M. Azhar Arsyad*...";
-         break;
-      case 17:
-         specificData = {};
-         expectedResMsg = "🏁 *HARI TERAKHIR STASE DEPT. RKG* 🏁\\n\\nHalo *M. Azhar Arsyad*...";
-         break;
-      case 18:
-         specificData = { pesanCustom: "Praktikum dialihkan ke Ruang B lantai 2 ya!" };
-         expectedResMsg = "📢 *PENGUMUMAN DEPT. RKG* 📢\\n\\nPraktikum dialihkan ke...";
-         break;
-      case 20:
-         specificData = { tanggal: "19/08/2026", totalMhs: 120, totalHadir: 110, totalTerlambat: 5, totalAlpha: 5 };
-         expectedResMsg = "📈 *REKAPITULASI ABSENSI HARIAN DEPT. RKG* 📈\\n\\nHalo Admin...";
-         break;
-      case 25:
-         specificData = { tanggalMulai: "01/08/2026", tanggalAkhir: "31/08/2026", password: "123" };
-         expectedResMsg = "🎉 *SELAMAT DATANG DI DEPT. RKG!* 🎉\\n\\nHalo *M. Azhar Arsyad*...";
-         break;
+    // Parse status kehadiran specifically
+    if (expectedResMsg.includes('[Status Kehadiran]')) {
+        expectedResMsg = expectedResMsg.replace(/\[Status Kehadiran\]/g, `🟢 *TEPAT WAKTU / HADIR* (Terekam pada: *${dummyData.jamAbsen}* WITA)`);
     }
 
-    baseReq.data = { ...baseReq.data, ...specificData };
+    // Replace other placeholders dynamically
+    expectedResMsg = expectedResMsg
+      .replace(/\[Nama Lengkap\]/g, dummyData.namaLengkap)
+      .replace(/\[NIM\]/g, dummyData.nim)
+      .replace(/\[Kelompok\]/g, dummyData.kelompok)
+      .replace(/\[Shift\]/g, dummyData.shift)
+      .replace(/\[Jam Sesi\]/g, dummyData.jamSesi)
+      .replace(/\[Jam Tutup\]/g, dummyData.jamTutup)
+      .replace(/\[Jam Absen\]/g, dummyData.jamAbsen)
+      .replace(/\[Tanggal Mulai\]/g, dummyData.tanggalMulai)
+      .replace(/\[Tanggal Akhir\]/g, dummyData.tanggalAkhir)
+      .replace(/\[Tanggal\]/g, dummyData.tanggal)
+      .replace(/\[Password\]/g, dummyData.password)
+      .replace(/\[Pesan Custom\]/g, dummyData.pesanCustom)
+      .replace(/\[Radius\]/g, dummyData.radius)
+      .replace(/\[Nama Lokasi Geofence\]/g, dummyData.lokasiGeofence)
+      .replace(/\[Total Mhs\]/g, dummyData.totalMhs)
+      .replace(/\[Total Hadir\]/g, dummyData.totalHadir)
+      .replace(/\[Total Terlambat\]/g, dummyData.totalTerlambat)
+      .replace(/\[Total Alpha\]/g, dummyData.totalAlpha)
+      .replace(/\[Link\]/g, dummyData.link);
 
+    // Escape newline for JSON display
     const resString = `{
   "success": true,
   "target_number": "081234567890",
-  "formatted_message": "${expectedResMsg}",
+  "formatted_message": "${expectedResMsg.replace(/\n/g, '\\n')}",
   "meta_info": {
     "scenario_executed": ${id},
     "timestamp": "${new Date().toISOString()}"
@@ -150,26 +189,15 @@ export default function ApiDocs() {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
-  const scenarios = [
-    { id: 1, title: "Pembukaan Sesi", desc: "Dikirim tepat saat jam shift dimulai." },
-    { id: 2, title: "Pengingat Sisa Waktu", desc: "Hanya untuk MHS yang belum absen (Sisa toleransi)." },
-    { id: 3, title: "Berhasil Absen", desc: "Real-time saat MHS klik Selesai." },
-    { id: 4, title: "Rekap Akhir", desc: "Status Hadir/Telat/Alpha setelah sesi ditutup." },
-    { id: 5, title: "Keamanan Logout", desc: "Pelepasan otoritas perangkat HP." },
-    { id: 6, title: "Welcome Stase", desc: "H-1 sebelum tanggal stase dimulai." },
-    { id: 7, title: "Rapor Mingguan", desc: "Persentase kehadiran per minggu." },
-    { id: 8, title: "Perubahan Jadwal", desc: "Notif saat admin mengedit jam shift." },
-    { id: 9, title: "SP Otomatis", desc: "Peringatan jika akumulasi Alpha terlalu banyak." },
-    { id: 10, title: "Pop-up Bukaan", desc: "Versi singkat pembukaan sesi." },
-    { id: 11, title: "Login Ilegal", desc: "Peringatan akses dari HP yang tidak dikenal." },
-    { id: 12, title: "Penghapusan Admin", desc: "Peringatan saat absen dibatalkan karena kecurangan." },
-    { id: 13, title: "Update GPS", desc: "Notif pergeseran titik Geofence kampus." },
-    { id: 14, title: "Ubah Password", desc: "Kredensial baru hasil reset admin." },
-    { id: 17, title: "Hari Terakhir", desc: "Pengingat cross-check di hari terakhir stase." },
-    { id: 18, title: "Pesan Broadcast", desc: "Pesan custom (pengumuman) dari Admin." },
-    { id: 20, title: "Rekap Admin", desc: "Rangkuman total Hadir/Alpha harian untuk Admin." },
-    { id: 25, title: "Onboarding Baru", desc: "Penyebaran password saat input MHS baru (Excel/Manual)." }
-  ];
+  if (isLoading) {
+     return (
+       <div className="min-h-screen bg-[#FFF06C] flex flex-col items-center justify-center p-4">
+         <Loader2 className="w-12 h-12 text-black animate-spin mb-4" />
+         <h2 className="text-xl font-black text-black tracking-widest uppercase mb-2">Memuat API Docs...</h2>
+         <p className="text-black/80 text-xs font-bold uppercase">Mengambil data Skenario dari Database Cloud</p>
+       </div>
+     );
+  }
 
   return (
     <div className="min-h-screen bg-[#FFF06C] text-black font-sans selection:bg-pink-400 selection:text-black pb-20">
@@ -205,7 +233,7 @@ export default function ApiDocs() {
             https://absensi.maksaarsyad.xyz/api/wa
           </p>
           <p className="font-bold text-lg max-w-2xl">
-            Gateway ini bertugas mengonversi <span className="bg-white border-2 border-black px-2 mx-1">JSON Payload</span> menjadi teks pesan WhatsApp yang rapi dan terstruktur sesuai <span className="bg-white border-2 border-black px-2 mx-1">Scenario ID</span>. Pilih skenario di bawah untuk melihat preview dinamis!
+            Gateway ini bertugas mengonversi <span className="bg-white border-2 border-black px-2 mx-1">JSON Payload</span> menjadi teks pesan WhatsApp yang rapi dan terstruktur sesuai <span className="bg-white border-2 border-black px-2 mx-1">Scenario ID</span>. Pilih skenario di bawah untuk melihat preview dinamis dari database!
           </p>
         </div>
 
@@ -264,20 +292,20 @@ export default function ApiDocs() {
           </div>
         </div>
 
-        {/* DICTIONARY OF SCENARIOS */}
+        {/* DICTIONARY OF SCENARIOS DARI REDIS */}
         <div className="mt-12 space-y-6">
           <div className="bg-white border-[4px] border-black shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] p-6 flex flex-col sm:flex-row justify-between items-start sm:items-center">
              <div>
-                <h3 className="text-3xl font-black uppercase tracking-wider mb-2">Daftar Skenario (Klik untuk Ubah Preview)</h3>
+                <h3 className="text-3xl font-black uppercase tracking-wider mb-2">Daftar Skenario (Load dari Database)</h3>
                 <p className="font-bold">Gunakan ID ini pada property <code className="bg-[#FFF06C] px-2 py-0.5 border-2 border-black">scenario</code> di JSON Request.</p>
              </div>
              <div className="bg-[#45AAF2] border-[3px] border-black text-black font-black uppercase px-4 py-2 mt-4 sm:mt-0 shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] rotate-2">
-               Total: 18 Templates
+                Total: {formats.length} Skenario
              </div>
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
-            {scenarios.map((sc, index) => {
+            {formats.map((sc, index) => {
               // Warna berulang untuk Neubrutalism
               const colors = ['bg-[#FF6B6B]', 'bg-[#4ECDC4]', 'bg-[#45AAF2]', 'bg-[#FF9FF3]', 'bg-[#FEEA00]', 'bg-[#A3CB38]'];
               const cardColor = colors[index % colors.length];
@@ -299,7 +327,7 @@ export default function ApiDocs() {
                     <ArrowRight className={`w-5 h-5 text-black transition-all duration-300 ${isSelected ? 'opacity-100 rotate-0' : 'opacity-0 -translate-x-2 group-hover:opacity-100 group-hover:translate-x-0'}`} strokeWidth={3} />
                   </div>
                   <h4 className="font-black uppercase text-lg leading-tight mb-1">{sc.title}</h4>
-                  <p className="font-bold text-black/80 text-xs leading-snug">{sc.desc}</p>
+                  <p className="font-bold text-black/80 text-xs leading-snug">{sc.description}</p>
                 </div>
               );
             })}
