@@ -6,8 +6,7 @@ import {
   BarChart3, Settings, FileText, LogOut, Users, Download, Plus, Trash2,
   RefreshCcw, ChevronRight, Fingerprint, Map, Activity, Key, Upload, Database, Navigation,
   Printer, X, CreditCard, Eye, EyeOff, Lock, ShieldCheck, Loader2, User, Cloud, CloudOff,
-  ServerCrash, Maximize, Menu, Network, Edit, Calendar, UserX, ScanFace, ActivitySquare, MessageSquare, Megaphone, Send,
-  ChevronLeft
+  ServerCrash, Maximize, Menu, Network, Edit, Calendar, UserX, ScanFace, ActivitySquare, MessageSquare, Megaphone, Send
 } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, AreaChart, Area } from 'recharts';
 
@@ -300,7 +299,12 @@ const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
       setGeofence(gf || defaultGeofence);
       setAdmins(ad || []);
       setFormats(fw && fw.length > 0 ? fw : initialDefaultFormatsWA);
-      setHolidays(hd || [{ id: 'h1', date: '2026-08-17', name: 'HUT Kemerdekaan RI' }]);
+      
+      // Default Hari Libur (Sabtu & Minggu otomatis ditambah jika belum ada)
+      const defaultHolidaysList: Holiday[] = hd || [
+         { id: 'h1', date: '2026-08-17', name: 'HUT Kemerdekaan RI' }
+      ];
+      setHolidays(defaultHolidaysList);
       
       setIsAppLoading(false);
     };
@@ -427,14 +431,15 @@ const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
 
      const cronInterval = setInterval(async () => {
          const now = new Date();
-         const dayOfWeek = now.getDay(); 
+         const dayOfWeek = now.getDay(); // 0 = Minggu, 6 = Sabtu
          const todayStr = getLocalYYYYMMDD(now);
 
+         // CEK APAKAH HARI INI LIBUR (Sabtu, Minggu, atau terdaftar di Manajemen Kalender)
          const isWeekend = (dayOfWeek === 0 || dayOfWeek === 6);
          const isCustomHoliday = holidays.some(h => h.date === todayStr);
 
          if (isWeekend || isCustomHoliday) {
-             return; 
+             return; // Bot WA TIDAK AKAN MENGIRIM PESAN APA PUN PADA HARI LIBUR / WEEKEND
          }
 
          const currentHHMM = now.toLocaleTimeString('id-ID', {hour: '2-digit', minute:'2-digit', hour12: false});
@@ -442,6 +447,7 @@ const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
          for (const sess of sessions) {
              if (!sess.isActive) continue;
 
+             // SKENARIO 1: PEMBUKAAN SESI
              if (sess.startTime === currentHHMM) {
                  const flagKey = `wa_scen1_${todayStr}_${sess.id}`;
                  const isSent = await CloudStore.get(flagKey);
@@ -460,6 +466,7 @@ const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
                  }
              }
 
+             // SKENARIO 2: PENGINGAT SISA WAKTU
              if (sess.endTime === currentHHMM) {
                  const flagKey = `wa_scen2_${todayStr}_${sess.id}`;
                  const isSent = await CloudStore.get(flagKey);
@@ -478,6 +485,7 @@ const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
                  }
              }
 
+             // SKENARIO 4 & 9: REKAP AKHIR & SP OTOMATIS
              const [endH, endM] = sess.endTime.split(':').map(Number);
              const endTotal = endH * 60 + endM + sess.toleranceMinutes;
              const currentTotal = now.getHours() * 60 + now.getMinutes();
@@ -512,13 +520,6 @@ const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
                                  for (let d = new Date(startD); d <= endD; d.setDate(d.getDate() + 1)) {
                                      if (d > new Date()) break;
                                      const dateStrLocal = getLocalYYYYMMDD(d);
-                                     
-                                     // Pastikan hari yang diloop BUKAN hari libur
-                                     const loopDayOfWeek = d.getDay();
-                                     const loopIsWeekend = (loopDayOfWeek === 0 || loopDayOfWeek === 6);
-                                     const loopIsCustomHoliday = holidays.some(h => h.date === dateStrLocal);
-                                     if (loopIsWeekend || loopIsCustomHoliday) continue;
-
                                      sessions.forEach(s => {
                                          if (s.isActive) {
                                              const pastLog = logs.find(l => l.nim === st.nim && getLocalYYYYMMDD(l.timestamp) === dateStrLocal && l.sessionName === s.name);
@@ -559,6 +560,7 @@ const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
              }
          }
 
+         // SKENARIO 17: HARI TERAKHIR STASE
          if (currentHHMM === '10:00') {
              const flagKey = `wa_scen17_${todayStr}`;
              const isSent = await CloudStore.get(flagKey);
@@ -573,6 +575,7 @@ const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
              }
          }
 
+         // SKENARIO 20: REKAP ADMIN
          if (currentHHMM === '23:50') {
              const flagKey = `wa_scen20_${todayStr}`;
              const isSent = await CloudStore.get(flagKey);
@@ -871,21 +874,23 @@ const StudentDashboard: React.FC<{ onStartAbsen: () => void, linkedNim: string |
         <div className="lg:col-span-2 bg-[#0A1628]/80 backdrop-blur-xl border border-cyan-500/20 p-6 md:p-8 rounded-[2rem] shadow-lg flex flex-col overflow-hidden">
           <h3 className="text-base font-black text-white mb-1 tracking-widest uppercase truncate">{myCluster?.startDate ? 'Kehadiran Periode Stase' : 'Kehadiran Mingguan'}</h3>
           <p className="text-[10px] md:text-xs text-cyan-500/70 font-mono uppercase mb-6">Jam tervalidasi, sinkronisasi otomatis ke sistem</p>
-          <div className="w-full mt-4 relative z-10 h-[300px]">
-             {staseDataList.length > 0 ? (
-               <ResponsiveContainer width="100%" height="100%">
-                 <BarChart data={staseDataList} margin={{ top: 0, right: 0, left: 0, bottom: 0 }}>
-                   <XAxis dataKey="day" axisLine={false} tickLine={false} tick={{fill: '#64748b', fontSize: 10, fontWeight: 'bold'}} dy={10} interval="preserveStartEnd" minTickGap={20} />
-                   <Tooltip cursor={{fill: '#1e293b', opacity: 0.4}} contentStyle={{backgroundColor: '#050B14', borderColor: '#8b5cf6', color: '#f8fafc', borderRadius: '1rem', fontSize: '12px'}} />
-                   <Bar dataKey="Hadir" stackId="a" fill="#10b981" barSize={staseDataList.length > 15 ? 15 : 40} />
-                   <Bar dataKey="Terlambat" stackId="a" fill="#f59e0b" />
-                   <Bar dataKey="Alpha" stackId="a" fill="#f43f5e" />
-                   <Bar dataKey="BelumAbsen" stackId="a" fill="#3b82f6" />
-                 </BarChart>
-               </ResponsiveContainer>
-             ) : (
-               <div className="h-full flex items-center justify-center text-cyan-800 font-mono text-xs uppercase tracking-widest">Data Kosong (Belum Login)</div>
-             )}
+          <div className="flex-1 w-full min-h-[200px] overflow-x-auto custom-scrollbar">
+             <div className="min-w-[400px] h-full">
+                 {staseDataList.length > 0 ? (
+                   <ResponsiveContainer width="100%" height="100%">
+                     <BarChart data={staseDataList} margin={{ top: 0, right: 0, left: 0, bottom: 0 }}>
+                       <XAxis dataKey="day" axisLine={false} tickLine={false} tick={{fill: '#64748b', fontSize: 10, fontWeight: 'bold'}} dy={10} interval="preserveStartEnd" minTickGap={20} />
+                       <Tooltip cursor={{fill: '#1e293b', opacity: 0.4}} contentStyle={{backgroundColor: '#050B14', borderColor: '#8b5cf6', color: '#f8fafc', borderRadius: '1rem', fontSize: '12px'}} />
+                       <Bar dataKey="Hadir" stackId="a" fill="#10b981" barSize={staseDataList.length > 15 ? 15 : 40} />
+                       <Bar dataKey="Terlambat" stackId="a" fill="#f59e0b" />
+                       <Bar dataKey="Alpha" stackId="a" fill="#f43f5e" />
+                       <Bar dataKey="BelumAbsen" stackId="a" fill="#3b82f6" />
+                     </BarChart>
+                   </ResponsiveContainer>
+                 ) : (
+                   <div className="h-full flex items-center justify-center text-cyan-800 font-mono text-xs uppercase tracking-widest">Data Kosong (Belum Login)</div>
+                 )}
+             </div>
           </div>
           <div className="flex justify-center gap-4 mt-6 flex-wrap">
              <div className="flex items-center gap-1.5 text-[9px] font-bold uppercase tracking-wider text-slate-300">
@@ -1687,8 +1692,7 @@ const AdminDashboardHome: React.FC = () => {
         <div className="lg:col-span-2 bg-[#0A1628]/60 backdrop-blur-md border border-cyan-500/20 p-6 rounded-[1.5rem] flex flex-col shadow-lg relative overflow-hidden">
           <div className="absolute top-0 right-0 w-32 h-32 bg-cyan-600/10 rounded-bl-[100px] pointer-events-none"></div>
           <h3 className="text-sm font-black text-cyan-50 mb-6 tracking-widest uppercase flex items-center gap-2"><Activity className="w-4 h-4 text-cyan-400"/> Tren Absensi Harian</h3>
-          
-          <div className="w-full h-[300px] relative z-10 flex flex-col">
+          <div className="flex-1 w-full min-h-[300px] h-[300px] relative z-10">
             <ResponsiveContainer width="100%" height="100%">
               <AreaChart data={trendData} margin={{ top: 0, right: 0, left: -20, bottom: 0 }}>
                 <defs>
@@ -1715,7 +1719,7 @@ const AdminDashboardHome: React.FC = () => {
         {/* PIE CHART */}
         <div className="bg-[#0A1628]/60 backdrop-blur-md border border-cyan-500/20 p-6 rounded-[1.5rem] flex flex-col shadow-lg">
           <h3 className="text-sm font-black text-cyan-50 mb-6 tracking-widest uppercase">Komposisi Kehadiran</h3>
-          <div className="w-full h-[250px]">
+          <div className="flex-1 w-full min-h-[300px] h-[300px]">
              {pieData.length > 0 ? (
                 <ResponsiveContainer width="100%" height="100%">
                   <PieChart>
@@ -1728,7 +1732,7 @@ const AdminDashboardHome: React.FC = () => {
              ) : <div className="h-full flex flex-col items-center justify-center text-cyan-800 font-mono text-xs uppercase tracking-widest"><ActivitySquare className="w-12 h-12 mb-2 opacity-50"/>Grafik Kosong</div>}
           </div>
           
-          <div className="flex justify-center gap-4 mt-auto pt-4">
+          <div className="flex justify-center gap-4 mt-2">
              {pieData.map(d => (
                 <div key={d.name} className="flex items-center gap-1.5 text-[9px] font-bold uppercase tracking-wider text-slate-300">
                    <div className="w-2.5 h-2.5 rounded-full" style={{backgroundColor: d.color}}></div>
@@ -2530,7 +2534,6 @@ const AdminCalendar: React.FC = () => {
    const [isAdding, setIsAdding] = useState(false);
    const [newDate, setNewDate] = useState('');
    const [newName, setNewName] = useState('');
-   const [currentMonth, setCurrentMonth] = useState(new Date());
 
    const handleAdd = (e: React.FormEvent) => {
       e.preventDefault();
@@ -2541,30 +2544,8 @@ const AdminCalendar: React.FC = () => {
       }
    };
 
-   // Navigasi Bulan
-   const nextMonth = () => setCurrentMonth(new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1, 1));
-   const prevMonth = () => setCurrentMonth(new Date(currentMonth.getFullYear(), currentMonth.getMonth() - 1, 1));
-
-   // Logika Pembuatan Grid Kalender Manual
-   const daysInMonth = new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1, 0).getDate();
-   const firstDayOfMonth = new Date(currentMonth.getFullYear(), currentMonth.getMonth(), 1).getDay(); // 0 = Minggu
-
-   const daysArray = [];
-   for (let i = 0; i < firstDayOfMonth; i++) {
-       daysArray.push(null);
-   }
-   for (let i = 1; i <= daysInMonth; i++) {
-       daysArray.push(i);
-   }
-
-   const monthNames = ["JANUARI", "FEBRUARI", "MARET", "APRIL", "MEI", "JUNI", "JULI", "AGUSTUS", "SEPTEMBER", "OKTOBER", "NOVEMBER", "DESEMBER"];
-   const dayNames = ["MIN", "SEN", "SEL", "RAB", "KAM", "JUM", "SAB"];
-
-   // Filter agenda libur hanya untuk bulan yang aktif dilihat
-   const monthHolidays = holidays.filter(h => {
-       const d = new Date(h.date);
-       return d.getMonth() === currentMonth.getMonth() && d.getFullYear() === currentMonth.getFullYear();
-   }).sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+   // Urutkan kalender dari yang paling dekat (recent)
+   const sortedHolidays = [...holidays].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
 
    return (
       <div className="space-y-6 animate-in fade-in duration-500 pb-10">
@@ -2576,6 +2557,18 @@ const AdminCalendar: React.FC = () => {
             <button onClick={() => setIsAdding(!isAdding)} className="flex items-center gap-2 px-5 py-3 bg-cyan-600/20 text-cyan-400 hover:bg-cyan-500/30 border border-cyan-500/50 rounded-xl transition-all duration-300 font-black uppercase tracking-widest text-xs shadow-[0_0_15px_rgba(6,182,212,0.2)]">
                <Plus className="w-4 h-4" /> Tambah Hari Libur
             </button>
+         </div>
+
+         <div className="bg-[#0A1628]/80 backdrop-blur-md border border-rose-500/30 p-5 md:p-6 rounded-3xl shadow-lg relative overflow-hidden flex items-start gap-4">
+            <div className="bg-rose-950/60 p-3 rounded-xl border border-rose-500/50 shrink-0">
+               <Calendar className="w-6 h-6 text-rose-400" />
+            </div>
+            <div>
+               <h3 className="text-sm font-black text-rose-200 tracking-widest uppercase mb-1">Akhir Pekan (Sabtu & Minggu) Otomatis Libur</h3>
+               <p className="text-xs text-rose-200/70 font-mono leading-relaxed">
+                  Sistem Bot WA Cron Job telah dikonfigurasi untuk <strong className="text-rose-400">TIDAK mengirimkan tagihan absensi / buka shift</strong> pada setiap hari Sabtu & Minggu secara otomatis. Anda hanya perlu menambahkan hari libur di luar akhir pekan (misal: Tanggal Merah) ke dalam daftar di bawah ini.
+               </p>
+            </div>
          </div>
 
          {isAdding && (
@@ -2592,111 +2585,38 @@ const AdminCalendar: React.FC = () => {
             </form>
          )}
 
-         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            
-            {/* LEFT PANEL: CALENDAR GRID */}
-            <div className="lg:col-span-2 bg-gradient-to-br from-[#050B14] to-[#0A1628] rounded-[2rem] border border-cyan-500/30 p-6 md:p-8 shadow-[0_15px_40px_rgba(0,0,0,0.5)]">
-               
-               {/* Header Calendar */}
-               <div className="flex justify-between items-center mb-8">
-                  <button onClick={prevMonth} className="p-3 bg-cyan-950/50 hover:bg-cyan-600 text-cyan-400 hover:text-white rounded-xl border border-cyan-500/30 transition-all active:scale-90">
-                     <ChevronRight className="w-5 h-5 transform rotate-180" />
-                  </button>
-                  <h3 className="text-xl md:text-2xl font-black text-cyan-50 tracking-widest">
-                     {monthNames[currentMonth.getMonth()]} {currentMonth.getFullYear()}
-                  </h3>
-                  <button onClick={nextMonth} className="p-3 bg-cyan-950/50 hover:bg-cyan-600 text-cyan-400 hover:text-white rounded-xl border border-cyan-500/30 transition-all active:scale-90">
-                     <ChevronRight className="w-5 h-5" />
-                  </button>
-               </div>
-
-               {/* Day Headers */}
-               <div className="grid grid-cols-7 gap-2 mb-4 text-center">
-                  {dayNames.map((day, idx) => (
-                     <div key={day} className={cn("text-[10px] md:text-xs font-black tracking-widest", (idx === 0 || idx === 6) ? "text-rose-400" : "text-cyan-500")}>
-                        {day}
-                     </div>
-                  ))}
-               </div>
-
-               {/* Day Grid */}
-               <div className="grid grid-cols-7 gap-2 md:gap-3">
-                  {daysArray.map((day, idx) => {
-                     if (day === null) {
-                        return <div key={`empty-${idx}`} className="aspect-square"></div>;
-                     }
-                     
-                     // Cek Status Hari
-                     const cellDateStr = getLocalYYYYMMDD(new Date(currentMonth.getFullYear(), currentMonth.getMonth(), day));
-                     const cellDayOfWeek = new Date(currentMonth.getFullYear(), currentMonth.getMonth(), day).getDay();
-                     
-                     const isWeekend = (cellDayOfWeek === 0 || cellDayOfWeek === 6);
-                     const isCustomHoliday = holidays.some(h => h.date === cellDateStr);
-                     const isToday = cellDateStr === getLocalYYYYMMDD(new Date());
-
-                     const isOffDay = isWeekend || isCustomHoliday;
-
-                     return (
-                        <div key={day} className="relative aspect-square flex items-center justify-center">
-                           <div className={cn(
-                              "w-full h-full flex flex-col items-center justify-center rounded-2xl font-bold text-sm md:text-base transition-all duration-300 border shadow-inner",
-                              isToday ? "bg-cyan-600 text-white border-cyan-400 shadow-[0_0_15px_rgba(6,182,212,0.5)]" : 
-                              isOffDay ? "bg-rose-950/20 text-rose-300 border-rose-500/20" : 
-                              "bg-[#0A1628]/50 text-cyan-50 border-cyan-500/10 hover:border-cyan-500/40"
-                           )}>
-                              {day}
-                              {isCustomHoliday && (
-                                 <div className="w-1.5 h-1.5 rounded-full bg-rose-500 mt-1 md:mt-2 shadow-[0_0_5px_rgba(244,63,94,1)]"></div>
-                              )}
-                              {isWeekend && !isCustomHoliday && (
-                                 <div className="w-1 h-1 rounded-full bg-rose-900 mt-1 md:mt-2"></div>
-                              )}
-                           </div>
-                        </div>
-                     );
-                  })}
-               </div>
-            </div>
-
-            {/* RIGHT PANEL: AGENDA / LEGEND */}
-            <div className="bg-[#0A1628]/80 rounded-[2rem] border border-cyan-500/20 p-6 md:p-8 flex flex-col h-full shadow-[0_15px_40px_rgba(0,0,0,0.5)] relative overflow-hidden">
-               <div className="absolute top-0 right-0 w-32 h-32 bg-rose-600/10 rounded-bl-[100px] pointer-events-none"></div>
-               
-               <h4 className="text-[10px] text-cyan-500 font-black tracking-[0.2em] uppercase mb-1">Daftar Agenda Bulan Ini</h4>
-               <h3 className="text-xl font-black text-cyan-50 tracking-widest uppercase mb-6 pb-4 border-b border-cyan-500/20">
-                  {monthNames[currentMonth.getMonth()]} {currentMonth.getFullYear()}
-               </h3>
-
-               <div className="flex-1 overflow-y-auto custom-scrollbar pr-2 space-y-4">
-                  
-                  {/* Default Note for Weekends */}
-                  <div className="p-4 rounded-2xl bg-rose-950/30 border border-rose-500/20 relative group">
-                     <div className="absolute top-0 left-0 w-1 h-full bg-rose-900 rounded-l-2xl"></div>
-                     <h4 className="font-bold text-rose-300 text-sm tracking-wider uppercase mb-1 ml-2">Akhir Pekan</h4>
-                     <p className="text-[10px] font-mono text-rose-400/80 ml-2">Hari Sabtu & Minggu (Default Libur)</p>
-                  </div>
-
-                  {/* Custom Holidays List */}
-                  {monthHolidays.length === 0 ? (
-                     <div className="text-center py-8">
-                        <Calendar className="w-8 h-8 mx-auto text-cyan-800 mb-2 opacity-50" />
-                        <p className="text-[10px] text-cyan-600 font-mono tracking-widest uppercase">Tidak ada hari libur nasional tambahan bulan ini.</p>
-                     </div>
-                  ) : (
-                     monthHolidays.map((h, i) => (
-                        <div key={h.id || i} className="p-4 rounded-2xl bg-[#050B14] border border-rose-500/40 relative group hover:shadow-[0_0_15px_rgba(244,63,94,0.2)] transition-shadow">
-                           <div className="absolute top-0 left-0 w-1 h-full bg-rose-500 rounded-l-2xl shadow-[0_0_5px_rgba(244,63,94,0.8)]"></div>
-                           <button onClick={() => {if(confirm(`Hapus hari libur: ${h.name}?`)) deleteHoliday(h.id);}} className="absolute top-4 right-4 text-rose-500/50 hover:text-rose-400"><Trash2 className="w-4 h-4"/></button>
-                           <div className="ml-2">
-                              <span className="inline-block px-2 py-1 bg-rose-950/80 text-rose-400 text-[8px] font-black tracking-widest uppercase rounded mb-2 border border-rose-500/20">Tanggal Merah</span>
-                              <h4 className="font-bold text-rose-100 text-sm tracking-wider uppercase mb-1 pr-6">{h.name}</h4>
-                              <p className="text-[10px] font-mono text-rose-400/80 flex items-center gap-1.5"><Calendar className="w-3 h-3"/> {new Date(h.date).toLocaleDateString('id-ID', {weekday:'long', day:'numeric', month:'long', year:'numeric'})}</p>
-                           </div>
-                        </div>
-                     ))
-                  )}
-               </div>
-
+         <div className="bg-[#0A1628]/60 backdrop-blur-md border border-cyan-500/20 rounded-[1.5rem] overflow-hidden flex flex-col shadow-xl">
+            <div className="overflow-x-auto custom-scrollbar">
+               <table className="w-full text-left border-collapse min-w-[600px]">
+                  <thead>
+                     <tr className="bg-[#050B14]/80 border-b border-cyan-500/30 text-cyan-500 text-[10px] tracking-[0.2em] uppercase font-black">
+                        <th className="p-4 md:p-5 w-48">Tanggal</th>
+                        <th className="p-4 md:p-5">Keterangan Libur</th>
+                        <th className="p-4 md:p-5 text-right w-32">Opsi</th>
+                     </tr>
+                  </thead>
+                  <tbody className="divide-y divide-cyan-900/30">
+                     {sortedHolidays.map((h, i) => (
+                        <tr key={h.id || i} className="hover:bg-cyan-900/20 transition-colors duration-200 text-cyan-50 group">
+                           <td className="p-4 md:p-5">
+                              <span className="font-mono text-sm tracking-widest font-bold text-rose-300 bg-rose-950/40 px-3 py-1.5 rounded-lg border border-rose-500/30 inline-flex items-center gap-2">
+                                 <Calendar className="w-3.5 h-3.5"/>
+                                 {new Date(h.date).toLocaleDateString('id-ID', {day: '2-digit', month: 'long', year: 'numeric'})}
+                              </span>
+                           </td>
+                           <td className="p-4 md:p-5 font-bold text-sm uppercase tracking-wide">{h.name}</td>
+                           <td className="p-4 md:p-5 text-right">
+                              <button onClick={() => {if(confirm(`Hapus kalender libur ${h.name}?`)) deleteHoliday(h.id);}} className="p-2.5 text-rose-500 hover:text-white hover:bg-rose-600 rounded-xl transition-all duration-300 border border-transparent hover:border-rose-500/50 hover:shadow-[0_0_15px_rgba(244,63,94,0.4)] active:scale-95">
+                                 <Trash2 className="w-5 h-5" />
+                              </button>
+                           </td>
+                        </tr>
+                     ))}
+                     {sortedHolidays.length === 0 && (
+                        <tr><td colSpan={3} className="p-16 text-center text-cyan-800 font-mono text-sm uppercase tracking-widest">Belum ada hari libur yang ditambahkan.</td></tr>
+                     )}
+                  </tbody>
+               </table>
             </div>
          </div>
       </div>
@@ -2706,6 +2626,471 @@ const AdminCalendar: React.FC = () => {
 // ==========================================
 // ADMIN OTHER COMPONENTS
 // ==========================================
+
+const AdminReports: React.FC = () => {
+  const { logs, sessions, clusters, students, deleteLog, sendWA } = useAppContext();
+  const [search, setSearch] = useState('');
+  const [filterSession, setFilterSession] = useState('All');
+  const [filterCluster, setFilterCluster] = useState('All');
+  const { startObj, endObj, FilterUI } = useDateFilter();
+  const [previewImage, setPreviewImage] = useState<string | null>(null);
+
+  const filteredLogs = logs.filter(log => {
+    const matchSearch = log.name.toLowerCase().includes(search.toLowerCase()) || log.nim.includes(search);
+    const matchSession = filterSession === 'All' || log.sessionName === filterSession;
+    const clusterName = clusters.find(c => c.id === filterCluster)?.name;
+    const matchCluster = filterCluster === 'All' || log.clusterName === clusterName;
+    const logDate = new Date(log.timestamp);
+    const inDateRange = logDate >= startObj && logDate <= endObj;
+    return matchSearch && matchSession && matchCluster && inDateRange;
+  });
+
+  return (
+    <div className="space-y-6 animate-in fade-in duration-500 h-full flex flex-col relative w-full pb-10">
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+        <div>
+           <h2 className="text-2xl md:text-3xl font-black text-cyan-50 tracking-widest uppercase">Riwayat Kehadiran</h2>
+           <p className="text-cyan-500/70 text-xs md:text-sm font-mono mt-1 uppercase">Data waktu, lokasi, dan foto absensi mahasiswa</p>
+        </div>
+        <button onClick={() => exportToExcel(filteredLogs)} className="w-full md:w-auto flex items-center justify-center gap-3 px-8 py-3.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white rounded-xl transition-all duration-300 font-black tracking-widest uppercase text-xs shadow-[0_0_20px_rgba(16,185,129,0.4)] active:scale-95">
+           <Download className="w-4 h-4" /> Download Laporan (Excel)
+        </button>
+      </div>
+
+      <div className="flex flex-col md:flex-row gap-3 md:gap-4 bg-[#0A1628]/60 p-4 rounded-2xl border border-cyan-500/20 shadow-lg items-end">
+        <FilterUI />
+        <div className="flex flex-col gap-1 flex-1 w-full md:w-auto">
+           <label className="text-[9px] text-cyan-500 uppercase tracking-widest font-bold">Pencarian Data</label>
+           <div className="relative w-full">
+              <SearchIcon className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-cyan-600" />
+              <input type="text" placeholder="Cari Nama atau NIM..." value={search} onChange={e=>setSearch(e.target.value)} className="w-full bg-[#050B14] border border-cyan-500/30 rounded-xl pl-11 pr-4 h-11 text-cyan-50 outline-none focus:border-cyan-400 transition-colors shadow-inner font-mono text-sm" />
+           </div>
+        </div>
+        <div className="flex flex-col gap-1 w-full sm:w-auto">
+           <label className="text-[9px] text-cyan-500 uppercase tracking-widest font-bold">Filter Kelompok</label>
+           <div className="flex items-center bg-[#050B14] border border-cyan-500/30 rounded-xl px-2 h-11 w-full sm:w-auto focus-within:border-cyan-400 transition-colors">
+              <select value={filterCluster} onChange={e=>setFilterCluster(e.target.value)} className="bg-transparent text-cyan-50 text-xs font-bold uppercase outline-none cursor-pointer px-3 w-full sm:w-40 h-full">
+                <option value="All">Semua Kelompok</option>
+                {clusters.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+              </select>
+           </div>
+        </div>
+        <div className="flex flex-col gap-1 w-full sm:w-auto">
+           <label className="text-[9px] text-cyan-500 uppercase tracking-widest font-bold">Jadwal Shift</label>
+           <div className="flex items-center bg-[#050B14] border border-cyan-500/30 rounded-xl px-2 h-11 w-full sm:w-auto focus-within:border-cyan-400 transition-colors">
+              <select value={filterSession} onChange={e=>setFilterSession(e.target.value)} className="bg-transparent text-cyan-50 text-xs font-bold uppercase outline-none cursor-pointer px-3 w-full sm:w-40 h-full">
+                <option value="All">Semua Shift</option>
+                {sessions.map(s => <option key={s.id} value={s.name}>{s.name}</option>)}
+              </select>
+           </div>
+        </div>
+      </div>
+
+      <div className="flex-1 bg-[#0A1628]/60 backdrop-blur-md border border-cyan-500/20 rounded-[1.5rem] overflow-hidden flex flex-col shadow-xl">
+        <div className="overflow-x-auto custom-scrollbar">
+          <table className="w-full text-left border-collapse min-w-[1000px]">
+            <thead>
+              <tr className="bg-[#050B14]/80 border-b border-cyan-500/30 text-cyan-500 text-[10px] tracking-[0.2em] uppercase font-black">
+                <th className="p-4 md:p-5">Foto Absen</th>
+                <th className="p-4 md:p-5">Data Mahasiswa</th>
+                <th className="p-4 md:p-5">Waktu Kehadiran</th>
+                <th className="p-4 md:p-5">Jadwal Shift</th>
+                <th className="p-4 md:p-5">Lokasi Absen</th>
+                <th className="p-4 md:p-5 text-right">Opsi</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-cyan-900/30">
+              {filteredLogs.map(log => (
+                <tr key={log.id} className="hover:bg-cyan-900/20 transition-colors duration-200">
+                  <td className="p-4 md:p-5">
+                    <div onClick={() => setPreviewImage(log.photoBase64)} className="w-16 h-16 rounded-xl overflow-hidden border-2 border-cyan-500/40 bg-black relative group cursor-pointer shadow-md hover:shadow-[0_0_15px_rgba(6,182,212,0.6)] hover:border-cyan-300 transition-all duration-300">
+                      <img src={log.photoBase64} alt="Selfie" className="w-full h-full object-cover" />
+                      <div className="absolute inset-0 bg-[#0A1628]/60 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity backdrop-blur-sm">
+                        <Maximize className="w-5 h-5 text-cyan-400" />
+                      </div>
+                    </div>
+                  </td>
+                  <td className="p-4 md:p-5">
+                     <p className="font-bold text-cyan-50 text-sm uppercase tracking-wide truncate max-w-[200px] mb-1">{log.name}</p>
+                     <p className="text-xs text-cyan-400/80 font-mono tracking-widest">{log.nim}</p>
+                     <p className="text-[9px] mt-2 inline-block px-2 py-0.5 bg-cyan-950 text-cyan-300 rounded border border-cyan-500/20 font-bold uppercase tracking-wider">{log.clusterName || 'Tanpa Kelompok'}</p>
+                  </td>
+                  <td className="p-4 md:p-5">
+                     <p className="text-cyan-50 font-black font-mono text-base tracking-wider mb-1 drop-shadow-md">{new Date(log.timestamp).toLocaleTimeString('id-ID')}</p>
+                     <p className="text-[10px] md:text-xs text-cyan-500/80 font-mono uppercase tracking-widest">{new Date(log.timestamp).toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'short' })}</p>
+                  </td>
+                  <td className="p-4 md:p-5">
+                     <p className="text-cyan-200 text-xs font-bold uppercase tracking-widest mb-2">{log.sessionName}</p>
+                     <span className={cn("px-3 py-1 text-[9px] font-black uppercase tracking-[0.2em] rounded-md border shadow-sm", log.status === 'Hadir' ? "bg-emerald-950/50 text-emerald-400 border-emerald-500/40 shadow-[0_0_10px_rgba(16,185,129,0.2)]" : "bg-amber-950/50 text-amber-400 border-amber-500/40 shadow-[0_0_10px_rgba(245,158,11,0.2)]")}>{log.status}</span>
+                  </td>
+                  <td className="p-4 md:p-5">
+                    <a href={`https://www.google.com/maps?q=${log.location.lat},${log.location.lng}`} target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 px-3 py-2 bg-cyan-950/50 hover:bg-cyan-600 hover:text-white text-cyan-400 text-[9px] font-black uppercase tracking-[0.2em] rounded-lg border border-cyan-500/40 transition-all duration-300 shadow-sm active:scale-95">
+                      <MapPin className="w-3 h-3" /> Buka Peta
+                    </a>
+                    <p className="text-[9px] text-cyan-600/70 mt-2.5 font-mono uppercase tracking-widest bg-[#050B14] inline-block px-2 py-1 rounded-md border border-cyan-900/50">{log.location.lat.toFixed(5)}, {log.location.lng.toFixed(5)}</p>
+                  </td>
+                  <td className="p-4 md:p-5 text-right">
+                    <button onClick={() => { 
+                       if(confirm(`Yakin ingin menghapus riwayat kehadiran ${log.name}?`)) {
+                          deleteLog(log.id); 
+                          
+                          // TRIGGER WA SKENARIO 12: PENGHAPUSAN ADMIN
+                          const st = students.find(s => s.nim === log.nim);
+                          if(st?.noHp) {
+                             sendWA(st.noHp, 12, {
+                                namaLengkap: log.name,
+                                kelompok: log.clusterName,
+                                shift: log.sessionName,
+                                tanggal: new Date(log.timestamp).toLocaleDateString('id-ID')
+                             });
+                          }
+                       }
+                    }} title="Hapus Riwayat" className="p-2.5 text-rose-500 hover:text-white hover:bg-rose-600 rounded-xl transition-all duration-300 border border-transparent hover:border-rose-500/50 hover:shadow-[0_0_15px_rgba(244,63,94,0.4)] active:scale-95">
+                      <Trash2 className="w-5 h-5" />
+                    </button>
+                  </td>
+                </tr>
+              ))}
+              {filteredLogs.length === 0 && <tr><td colSpan={6} className="p-16 text-center text-cyan-800 font-mono text-sm uppercase tracking-widest">Belum ada riwayat absensi.</td></tr>}
+            </tbody>
+          </table>
+        </div>
+      </div>
+      
+      {previewImage && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-[#050B14]/95 backdrop-blur-2xl p-4 animate-in fade-in zoom-in-95 duration-300" onClick={() => setPreviewImage(null)}>
+          <div className="relative max-w-3xl w-full flex flex-col items-center justify-center">
+            <button onClick={() => setPreviewImage(null)} className="absolute -top-14 md:-top-16 right-0 md:-right-8 p-3 bg-rose-950/50 hover:bg-rose-500 hover:text-white rounded-xl transition-all duration-300 text-rose-400 shadow-[0_0_15px_rgba(244,63,94,0.2)] active:scale-90 border border-rose-500/30">
+              <X className="w-6 h-6"/>
+            </button>
+            <div className="relative w-full overflow-hidden rounded-[2rem] border-[4px] md:border-[8px] border-cyan-500/30 shadow-[0_0_80px_rgba(6,182,212,0.4)] bg-black">
+                <div className="absolute inset-0 pointer-events-none bg-[linear-gradient(transparent_95%,rgba(6,182,212,0.2)_100%),linear-gradient(90deg,transparent_95%,rgba(6,182,212,0.2)_100%)] bg-[length:40px_40px] mix-blend-screen opacity-50"></div>
+                <img src={previewImage} alt="Preview Foto Absen" className="max-w-full max-h-[75vh] md:max-h-[85vh] w-full object-contain mx-auto" onClick={e => e.stopPropagation()} />
+            </div>
+            <p className="mt-5 text-cyan-400 text-[10px] font-mono tracking-[0.2em] bg-[#0A1628] px-4 py-2 rounded-lg border border-cyan-500/20 uppercase">Ketuk area luar untuk menutup foto</p>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
+const AdminGeofence: React.FC = () => {
+  const { geofence, updateGeofence, students, sendWA } = useAppContext();
+  const [lat, setLat] = useState(geofence.lat.toString());
+  const [lng, setLng] = useState(geofence.lng.toString());
+  const [radius, setRadius] = useState(geofence.radius.toString());
+  const [locationName, setLocationName] = useState(geofence.name || 'Gedung Kampus Pusat');
+
+  const handleSave = (e: React.FormEvent) => {
+    e.preventDefault();
+    updateGeofence({ lat: parseFloat(lat), lng: parseFloat(lng), radius: parseInt(radius), name: locationName });
+    alert('Pengaturan lokasi absensi berhasil disimpan!');
+    
+    // TRIGGER WA SKENARIO 13: UPDATE GPS
+    if (confirm('Apakah Anda ingin mengirimkan notifikasi pembaruan titik lokasi ke seluruh mahasiswa?')) {
+        students.forEach(st => {
+           if(st.noHp) {
+              sendWA(st.noHp, 13, { 
+                 lokasiGeofence: locationName, 
+                 radius: radius.toString() 
+              });
+           }
+        });
+        alert('Notifikasi pembaruan lokasi sedang dikirim...');
+    }
+  };
+
+  const getMyLocation = () => {
+    if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        (pos) => { setLat(pos.coords.latitude.toString()); setLng(pos.coords.longitude.toString()); },
+        () => alert('Gagal mendeteksi lokasi GPS Anda saat ini.')
+      );
+    }
+  };
+
+  return (
+    <div className="space-y-6 animate-in fade-in duration-500 max-w-3xl pb-10">
+      <div>
+        <h2 className="text-2xl md:text-3xl font-black text-cyan-50 tracking-widest uppercase">Pengaturan Lokasi Absen</h2>
+        <p className="text-cyan-500/70 text-xs md:text-sm font-mono mt-1 uppercase">Tentukan batas area kampus atau tempat kerja</p>
+      </div>
+
+      <form onSubmit={handleSave} className="bg-[#0A1628]/80 backdrop-blur-md border border-cyan-500/30 p-6 md:p-8 rounded-[2rem] space-y-6 md:space-y-8 shadow-[0_15px_40px_rgba(0,0,0,0.5)]">
+        <div className="p-5 bg-cyan-950/30 border border-cyan-500/30 rounded-2xl flex items-start gap-4 shadow-inner relative overflow-hidden">
+          <div className="absolute left-0 top-0 w-1 h-full bg-cyan-500"></div>
+          <Navigation className="w-7 h-7 text-cyan-400 mt-1 shrink-0 drop-shadow-[0_0_8px_rgba(6,182,212,0.8)]" />
+          <p className="text-xs text-cyan-100/90 leading-relaxed font-mono uppercase tracking-wide">Mahasiswa hanya bisa melakukan absen jika lokasi GPS mereka berada dalam jangkauan jarak (<b>Batas Radius Maksimal</b>) dari koordinat lokasi yang Anda tentukan di bawah ini.</p>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-5 md:gap-6">
+          <div className="space-y-1.5 md:col-span-2">
+             <label className="text-[10px] text-cyan-500 font-bold uppercase tracking-widest ml-1">Nama Lokasi Absen</label>
+             <input required type="text" value={locationName} onChange={e=>setLocationName(e.target.value)} className="w-full bg-[#050B14] border border-cyan-500/30 rounded-xl px-4 py-3.5 text-cyan-50 outline-none focus:border-cyan-400 transition-colors shadow-inner text-sm font-mono" placeholder="Contoh: Gedung Rektorat" />
+          </div>
+          <div className="space-y-1.5">
+            <label className="text-[10px] text-cyan-500 font-bold uppercase tracking-widest ml-1">Latitude</label>
+            <input required type="number" step="any" value={lat} onChange={e=>setLat(e.target.value)} className="w-full bg-[#050B14] border border-cyan-500/30 rounded-xl px-4 py-3.5 text-cyan-50 outline-none focus:border-cyan-400 transition-colors shadow-inner font-mono text-sm" />
+          </div>
+          <div className="space-y-1.5">
+            <label className="text-[10px] text-cyan-500 font-bold uppercase tracking-widest ml-1">Longitude</label>
+            <input required type="number" step="any" value={lng} onChange={e=>setLng(e.target.value)} className="w-full bg-[#050B14] border border-cyan-500/30 rounded-xl px-4 py-3.5 text-cyan-50 outline-none focus:border-cyan-400 transition-colors shadow-inner font-mono text-sm" />
+          </div>
+        </div>
+
+        <div className="space-y-1.5">
+           <label className="text-[10px] text-cyan-500 font-bold uppercase tracking-widest ml-1">Batas Jarak Radius (Meter)</label>
+           <input required type="number" min="10" value={radius} onChange={e=>setRadius(e.target.value)} className="w-full bg-[#050B14] border border-cyan-500/30 rounded-xl px-4 py-4 text-cyan-400 outline-none focus:border-cyan-400 transition-colors shadow-inner font-black text-lg md:text-xl text-center tracking-widest" />
+        </div>
+
+        <div className="flex flex-col md:flex-row gap-3 md:gap-4 pt-8 border-t border-cyan-900/50">
+          <button type="button" onClick={getMyLocation} className="w-full md:w-auto px-6 py-4 bg-[#050B14] hover:bg-cyan-950/40 border border-cyan-500/40 text-cyan-400 font-black tracking-widest uppercase text-xs rounded-xl transition-all duration-300 flex items-center justify-center gap-3 active:scale-95 shadow-sm">
+            <MapPin className="w-4 h-4" /> Gunakan Lokasi Saya Saat Ini
+          </button>
+          <button type="submit" className="w-full md:flex-1 py-4 bg-cyan-600 hover:bg-cyan-500 text-white font-black tracking-[0.15em] uppercase text-xs rounded-xl transition-all duration-300 shadow-[0_0_20px_rgba(6,182,212,0.4)] active:scale-95 border border-cyan-400/50">
+            Simpan Lokasi
+          </button>
+        </div>
+      </form>
+    </div>
+  );
+};
+
+const AdminSettings: React.FC = () => {
+  const { sessions, updateSession, addSession, deleteSession, students, sendWA } = useAppContext();
+  const [isAdding, setIsAdding] = useState(false);
+  const [editingSessId, setEditingSessId] = useState<string | null>(null);
+
+  const [formSess, setFormSess] = useState({ name: '', startTime: '', endTime: '', toleranceMinutes: 15 });
+
+  const handleSave = (e: React.FormEvent) => {
+    e.preventDefault(); 
+    if (editingSessId) {
+       updateSession(editingSessId, { ...formSess });
+       
+       // TRIGGER WA SKENARIO 8: PERUBAHAN JADWAL
+       if (confirm('Kirim notifikasi ke mahasiswa terkait adanya penyesuaian jadwal pada shift ini?')) {
+           students.forEach(st => {
+               if(st.noHp) {
+                   sendWA(st.noHp, 8, {
+                       namaLengkap: st.name,
+                       shift: formSess.name,
+                       jamSesi: formSess.startTime,
+                       jamTutup: formSess.endTime
+                   });
+               }
+           });
+       }
+    } else {
+       addSession({ ...formSess, isActive: true }); 
+    }
+    setIsAdding(false); setEditingSessId(null); 
+    setFormSess({ name: '', startTime: '', endTime: '', toleranceMinutes: 15 });
+  };
+
+  const startEdit = (sess: Session) => {
+     setIsAdding(true);
+     setEditingSessId(sess.id);
+     setFormSess({ name: sess.name, startTime: sess.startTime, endTime: sess.endTime, toleranceMinutes: sess.toleranceMinutes });
+  }
+
+  const cancelForm = () => {
+     setIsAdding(false); setEditingSessId(null);
+     setFormSess({ name: '', startTime: '', endTime: '', toleranceMinutes: 15 });
+  }
+
+  return (
+    <div className="space-y-6 animate-in fade-in duration-500 pb-10">
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+        <div>
+           <h2 className="text-2xl md:text-3xl font-black text-cyan-50 tracking-widest uppercase">Pengaturan Jadwal Shift</h2>
+           <p className="text-cyan-500/70 text-xs md:text-sm font-mono mt-1 uppercase">Kelola jadwal jam kehadiran mahasiswa</p>
+        </div>
+        <button onClick={() => {cancelForm(); setIsAdding(true);}} className="flex items-center gap-2 px-6 py-3 bg-cyan-600/20 text-cyan-400 hover:bg-cyan-500/30 border border-cyan-500/50 rounded-xl transition-all duration-300 font-black uppercase tracking-widest text-xs shadow-[0_0_15px_rgba(6,182,212,0.2)] w-full md:w-auto justify-center">
+           <Plus className="w-4 h-4" /> Tambah Jadwal Baru
+        </button>
+      </div>
+
+      {isAdding && (
+        <form onSubmit={handleSave} className="bg-[#0A1628]/90 backdrop-blur-md border border-cyan-500/50 p-6 md:p-8 rounded-3xl grid grid-cols-1 md:grid-cols-5 gap-5 md:gap-6 items-end animate-in slide-in-from-top-4 shadow-[0_15px_40px_rgba(0,0,0,0.5)] relative">
+
+          <div className="absolute top-4 right-4 cursor-pointer text-cyan-600 hover:text-cyan-400" onClick={cancelForm}><X className="w-5 h-5"/></div>
+
+          <div className="space-y-1.5 md:col-span-2">
+             <label className="text-[10px] text-cyan-500 font-bold uppercase tracking-widest ml-1">Nama Shift</label>
+             <input required type="text" value={formSess.name} onChange={e=>setFormSess({...formSess, name: e.target.value})} className="w-full bg-[#050B14] border border-cyan-500/30 rounded-xl px-4 py-3.5 text-cyan-50 outline-none focus:border-cyan-400 font-mono text-sm" placeholder="Contoh: Shift Pagi / Kelas A" />
+          </div>
+          <div className="space-y-1.5">
+             <label className="text-[10px] text-cyan-500 font-bold uppercase tracking-widest ml-1">Jam Mulai</label>
+             <input required type="time" value={formSess.startTime} onChange={e=>setFormSess({...formSess, startTime: e.target.value})} className="w-full bg-[#050B14] border border-cyan-500/30 rounded-xl px-4 py-3.5 text-cyan-50 outline-none focus:border-cyan-400 font-mono text-sm" />
+          </div>
+          <div className="space-y-1.5">
+             <label className="text-[10px] text-cyan-500 font-bold uppercase tracking-widest ml-1">Jam Berakhir</label>
+             <input required type="time" value={formSess.endTime} onChange={e=>setFormSess({...formSess, endTime: e.target.value})} className="w-full bg-[#050B14] border border-cyan-500/30 rounded-xl px-4 py-3.5 text-cyan-50 outline-none focus:border-cyan-400 font-mono text-sm" />
+          </div>
+          <div className="space-y-1.5">
+             <label className="text-[10px] text-cyan-500 font-bold uppercase tracking-widest ml-1">Toleransi Tutup Sesi (+ Dari Berakhir)</label>
+             <div className="relative">
+                <input required type="number" min="0" value={formSess.toleranceMinutes} onChange={e=>setFormSess({...formSess, toleranceMinutes: parseInt(e.target.value)})} className="w-full bg-[#050B14] border border-cyan-500/30 rounded-xl pl-4 pr-12 py-3.5 text-cyan-50 outline-none focus:border-cyan-400 font-mono text-sm" />
+                <span className="absolute right-4 top-1/2 -translate-y-1/2 text-cyan-600 text-xs font-mono font-bold">MENIT</span>
+             </div>
+          </div>
+          <button type="submit" className="md:col-span-5 w-full py-4 bg-cyan-600 hover:bg-cyan-500 text-white font-black uppercase tracking-widest text-xs rounded-xl transition-all duration-300 shadow-[0_0_15px_rgba(6,182,212,0.4)] active:scale-95 mt-2">
+             {editingSessId ? 'Simpan Perubahan' : 'Buat Jadwal Shift'}
+          </button>
+        </form>
+      )}
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 md:gap-6">
+        {sessions.map(session => (
+          <div key={session.id} className={cn("p-6 rounded-[2rem] border transition-all duration-300 hover:shadow-lg group relative overflow-hidden", session.isActive ? "bg-[#0A1628]/80 border-cyan-500/30 hover:border-cyan-400/60 backdrop-blur-md shadow-[0_10px_30px_rgba(0,0,0,0.5)]" : "bg-[#050B14]/80 opacity-60 border-cyan-900 hover:opacity-100")}>
+            
+            <div className="absolute top-0 right-0 w-24 h-24 bg-cyan-600/5 rounded-bl-full pointer-events-none"></div>
+
+            <div className="flex justify-between items-start mb-6 relative z-10">
+              <h3 className="text-xl font-black text-cyan-50 uppercase tracking-widest max-w-[60%]">{session.name}</h3>
+              <div className="flex gap-2">
+                <button onClick={() => updateSession(session.id, { isActive: !session.isActive })} className={cn("px-4 py-2 text-[9px] font-black uppercase tracking-widest rounded-lg border transition-all duration-300 shadow-sm active:scale-95 flex items-center gap-1", session.isActive ? "bg-emerald-950/50 text-emerald-400 border-emerald-500/40 shadow-[0_0_10px_rgba(16,185,129,0.2)]" : "bg-slate-900/80 text-slate-500 border-slate-700")}>
+                   {session.isActive ? <><Activity className="w-3 h-3"/> Aktif</> : 'Nonaktif'}
+                </button>
+              </div>
+            </div>
+            
+            <div className="space-y-4 text-xs font-mono bg-[#050B14] p-5 rounded-2xl border border-cyan-500/20 relative z-10 shadow-inner">
+              <div className="flex justify-between items-center text-cyan-400/80">
+                 <div className="flex items-center gap-3"><Clock className="w-4 h-4 text-cyan-500"/> Jam Tepat Waktu</div>
+                 <span className="text-cyan-50 font-bold bg-[#0A1628] px-3 py-1.5 rounded-lg border border-cyan-500/20">{session.startTime} - {session.endTime}</span>
+              </div>
+              <div className="flex justify-between items-center text-cyan-400/80">
+                 <div className="flex items-center gap-3"><ActivitySquare className="w-4 h-4 text-purple-500"/> Toleransi (Tutup Sesi)</div>
+                 <span className="text-purple-300 font-bold bg-purple-950/40 px-3 py-1.5 rounded-lg border border-purple-500/30">+{session.toleranceMinutes} Menit</span>
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-2 mt-5 relative z-10">
+               <button onClick={() => startEdit(session)} className="flex items-center gap-2 px-4 py-2 text-[10px] font-black uppercase tracking-widest bg-blue-950/50 text-blue-400 hover:bg-blue-600 hover:text-white border border-blue-500/30 rounded-xl transition-all duration-300 active:scale-95">
+                 <Edit className="w-3.5 h-3.5" /> Edit
+               </button>
+               <button onClick={() => {if(confirm(`Yakin ingin menghapus jadwal ${session.name}?`)) deleteSession(session.id);}} className="flex items-center gap-2 px-4 py-2 text-[10px] font-black uppercase tracking-widest bg-rose-950/50 text-rose-400 hover:bg-rose-600 hover:text-white border border-rose-500/30 rounded-xl transition-all duration-300 active:scale-95">
+                 <Trash2 className="w-3.5 h-3.5" /> Hapus
+               </button>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+};
+
+const AdminManagement: React.FC = () => {
+  const { admins, addAdmin, updateAdmin, deleteAdmin } = useAppContext();
+  const [isAdding, setIsAdding] = useState(false);
+  const [newAd, setNewAd] = useState({ username: '', password: '', noHp: '' });
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editUser, setEditUser] = useState('');
+  const [editPass, setEditPass] = useState('');
+  const [editHp, setEditHp] = useState('');
+
+  const handleAdd = (e: React.FormEvent) => {
+    e.preventDefault();
+    if(newAd.username.trim() && newAd.password.trim()) {
+       let phone = newAd.noHp.trim();
+       if (phone.startsWith('0')) phone = '62' + phone.substring(1);
+       addAdmin({ ...newAd, noHp: phone });
+       setIsAdding(false); 
+       setNewAd({ username: '', password: '', noHp: '' });
+    }
+  };
+
+  const handleUpdate = (e: React.FormEvent) => {
+     e.preventDefault();
+     if(editingId && editUser.trim()) {
+        let phone = editHp.trim();
+        if (phone.startsWith('0')) phone = '62' + phone.substring(1);
+        updateAdmin(editingId, { username: editUser, password: editPass, noHp: phone });
+        setEditingId(null); 
+        setEditUser('');
+        setEditPass('');
+        setEditHp('');
+     }
+  }
+
+  return (
+    <div className="space-y-6 animate-in fade-in duration-500 pb-10">
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+        <div>
+          <h2 className="text-2xl md:text-3xl font-black text-cyan-50 tracking-widest uppercase">Kelola Akun Admin</h2>
+          <p className="text-cyan-500/70 text-xs md:text-sm font-mono uppercase mt-1">Tambah atau atur akses masuk ke Dashboard</p>
+        </div>
+        <button onClick={() => setIsAdding(!isAdding)} className="flex items-center gap-2 px-5 py-3 bg-cyan-600/20 text-cyan-400 hover:bg-cyan-500/30 border border-cyan-500/50 rounded-xl transition-all duration-300 font-black uppercase tracking-widest text-xs shadow-[0_0_15px_rgba(6,182,212,0.2)]">
+          <Plus className="w-4 h-4" /> Tambah Admin Baru
+        </button>
+      </div>
+
+      {isAdding && (
+        <form onSubmit={handleAdd} className="bg-[#0A1628]/80 backdrop-blur-md border border-cyan-500/30 p-5 md:p-6 rounded-2xl flex flex-col md:flex-row gap-4 items-end shadow-xl animate-in slide-in-from-top-4">
+          <div className="flex-1 space-y-1.5 w-full">
+            <label className="text-[10px] md:text-xs text-cyan-500 font-bold uppercase tracking-widest ml-1">Username</label>
+            <input required type="text" value={newAd.username} onChange={e=>setNewAd({...newAd, username: e.target.value})} className="w-full bg-[#050B14] border border-cyan-500/30 rounded-xl px-4 py-3.5 text-white outline-none focus:border-cyan-400 transition-colors text-sm font-mono" placeholder="Ketik Username..." />
+          </div>
+          <div className="flex-1 space-y-1.5 w-full">
+            <label className="text-[10px] md:text-xs text-cyan-500 font-bold uppercase tracking-widest ml-1">Password</label>
+            <input required type="text" value={newAd.password} onChange={e=>setNewAd({...newAd, password: e.target.value})} className="w-full bg-[#050B14] border border-cyan-500/30 rounded-xl px-4 py-3.5 text-white outline-none focus:border-cyan-400 transition-colors text-sm font-mono" placeholder="Ketik Password..." />
+          </div>
+          <div className="flex-1 space-y-1.5 w-full">
+            <label className="text-[10px] md:text-xs text-cyan-500 font-bold uppercase tracking-widest ml-1">No WA (Menerima Rekap)</label>
+            <input required type="text" value={newAd.noHp} onChange={e=>setNewAd({...newAd, noHp: e.target.value})} className="w-full bg-[#050B14] border border-cyan-500/30 rounded-xl px-4 py-3.5 text-white outline-none focus:border-cyan-400 transition-colors text-sm font-mono" placeholder="08xxx / 628xxx" />
+          </div>
+          <button type="submit" className="w-full md:w-auto px-8 py-3.5 bg-cyan-600 hover:bg-cyan-500 text-white font-black uppercase tracking-widest text-xs rounded-xl transition-all duration-300 shadow-lg active:scale-95">Simpan</button>
+        </form>
+      )}
+
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+         {admins.map(a => (
+            <div key={a.id} className="bg-[#0A1628]/60 backdrop-blur-md border border-cyan-500/20 p-5 rounded-2xl flex flex-col gap-4 group hover:border-cyan-500/50 transition-all duration-300 shadow-lg">
+               {editingId === a.id ? (
+                  <form onSubmit={handleUpdate} className="flex flex-col gap-3">
+                     <div className="flex gap-2">
+                         <User className="w-5 h-5 text-cyan-600" />
+                         <input autoFocus required placeholder="Username" type="text" value={editUser} onChange={e=>setEditUser(e.target.value)} className="w-full bg-[#050B14] border border-cyan-500/50 rounded-lg px-3 py-2 text-white outline-none text-sm font-mono" />
+                     </div>
+                     <div className="flex gap-2">
+                         <Key className="w-5 h-5 text-cyan-600" />
+                         <input required placeholder="Password" type="text" value={editPass} onChange={e=>setEditPass(e.target.value)} className="w-full bg-[#050B14] border border-cyan-500/50 rounded-lg px-3 py-2 text-white outline-none text-sm font-mono" />
+                     </div>
+                     <div className="flex gap-2">
+                         <MessageSquare className="w-5 h-5 text-cyan-600" />
+                         <input required placeholder="No WA (08xxx)" type="text" value={editHp} onChange={e=>setEditHp(e.target.value)} className="w-full bg-[#050B14] border border-cyan-500/50 rounded-lg px-3 py-2 text-white outline-none text-sm font-mono" />
+                     </div>
+                     <div className="flex gap-2 justify-end mt-2">
+                         <button type="submit" className="bg-emerald-500/20 text-emerald-400 p-2 rounded-lg border border-emerald-500/30 flex-1 flex justify-center"><CheckCircle2 className="w-4 h-4"/></button>
+                         <button type="button" onClick={()=>setEditingId(null)} className="bg-rose-500/20 text-rose-400 p-2 rounded-lg border border-rose-500/30 flex-1 flex justify-center"><X className="w-4 h-4"/></button>
+                     </div>
+                  </form>
+               ) : (
+                  <>
+                     <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 bg-cyan-950/50 rounded-xl flex items-center justify-center border border-cyan-500/30"><ShieldCheck className="w-5 h-5 text-cyan-400" /></div>
+                        <div>
+                           <h3 className="font-bold text-white text-base tracking-wide font-mono">{a.username}</h3>
+                           <p className="text-[10px] text-cyan-500 tracking-widest uppercase mt-0.5">{a.noHp || 'No WA Kosong'}</p>
+                        </div>
+                     </div>
+                     <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <button onClick={()=>{setEditingId(a.id); setEditUser(a.username); setEditPass(a.password || ''); setEditHp(a.noHp || '');}} className="flex-1 flex justify-center items-center gap-2 py-2 bg-blue-500/10 hover:bg-blue-500/20 text-blue-400 border border-blue-500/20 rounded-lg text-[10px] uppercase font-bold tracking-wider"><Edit className="w-3.5 h-3.5"/> Edit</button>
+                        <button onClick={()=>{if(confirm(`Yakin ingin menghapus Admin ${a.username}?`)) deleteAdmin(a.id);}} className="flex-1 flex justify-center items-center gap-2 py-2 bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/20 rounded-lg text-[10px] uppercase font-bold tracking-wider"><Trash2 className="w-3.5 h-3.5"/> Hapus</button>
+                     </div>
+                  </>
+               )}
+            </div>
+         ))}
+         {admins.length === 0 && <div className="col-span-full p-8 text-center border-2 border-dashed border-cyan-900 rounded-2xl text-cyan-700 font-mono text-sm uppercase">Belum Ada Admin Terdaftar</div>}
+      </div>
+    </div>
+  );
+};
+
 
 const SearchIcon = ({ className }: { className?: string }) => (
   <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
@@ -2771,7 +3156,6 @@ const AdminLayout: React.FC<{ children: React.ReactNode, activeRoute: string, se
         </div>
       </aside>
 
-      {/* UPDATE PENTING GBR 2: DITAMBAHKAN OVERFLOW-X-HIDDEN UNTUK MENCEGAH SCROLL KE SAMPING */}
       <main className="flex-1 flex flex-col relative overflow-y-auto overflow-x-hidden w-full h-screen custom-scrollbar">
         {/* RESPONSIVE HEADER & STATUS BADGE */}
         <header className="sticky top-0 p-4 md:p-6 flex justify-between md:justify-end items-center z-30 w-full bg-[#0A1628]/80 backdrop-blur-xl border-b border-cyan-900/50 shadow-[0_4px_30px_rgba(0,0,0,0.5)]">
