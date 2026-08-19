@@ -1,43 +1,138 @@
 "use client";
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Terminal, Copy, CheckCircle2, Zap, Send, FileJson, Server, Activity, ArrowRight } from 'lucide-react';
 
 export default function ApiDocs() {
   const [copiedReq, setCopiedReq] = useState(false);
   const [copiedRes, setCopiedRes] = useState(false);
+  const [selectedScenario, setSelectedScenario] = useState<number>(25);
 
-  const reqJson = `{
-  "no_hp": "081234567890",
-  "scenario": 25,
-  "data": {
-    "namaLengkap": "M. Azhar Arsyad",
-    "nim": "161202300030",
-    "kelompok": "Cluster II 2025",
-    "shift": "Shift Pagi",
-    "jamSesi": "07:30 - 08:45",
-    "jamTutup": "08:55",
-    "jamAbsen": "07:45",
-    "statusAkhir": "Hadir",
-    "tanggalMulai": "01/08/2026",
-    "tanggalAkhir": "31/08/2026",
-    "password": "123",
-    "radius": "500",
-    "lokasiGeofence": "Gedung Rektorat",
-    "pesanCustom": "Pindah ke Lab 2 ya!",
-    "link": "https://absensi.maksaarsyad.xyz/"
-  }
-}`;
+  // Set Favicon & Title
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      let link = document.querySelector("link[rel~='icon']") as HTMLLinkElement;
+      if (!link) {
+        link = document.createElement('link');
+        link.rel = 'icon';
+        document.head.appendChild(link);
+      }
+      link.href = '/axalogo.png';
+      link.type = 'image/png';
+      document.title = "API Docs - Bot WA Dept. RKG";
+    }
+  }, []);
 
-  const resJson = `{
+  // Dynamic JSON Generator
+  const getScenarioData = (id: number) => {
+    const baseReq: any = {
+      no_hp: "081234567890",
+      scenario: id,
+      data: {
+        namaLengkap: "M. Azhar Arsyad",
+        nim: "161202300030",
+        kelompok: "Cluster II 2025",
+        link: "https://absensi.maksaarsyad.xyz/"
+      }
+    };
+
+    let specificData = {};
+    let expectedResMsg = "";
+
+    switch (id) {
+      case 1:
+        specificData = { shift: "Shift Pagi", jamSesi: "07:30 - 08:45", jamTutup: "08:55" };
+        expectedResMsg = "🔔 *NOTIFIKASI ABSENSI DIBUKA* 🔔\\n\\nHalo *M. Azhar Arsyad*...";
+        break;
+      case 2:
+        specificData = { shift: "Shift Pagi", jamTutup: "08:55" };
+        expectedResMsg = "⚠️ *PENGINGAT TERAKHIR ABSENSI* ⚠️\\n\\nPanggilan kepada *M. Azhar Arsyad*!...";
+        break;
+      case 3:
+         specificData = { shift: "Shift Pagi", jamAbsen: "07:45" };
+         expectedResMsg = "✅ *ABSENSI BERHASIL DITERIMA* ✅\\n\\nTerima kasih *M. Azhar Arsyad*!...";
+         break;
+      case 4:
+         specificData = { shift: "Shift Pagi", jamTutup: "08:55", statusAkhir: "Hadir", jamAbsen: "07:45" };
+         expectedResMsg = "📊 *STATUS AKHIR KEHADIRAN* 📊\\n\\nHalo *M. Azhar Arsyad*...";
+         break;
+      case 5:
+         specificData = { jamAbsen: "09:00" };
+         expectedResMsg = "🛡️ *PEMBERITAHUAN KEAMANAN SISTEM* 🛡️\\n\\nHalo *M. Azhar Arsyad*...";
+         break;
+      case 6:
+         specificData = { tanggalMulai: "01/08/2026", tanggalAkhir: "31/08/2026" };
+         expectedResMsg = "👋 *SELAMAT DATANG DI DEPT. RKG!* 🏥\\n\\nHalo *M. Azhar Arsyad*...";
+         break;
+      case 7:
+         specificData = { totalHadir: 10, totalTerlambat: 0, totalAlpha: 0 };
+         expectedResMsg = "📊 *RAPOR KEHADIRAN DEPT. RKG* 📊\\n\\nHalo *M. Azhar Arsyad*...";
+         break;
+      case 8:
+         specificData = { shift: "Shift Pagi", jamSesi: "07:00 - 08:00", jamTutup: "08:15" };
+         expectedResMsg = "🔄 *INFO PERUBAHAN JADWAL ABSENSI* 🔄\\n\\nPerhatian *M. Azhar Arsyad*...";
+         break;
+      case 9:
+         specificData = { totalAlpha: 3, totalTerlambat: 2 };
+         expectedResMsg = "🚨 *SURAT PERINGATAN KEHADIRAN (SISTEM)* 🚨\\n\\nHalo *M. Azhar Arsyad*...";
+         break;
+      case 10:
+         specificData = { shift: "Shift Pagi", jamSesi: "07:30 - 08:45", jamTutup: "08:55" };
+         expectedResMsg = "Halo *M. Azhar Arsyad*, sesi *Shift Pagi*...";
+         break;
+      case 11:
+         specificData = { jamAbsen: "07:35" };
+         expectedResMsg = "🛑 *PERINGATAN KEAMANAN AKUN* 🛑\\n\\nHalo *M. Azhar Arsyad*...";
+         break;
+      case 12:
+         specificData = { shift: "Shift Pagi", tanggal: "19/08/2026" };
+         expectedResMsg = "❌ *PEMBATALAN RIWAYAT KEHADIRAN* ❌\\n\\nPerhatian *M. Azhar Arsyad*...";
+         break;
+      case 13:
+         specificData = { lokasiGeofence: "Gedung Rektorat", radius: "500" };
+         expectedResMsg = "📍 *PEMBARUAN TITIK LOKASI ABSENSI* 📍\\n\\nHalo rekan-rekan...";
+         break;
+      case 14:
+         specificData = { password: "NewPassword123" };
+         expectedResMsg = "🔑 *PEMBARUAN KATA SANDI AKUN* 🔑\\n\\nHalo *M. Azhar Arsyad*...";
+         break;
+      case 17:
+         specificData = {};
+         expectedResMsg = "🏁 *HARI TERAKHIR STASE DEPT. RKG* 🏁\\n\\nHalo *M. Azhar Arsyad*...";
+         break;
+      case 18:
+         specificData = { pesanCustom: "Praktikum dialihkan ke Ruang B lantai 2 ya!" };
+         expectedResMsg = "📢 *PENGUMUMAN DEPT. RKG* 📢\\n\\nPraktikum dialihkan ke...";
+         break;
+      case 20:
+         specificData = { tanggal: "19/08/2026", totalMhs: 120, totalHadir: 110, totalTerlambat: 5, totalAlpha: 5 };
+         expectedResMsg = "📈 *REKAPITULASI ABSENSI HARIAN DEPT. RKG* 📈\\n\\nHalo Admin...";
+         break;
+      case 25:
+         specificData = { tanggalMulai: "01/08/2026", tanggalAkhir: "31/08/2026", password: "123" };
+         expectedResMsg = "🎉 *SELAMAT DATANG DI DEPT. RKG!* 🎉\\n\\nHalo *M. Azhar Arsyad*...";
+         break;
+    }
+
+    baseReq.data = { ...baseReq.data, ...specificData };
+
+    const resString = `{
   "success": true,
   "target_number": "081234567890",
-  "formatted_message": "🎉 *SELAMAT DATANG DI DEPT. RKG!* 🎉\\n\\nHalo *M. Azhar Arsyad*...",
+  "formatted_message": "${expectedResMsg}",
   "meta_info": {
-    "scenario_executed": 25,
+    "scenario_executed": ${id},
     "timestamp": "${new Date().toISOString()}"
   }
 }`;
+
+    return {
+      req: JSON.stringify(baseReq, null, 2),
+      res: resString
+    };
+  };
+
+  const { req, res } = getScenarioData(selectedScenario);
 
   const copyToClipboard = (text: string, type: 'req' | 'res') => {
     navigator.clipboard.writeText(text);
@@ -48,6 +143,11 @@ export default function ApiDocs() {
       setCopiedRes(true);
       setTimeout(() => setCopiedRes(false), 2000);
     }
+  };
+
+  const handleCardClick = (id: number) => {
+    setSelectedScenario(id);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   const scenarios = [
@@ -77,8 +177,10 @@ export default function ApiDocs() {
       {/* NAVBAR */}
       <nav className="border-b-[4px] border-black bg-white p-4 flex justify-between items-center sticky top-0 z-50">
         <div className="flex items-center gap-3">
-          <div className="bg-[#FF6B6B] border-[3px] border-black p-2 shadow-[3px_3px_0px_0px_rgba(0,0,0,1)]">
-            <Zap className="w-6 h-6 text-black" strokeWidth={3} />
+          <div className="bg-[#FF6B6B] border-[3px] border-black p-2 shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] flex items-center justify-center">
+            {/* LOGO WEB SAYA */}
+            <img src="/axalogo.png" alt="Logo Dept RKG" className="w-6 h-6 object-contain" onError={(e) => { e.currentTarget.style.display = 'none'; e.currentTarget.nextElementSibling?.classList.remove('hidden'); }} />
+            <Zap className="w-6 h-6 text-black hidden" strokeWidth={3} />
           </div>
           <h1 className="text-xl md:text-2xl font-black uppercase tracking-widest">Bot WA Gateway</h1>
         </div>
@@ -103,7 +205,7 @@ export default function ApiDocs() {
             https://absensi.maksaarsyad.xyz/api/wa
           </p>
           <p className="font-bold text-lg max-w-2xl">
-            Gateway ini bertugas mengonversi <span className="bg-white border-2 border-black px-2 mx-1">JSON Payload</span> menjadi teks pesan WhatsApp yang rapi dan terstruktur sesuai <span className="bg-white border-2 border-black px-2 mx-1">Scenario ID</span>.
+            Gateway ini bertugas mengonversi <span className="bg-white border-2 border-black px-2 mx-1">JSON Payload</span> menjadi teks pesan WhatsApp yang rapi dan terstruktur sesuai <span className="bg-white border-2 border-black px-2 mx-1">Scenario ID</span>. Pilih skenario di bawah untuk melihat preview dinamis!
           </p>
         </div>
 
@@ -117,20 +219,20 @@ export default function ApiDocs() {
               </div>
               <h3 className="text-2xl font-black uppercase tracking-wider">Format Body Request</h3>
             </div>
-            <div className="bg-[#1E1E1E] text-[#00FF41] border-[4px] border-black p-0 shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] relative flex flex-col">
+            <div className="bg-[#1E1E1E] text-[#00FF41] border-[4px] border-black p-0 shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] relative flex flex-col transition-all">
               <div className="bg-[#FF6B6B] border-b-[4px] border-black p-3 flex justify-between items-center">
                 <span className="font-black text-black uppercase tracking-widest text-sm flex items-center gap-2">
-                  <FileJson className="w-4 h-4"/> request.json
+                  <FileJson className="w-4 h-4"/> request.json (Scenario: {selectedScenario})
                 </span>
                 <button 
-                  onClick={() => copyToClipboard(reqJson, 'req')}
-                  className="bg-white text-black border-[2px] border-black px-3 py-1 font-bold text-xs uppercase shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] active:shadow-[0px_0px_0px_0px] active:translate-y-[2px] active:translate-x-[2px] transition-all flex items-center gap-1"
+                  onClick={() => copyToClipboard(req, 'req')}
+                  className="bg-white text-black border-[2px] border-black px-3 py-1 font-bold text-xs uppercase shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] active:shadow-[0px_0px_0px_0px] active:translate-y-[2px] active:translate-x-[2px] transition-all flex items-center gap-1 cursor-pointer"
                 >
                   {copiedReq ? <><CheckCircle2 className="w-3 h-3"/> Copied</> : <><Copy className="w-3 h-3"/> Copy</>}
                 </button>
               </div>
               <pre className="p-4 md:p-6 text-xs md:text-sm overflow-x-auto whitespace-pre-wrap font-mono leading-relaxed">
-                <code>{reqJson}</code>
+                <code>{req}</code>
               </pre>
             </div>
           </div>
@@ -143,20 +245,20 @@ export default function ApiDocs() {
               </div>
               <h3 className="text-2xl font-black uppercase tracking-wider">Response Generator</h3>
             </div>
-            <div className="bg-[#F8F9FA] text-black border-[4px] border-black p-0 shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] relative flex flex-col">
+            <div className="bg-[#F8F9FA] text-black border-[4px] border-black p-0 shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] relative flex flex-col transition-all">
               <div className="bg-[#4ECDC4] border-b-[4px] border-black p-3 flex justify-between items-center">
                 <span className="font-black text-black uppercase tracking-widest text-sm flex items-center gap-2">
                   <Activity className="w-4 h-4"/> Status: 200 OK
                 </span>
                 <button 
-                  onClick={() => copyToClipboard(resJson, 'res')}
-                  className="bg-white text-black border-[2px] border-black px-3 py-1 font-bold text-xs uppercase shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] active:shadow-[0px_0px_0px_0px] active:translate-y-[2px] active:translate-x-[2px] transition-all flex items-center gap-1"
+                  onClick={() => copyToClipboard(res, 'res')}
+                  className="bg-white text-black border-[2px] border-black px-3 py-1 font-bold text-xs uppercase shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] active:shadow-[0px_0px_0px_0px] active:translate-y-[2px] active:translate-x-[2px] transition-all flex items-center gap-1 cursor-pointer"
                 >
                   {copiedRes ? <><CheckCircle2 className="w-3 h-3"/> Copied</> : <><Copy className="w-3 h-3"/> Copy</>}
                 </button>
               </div>
               <pre className="p-4 md:p-6 text-xs md:text-sm overflow-x-auto whitespace-pre-wrap font-mono font-bold leading-relaxed text-[#D80032]">
-                <code>{resJson}</code>
+                <code>{res}</code>
               </pre>
             </div>
           </div>
@@ -166,7 +268,7 @@ export default function ApiDocs() {
         <div className="mt-12 space-y-6">
           <div className="bg-white border-[4px] border-black shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] p-6 flex flex-col sm:flex-row justify-between items-start sm:items-center">
              <div>
-                <h3 className="text-3xl font-black uppercase tracking-wider mb-2">Daftar Skenario (IDs)</h3>
+                <h3 className="text-3xl font-black uppercase tracking-wider mb-2">Daftar Skenario (Klik untuk Ubah Preview)</h3>
                 <p className="font-bold">Gunakan ID ini pada property <code className="bg-[#FFF06C] px-2 py-0.5 border-2 border-black">scenario</code> di JSON Request.</p>
              </div>
              <div className="bg-[#45AAF2] border-[3px] border-black text-black font-black uppercase px-4 py-2 mt-4 sm:mt-0 shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] rotate-2">
@@ -176,17 +278,25 @@ export default function ApiDocs() {
 
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
             {scenarios.map((sc, index) => {
-              // Menentukan warna rotasi berulang untuk Neubrutalism
+              // Warna berulang untuk Neubrutalism
               const colors = ['bg-[#FF6B6B]', 'bg-[#4ECDC4]', 'bg-[#45AAF2]', 'bg-[#FF9FF3]', 'bg-[#FEEA00]', 'bg-[#A3CB38]'];
               const cardColor = colors[index % colors.length];
+              const isSelected = selectedScenario === sc.id;
 
               return (
-                <div key={sc.id} className={`${cardColor} border-[3px] border-black p-4 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:-translate-y-1 hover:-translate-x-1 hover:shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] transition-transform flex flex-col group`}>
+                <div 
+                  key={sc.id} 
+                  onClick={() => handleCardClick(sc.id)}
+                  className={`
+                    ${cardColor} border-[3px] border-black p-4 transition-all flex flex-col group cursor-pointer
+                    ${isSelected ? 'shadow-[0px_0px_0px_0px_rgba(0,0,0,1)] translate-y-[4px] translate-x-[4px] ring-4 ring-black/50' : 'shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:-translate-y-1 hover:-translate-x-1 hover:shadow-[6px_6px_0px_0px_rgba(0,0,0,1)]'}
+                  `}
+                >
                   <div className="flex justify-between items-start mb-3">
-                    <span className="bg-white text-black font-black text-lg px-2 border-2 border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]">
+                    <span className={`bg-white text-black font-black text-lg px-2 border-2 border-black ${isSelected ? 'shadow-[1px_1px_0px_0px_rgba(0,0,0,1)]' : 'shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]'}`}>
                       ID: {sc.id}
                     </span>
-                    <ArrowRight className="w-5 h-5 text-black opacity-0 group-hover:opacity-100 transition-opacity" strokeWidth={3} />
+                    <ArrowRight className={`w-5 h-5 text-black transition-all duration-300 ${isSelected ? 'opacity-100 rotate-0' : 'opacity-0 -translate-x-2 group-hover:opacity-100 group-hover:translate-x-0'}`} strokeWidth={3} />
                   </div>
                   <h4 className="font-black uppercase text-lg leading-tight mb-1">{sc.title}</h4>
                   <p className="font-bold text-black/80 text-xs leading-snug">{sc.desc}</p>
