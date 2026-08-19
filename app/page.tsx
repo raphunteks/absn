@@ -121,7 +121,6 @@ const calculateDistance = (lat1: number, lon1: number, lat2: number, lon2: numbe
   return R * c; 
 };
 
-// EXPORT TO EXCEL DYNAMICALLY
 const exportToExcel = async (logs: Log[]) => {
   try {
     const XLSX = await loadXlsx();
@@ -179,6 +178,7 @@ interface Student { id: string; nim: string; name: string; password?: string; no
 interface Geofence { lat: number; lng: number; radius: number; name?: string; }
 interface AdminUser { id: string; username: string; password?: string; noHp?: string; } 
 interface FormatWA { id: number; title: string; description: string; template: string; }
+interface Holiday { id: string; date: string; name: string; isWeekend?: boolean; }
 
 type SyncStatus = 'offline' | 'synced' | 'syncing' | 'error';
 
@@ -188,6 +188,7 @@ interface AppContextType {
   logs: Log[];
   students: Student[];
   formats: FormatWA[];
+  holidays: Holiday[];
   geofence: Geofence;
   admins: AdminUser[];
   isCloudSync: boolean;
@@ -209,6 +210,8 @@ interface AppContextType {
   updateAdmin: (id: string, updates: Partial<AdminUser>) => void;
   deleteAdmin: (id: string) => void;
   updateFormat: (id: number, updates: Partial<FormatWA>) => void;
+  addHoliday: (holiday: Omit<Holiday, 'id'>) => void;
+  deleteHoliday: (id: string) => void;
   forceManualSync: () => Promise<void>;
   studentLogout: () => void;
   sendWA: (noHp: string, scenarioId: number, payloadData: any) => Promise<void>;
@@ -245,7 +248,7 @@ const initialDefaultFormatsWA: FormatWA[] = [
 const AppContext = createContext<AppContextType | null>(null);
 
 // ==========================================
-// APP PROVIDER (DENGAN ADMIN CRON REAL-TIME)
+// APP PROVIDER (DENGAN ADMIN CRON & PENGECEKAN HARI LIBUR)
 // ==========================================
 const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [isAppLoading, setIsAppLoading] = useState(true);
@@ -259,6 +262,7 @@ const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [geofence, setGeofence] = useState<Geofence>(defaultGeofence);
   const [admins, setAdmins] = useState<AdminUser[]>([]);
   const [formats, setFormats] = useState<FormatWA[]>([]);
+  const [holidays, setHolidays] = useState<Holiday[]>([]);
 
   useEffect(() => {
     const initData = async () => {
@@ -266,7 +270,7 @@ const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
       setIsCloudSync(cloudAvailable);
       setSyncStatus(cloudAvailable ? 'synced' : 'offline');
 
-      let c = null, s = null, l = null, st = null, gf = null, ad = null, fw = null;
+      let c = null, s = null, l = null, st = null, gf = null, ad = null, fw = null, hd = null;
 
       if (cloudAvailable) {
         c = await CloudStore.get('axaxyz_clusters');
@@ -276,6 +280,7 @@ const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
         gf = await CloudStore.get('axaxyz_geofence');
         ad = await CloudStore.get('axaxyz_admins');
         fw = await CloudStore.get('axaxyz_formats');
+        hd = await CloudStore.get('axaxyz_holidays');
       }
 
       if (!c) c = JSON.parse(localStorage.getItem('axaxyz_clusters') || 'null');
@@ -285,6 +290,7 @@ const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
       if (!gf) gf = JSON.parse(localStorage.getItem('axaxyz_geofence') || 'null');
       if (!ad) ad = JSON.parse(localStorage.getItem('axaxyz_admins') || 'null');
       if (!fw) fw = JSON.parse(localStorage.getItem('axaxyz_formats') || 'null');
+      if (!hd) hd = JSON.parse(localStorage.getItem('axaxyz_holidays') || 'null');
 
       setClusters(c || defaultClusters);
       setSessions(s || defaultSessions);
@@ -293,6 +299,12 @@ const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
       setGeofence(gf || defaultGeofence);
       setAdmins(ad || []);
       setFormats(fw && fw.length > 0 ? fw : initialDefaultFormatsWA);
+      
+      // Default Hari Libur (Sabtu & Minggu otomatis ditambah jika belum ada)
+      const defaultHolidaysList: Holiday[] = hd || [
+         { id: 'h1', date: '2026-08-17', name: 'HUT Kemerdekaan RI' }
+      ];
+      setHolidays(defaultHolidaysList);
       
       setIsAppLoading(false);
     };
@@ -324,6 +336,7 @@ const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
       await CloudStore.set('axaxyz_geofence', JSON.stringify(geofence));
       await CloudStore.set('axaxyz_admins', JSON.stringify(admins));
       await CloudStore.set('axaxyz_formats', JSON.stringify(formats));
+      await CloudStore.set('axaxyz_holidays', JSON.stringify(holidays));
       setSyncStatus('synced');
       alert("✅ Seluruh data berhasil dicadangkan ke Cloud Database!");
     } catch (e: any) {
@@ -339,6 +352,7 @@ const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const saveGeofence = (d: Geofence) => { setGeofence(d); localStorage.setItem('axaxyz_geofence', JSON.stringify(d)); syncToCloud('axaxyz_geofence', d); };
   const saveAdmins = (d: AdminUser[]) => { setAdmins(d); localStorage.setItem('axaxyz_admins', JSON.stringify(d)); syncToCloud('axaxyz_admins', d); };
   const saveFormats = (d: FormatWA[]) => { setFormats(d); localStorage.setItem('axaxyz_formats', JSON.stringify(d)); syncToCloud('axaxyz_formats', d); };
+  const saveHolidays = (d: Holiday[]) => { setHolidays(d); localStorage.setItem('axaxyz_holidays', JSON.stringify(d)); syncToCloud('axaxyz_holidays', d); };
 
   const addCluster = (data: Omit<Cluster, 'id'>) => saveClusters([...clusters, { ...data, id: Math.random().toString(36).substr(2, 9) }]);
   const updateCluster = (id: string, data: Omit<Cluster, 'id'>) => saveClusters(clusters.map(c => c.id === id ? { ...c, ...data } : c));
@@ -365,6 +379,9 @@ const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const deleteAdmin = (id: string) => saveAdmins(admins.filter(a => a.id !== id));
 
   const updateFormat = (id: number, updates: Partial<FormatWA>) => saveFormats(formats.map(f => f.id === id ? { ...f, ...updates } : f));
+  
+  const addHoliday = (holidayData: Omit<Holiday, 'id'>) => saveHolidays([...holidays, { ...holidayData, id: Math.random().toString(36).substr(2, 9) }]);
+  const deleteHoliday = (id: string) => saveHolidays(holidays.filter(h => h.id !== id));
 
   // ==========================================
   // FUNGSI GLOBAL TRIGGER WHATSAPP API
@@ -405,8 +422,7 @@ const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   };
 
   // ==========================================
-  // ADMIN CRON (PENGGANTI NODE CRON SERVER)
-  // Menangani Skenario 1, 2, 4, 9, 17, 20
+  // ADMIN CRON (DENGAN PENGECEKAN HARI LIBUR & WEEKEND)
   // ==========================================
   useEffect(() => {
      if (typeof window === 'undefined') return;
@@ -415,8 +431,18 @@ const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
 
      const cronInterval = setInterval(async () => {
          const now = new Date();
-         const currentHHMM = now.toLocaleTimeString('id-ID', {hour: '2-digit', minute:'2-digit', hour12: false});
+         const dayOfWeek = now.getDay(); // 0 = Minggu, 6 = Sabtu
          const todayStr = getLocalYYYYMMDD(now);
+
+         // CEK APAKAH HARI INI LIBUR (Sabtu, Minggu, atau terdaftar di Manajemen Kalender)
+         const isWeekend = (dayOfWeek === 0 || dayOfWeek === 6);
+         const isCustomHoliday = holidays.some(h => h.date === todayStr);
+
+         if (isWeekend || isCustomHoliday) {
+             return; // Bot WA TIDAK AKAN MENGIRIM PESAN APA PUN PADA HARI LIBUR / WEEKEND
+         }
+
+         const currentHHMM = now.toLocaleTimeString('id-ID', {hour: '2-digit', minute:'2-digit', hour12: false});
 
          for (const sess of sessions) {
              if (!sess.isActive) continue;
@@ -485,7 +511,6 @@ const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
                              kelompok: c?.name 
                          });
 
-                         // LOGIKA SKENARIO 9 (SP OTOMATIS JIKA ALPHA >= 3)
                          if (stAkhir === 'Alpha') {
                              let totalAlphaHist = 0;
                              let totalTelatHist = 0;
@@ -578,7 +603,7 @@ const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
      }, 60000); 
      
      return () => clearInterval(cronInterval);
-  }, [isCloudSync, sessions, students, logs, clusters, admins]);
+  }, [isCloudSync, sessions, students, logs, clusters, admins, holidays]);
 
   if (isAppLoading) {
     return (
@@ -598,10 +623,10 @@ const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
 
   return (
     <AppContext.Provider value={{ 
-      isCloudSync, syncStatus, clusters, sessions, logs, students, geofence, admins, formats,
+      isCloudSync, syncStatus, clusters, sessions, logs, students, geofence, admins, formats, holidays,
       addCluster, updateCluster, deleteCluster, addLog, deleteLog, updateSession, addSession, deleteSession, 
       addStudent, updateStudent, bulkAddStudents, deleteStudent, updateGeofence, forceManualSync, studentLogout,
-      addAdmin, updateAdmin, deleteAdmin, updateFormat, sendWA
+      addAdmin, updateAdmin, deleteAdmin, updateFormat, addHoliday, deleteHoliday, sendWA
     }}>
       {children}
     </AppContext.Provider>
@@ -1545,15 +1570,11 @@ const AdminDashboardHome: React.FC = () => {
   });
 
   const filteredStudents = selectedCluster === 'All' ? students : students.filter(s => s.clusterId === selectedCluster);
-
   const activeSessions = sessions.filter(s => s.isActive);
   
   const studentStats = filteredStudents.map(student => {
      const studentLogs = filteredLogs.filter(l => l.nim === student.nim);
-     let hadir = 0;
-     let terlambat = 0;
-     let alpha = 0;
-     let belumAbsen = 0;
+     let hadir = 0; let terlambat = 0; let alpha = 0; let belumAbsen = 0;
      
      const rangeStart = new Date(startObj);
      const rangeEnd = new Date(endObj); 
@@ -1576,18 +1597,14 @@ const AdminDashboardHome: React.FC = () => {
                      const [endH, endM] = sess.endTime.split(':').map(Number);
                      const endTotal = endH * 60 + endM;
                      const endWithTol = endTotal + sess.toleranceMinutes;
-                     
                      if (currentMinutes > endWithTol) alpha++; 
                      else belumAbsen++; 
                  } else {
-                     if (d < new Date(new Date().setHours(0,0,0,0))) {
-                        alpha++; 
-                     }
+                     if (d < new Date(new Date().setHours(0,0,0,0))) alpha++; 
                  }
              }
          });
      }
-     
      return { ...student, hadir, terlambat, alpha, belumAbsen };
   });
 
@@ -1597,14 +1614,29 @@ const AdminDashboardHome: React.FC = () => {
   const totalAlphaCount = studentStats.reduce((acc, curr) => acc + curr.alpha, 0);
   const totalBelumAbsenCount = studentStats.reduce((acc, curr) => acc + curr.belumAbsen, 0);
 
-  const dailyDataMap: Record<string, { date: string; Hadir: number; Terlambat: number }> = {};
-  filteredLogs.forEach(log => {
-     const dateStr = new Date(log.timestamp).toLocaleDateString('id-ID', {day: 'numeric', month: 'short'});
-     if (!dailyDataMap[dateStr]) dailyDataMap[dateStr] = { date: dateStr, Hadir: 0, Terlambat: 0 };
-     if (log.status === 'Hadir') dailyDataMap[dateStr].Hadir++;
-     else if (log.status === 'Terlambat') dailyDataMap[dateStr].Terlambat++;
-  });
-  const trendData = Object.values(dailyDataMap);
+  // FIX BUG MELOROT & KOSONG: Generate data untuk rentang secara penuh
+  const trendData = useMemo(() => {
+     const dataMap: Record<string, { date: string; Hadir: number; Terlambat: number; sortKey: string }> = {};
+     const rStart = new Date(startObj);
+     const rEnd = new Date(endObj);
+     
+     for (let d = new Date(rStart); d <= rEnd; d.setDate(d.getDate() + 1)) {
+        const dateStr = d.toLocaleDateString('id-ID', {day: 'numeric', month: 'short'});
+        const sortKey = getLocalYYYYMMDD(d);
+        dataMap[sortKey] = { date: dateStr, Hadir: 0, Terlambat: 0, sortKey };
+     }
+
+     filteredLogs.forEach(log => {
+        const d = new Date(log.timestamp);
+        const sortKey = getLocalYYYYMMDD(d);
+        if (dataMap[sortKey]) {
+           if (log.status === 'Hadir') dataMap[sortKey].Hadir++;
+           else if (log.status === 'Terlambat') dataMap[sortKey].Terlambat++;
+        }
+     });
+
+     return Object.values(dataMap).sort((a, b) => a.sortKey.localeCompare(b.sortKey));
+  }, [startObj, endObj, filteredLogs]);
   
   const pieData = [
      { name: 'Tepat Waktu', value: onTimeCount, color: '#10b981' }, 
@@ -1654,40 +1686,40 @@ const AdminDashboardHome: React.FC = () => {
         ))}
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-5 min-h-[350px]">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
         
+        {/* TREND CHART - FIXED HEIGHT & FULL RANGE */}
         <div className="lg:col-span-2 bg-[#0A1628]/60 backdrop-blur-md border border-cyan-500/20 p-6 rounded-[1.5rem] flex flex-col shadow-lg relative overflow-hidden">
           <div className="absolute top-0 right-0 w-32 h-32 bg-cyan-600/10 rounded-bl-[100px] pointer-events-none"></div>
           <h3 className="text-sm font-black text-cyan-50 mb-6 tracking-widest uppercase flex items-center gap-2"><Activity className="w-4 h-4 text-cyan-400"/> Tren Absensi Harian</h3>
-          <div className="flex-1 w-full min-h-[250px] relative z-10">
-            {trendData.length > 0 ? (
-              <ResponsiveContainer width="100%" height="100%">
-                <AreaChart data={trendData} margin={{ top: 0, right: 0, left: -20, bottom: 0 }}>
-                  <defs>
-                    <linearGradient id="colorHadir" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="#06b6d4" stopOpacity={0.8}/>
-                      <stop offset="95%" stopColor="#06b6d4" stopOpacity={0}/>
-                    </linearGradient>
-                    <linearGradient id="colorTelat" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="#f59e0b" stopOpacity={0.8}/>
-                      <stop offset="95%" stopColor="#f59e0b" stopOpacity={0}/>
-                    </linearGradient>
-                  </defs>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" vertical={false} />
-                  <XAxis dataKey="date" stroke="#64748b" fontSize={10} tickLine={false} axisLine={false} />
-                  <YAxis stroke="#64748b" fontSize={10} tickLine={false} axisLine={false} />
-                  <Tooltip cursor={{stroke: '#334155', strokeWidth: 2, fill: 'transparent'}} contentStyle={{backgroundColor: '#050B14', borderColor: '#06b6d4', color: '#f8fafc', borderRadius: '0.75rem', fontSize: '12px'}} />
-                  <Area type="monotone" dataKey="Hadir" stroke="#06b6d4" strokeWidth={3} fillOpacity={1} fill="url(#colorHadir)" />
-                  <Area type="monotone" dataKey="Terlambat" stroke="#f59e0b" strokeWidth={3} fillOpacity={1} fill="url(#colorTelat)" />
-                </AreaChart>
-              </ResponsiveContainer>
-            ) : <div className="h-full flex items-center justify-center text-cyan-800 font-mono text-xs uppercase">Grafik Kosong (Tidak ada data)</div>}
+          <div className="flex-1 w-full min-h-[300px] h-[300px] relative z-10">
+            <ResponsiveContainer width="100%" height="100%">
+              <AreaChart data={trendData} margin={{ top: 0, right: 0, left: -20, bottom: 0 }}>
+                <defs>
+                  <linearGradient id="colorHadir" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="#06b6d4" stopOpacity={0.8}/>
+                    <stop offset="95%" stopColor="#06b6d4" stopOpacity={0}/>
+                  </linearGradient>
+                  <linearGradient id="colorTelat" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="#f59e0b" stopOpacity={0.8}/>
+                    <stop offset="95%" stopColor="#f59e0b" stopOpacity={0}/>
+                  </linearGradient>
+                </defs>
+                <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" vertical={false} />
+                <XAxis dataKey="date" stroke="#64748b" fontSize={10} tickLine={false} axisLine={false} />
+                <YAxis stroke="#64748b" fontSize={10} tickLine={false} axisLine={false} allowDecimals={false} />
+                <Tooltip cursor={{stroke: '#334155', strokeWidth: 2, fill: 'transparent'}} contentStyle={{backgroundColor: '#050B14', borderColor: '#06b6d4', color: '#f8fafc', borderRadius: '0.75rem', fontSize: '12px'}} />
+                <Area type="monotone" dataKey="Hadir" stroke="#06b6d4" strokeWidth={3} fillOpacity={1} fill="url(#colorHadir)" />
+                <Area type="monotone" dataKey="Terlambat" stroke="#f59e0b" strokeWidth={3} fillOpacity={1} fill="url(#colorTelat)" />
+              </AreaChart>
+            </ResponsiveContainer>
           </div>
         </div>
 
+        {/* PIE CHART */}
         <div className="bg-[#0A1628]/60 backdrop-blur-md border border-cyan-500/20 p-6 rounded-[1.5rem] flex flex-col shadow-lg">
           <h3 className="text-sm font-black text-cyan-50 mb-6 tracking-widest uppercase">Komposisi Kehadiran</h3>
-          <div className="flex-1 w-full min-h-[250px]">
+          <div className="flex-1 w-full min-h-[300px] h-[300px]">
              {pieData.length > 0 ? (
                 <ResponsiveContainer width="100%" height="100%">
                   <PieChart>
@@ -1697,7 +1729,7 @@ const AdminDashboardHome: React.FC = () => {
                     <Tooltip contentStyle={{backgroundColor: '#050B14', borderColor: '#1e293b', color: '#f8fafc', borderRadius: '0.75rem', fontSize: '12px'}} itemStyle={{color: '#fff'}} />
                   </PieChart>
                 </ResponsiveContainer>
-             ) : <div className="h-full flex items-center justify-center text-cyan-800 font-mono text-xs uppercase">Grafik Kosong</div>}
+             ) : <div className="h-full flex flex-col items-center justify-center text-cyan-800 font-mono text-xs uppercase tracking-widest"><ActivitySquare className="w-12 h-12 mb-2 opacity-50"/>Grafik Kosong</div>}
           </div>
           
           <div className="flex justify-center gap-4 mt-2">
@@ -2064,7 +2096,6 @@ const AdminStudents: React.FC = () => {
   return (
     <div className="space-y-6 animate-in fade-in duration-500 h-full flex flex-col w-full relative pb-10">
       
-      {/* HEADER SECTION */}
       <div className="flex flex-col gap-6">
         <div className="shrink-0 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
           <div>
@@ -2083,13 +2114,9 @@ const AdminStudents: React.FC = () => {
           </div>
         </div>
         
-        {/* NEW LAYOUT: ACTION ROW FIRST, THEN EXCEL GUIDE */}
         <div className="flex flex-col gap-4 w-full">
-          
-          {/* Action Row (Dropdowns & Buttons) */}
           <div className="flex flex-wrap lg:flex-nowrap gap-3 w-full bg-[#0A1628]/80 p-4 rounded-2xl border border-cyan-500/20 shadow-lg items-center">
              
-             {/* KELOMPOK DROPDOWN */}
              <div className="flex flex-col w-full lg:w-auto flex-1 min-w-[200px] gap-1">
                <div className="flex items-center bg-[#050B14] border border-purple-500/30 rounded-xl px-2 h-12 w-full focus-within:border-purple-400 transition-colors">
                   <select value={selectedClusterForBulk} onChange={e=>setSelectedClusterForBulk(e.target.value)} className="bg-transparent text-purple-100 text-xs font-bold uppercase outline-none w-full cursor-pointer appearance-none px-2 text-center lg:text-left">
@@ -2099,7 +2126,6 @@ const AdminStudents: React.FC = () => {
                </div>
              </div>
 
-             {/* INPUT DEFAULT PASSWORD */}
              <div className="flex flex-col w-full lg:w-auto flex-1 min-w-[150px] gap-1">
                <div className="flex items-center bg-[#050B14] border border-purple-500/30 rounded-xl px-3 h-12 w-full focus-within:border-purple-400 transition-colors" title="Sandi otomatis untuk import">
                   <Key className="w-3.5 h-3.5 text-purple-400 mr-2 shrink-0" />
@@ -2117,7 +2143,6 @@ const AdminStudents: React.FC = () => {
              </button>
           </div>
 
-          {/* EXCEL GUIDE (Moved Below Action Row) */}
           <div className="bg-gradient-to-br from-[#050B14]/90 to-[#0A1628]/90 p-5 rounded-2xl border border-purple-500/40 flex flex-col md:flex-row items-start md:items-center gap-4 md:gap-6 shadow-[0_10px_30px_rgba(147,51,234,0.15)] relative overflow-hidden group w-full">
              <div className="absolute top-0 right-0 w-40 h-40 bg-purple-600/10 rounded-bl-[120px] pointer-events-none transition-transform group-hover:scale-110"></div>
              
@@ -2186,7 +2211,6 @@ const AdminStudents: React.FC = () => {
         </form>
       )}
 
-      {/* FILTER TAMPILAN TABEL */}
       <div className="flex flex-col sm:flex-row gap-3 w-full max-w-2xl items-end">
          <div className="flex flex-col gap-1 flex-1 w-full">
             <label className="text-[9px] text-cyan-500 uppercase tracking-widest font-bold">Pencarian Mahasiswa</label>
@@ -2265,7 +2289,6 @@ const AdminStudents: React.FC = () => {
         </div>
       </div>
 
-      {/* EDIT MODAL DENGAN NO WA */}
       {editingStudent && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/90 backdrop-blur-xl p-4 animate-in fade-in zoom-in-95 duration-200">
            <form onSubmit={handleUpdate} className="bg-[#0A1628] border border-cyan-500/40 p-6 md:p-8 rounded-3xl w-full max-w-md shadow-[0_0_50px_rgba(6,182,212,0.3)] relative radiology-bg">
@@ -2305,7 +2328,6 @@ const AdminStudents: React.FC = () => {
         </div>
       )}
 
-      {/* MODAL PESAN BROADCAST CUSTOM */}
       {isCustomBroadcastOpen && (
          <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/90 backdrop-blur-xl p-4 animate-in fade-in zoom-in-95 duration-200">
             <form onSubmit={handleCustomBroadcast} className="bg-[#0A1628] border border-cyan-500/40 p-6 md:p-8 rounded-3xl w-full max-w-2xl shadow-[0_0_50px_rgba(6,182,212,0.3)] relative radiology-bg">
@@ -2401,7 +2423,7 @@ const AdminStudents: React.FC = () => {
 
 
 // ==========================================
-// ADMIN FORMATS (NEW MODULE FOR WA TEMPLATE CRUD)
+// ADMIN FORMATS (WA TEMPLATE CRUD)
 // ==========================================
 const AdminFormats: React.FC = () => {
    const { formats, updateFormat } = useAppContext();
@@ -2423,7 +2445,6 @@ const AdminFormats: React.FC = () => {
             <p className="text-cyan-500/70 text-xs md:text-sm font-mono mt-1 uppercase">Ubah Template Pesan Bot Whatsapp Secara Real-Time</p>
          </div>
 
-         {/* Variabel Dinamis Box */}
          <div className="bg-[#0A1628]/80 backdrop-blur-md border border-cyan-500/30 p-5 md:p-6 rounded-3xl shadow-lg relative overflow-hidden">
             <div className="absolute top-0 right-0 w-32 h-32 bg-cyan-600/10 rounded-bl-[100px] pointer-events-none"></div>
             <div className="flex items-center gap-3 mb-4 relative z-10">
@@ -2437,7 +2458,6 @@ const AdminFormats: React.FC = () => {
             </div>
          </div>
 
-         {/* Edit Modal (Overlays Screen) */}
          {editingFormat && (
             <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/90 backdrop-blur-xl p-4 animate-in fade-in zoom-in-95 duration-200">
                <form onSubmit={handleSave} className="bg-[#0A1628] border border-cyan-500/40 p-6 md:p-8 rounded-3xl w-full max-w-3xl shadow-[0_0_50px_rgba(6,182,212,0.3)] relative radiology-bg flex flex-col h-[90vh] md:h-[80vh]">
@@ -2476,7 +2496,6 @@ const AdminFormats: React.FC = () => {
             </div>
          )}
 
-         {/* Grid Cards of Scenarios */}
          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             {formats.map(f => (
                <div key={f.id} className="bg-[#0A1628]/60 backdrop-blur-md border border-cyan-500/20 p-6 rounded-3xl flex flex-col group hover:border-cyan-500/50 transition-all duration-300 shadow-[0_10px_30px_rgba(0,0,0,0.3)] relative overflow-hidden h-[400px]">
@@ -2502,6 +2521,103 @@ const AdminFormats: React.FC = () => {
                   </div>
                </div>
             ))}
+         </div>
+      </div>
+   );
+};
+
+// ==========================================
+// ADMIN CALENDAR (NEW MODULE)
+// ==========================================
+const AdminCalendar: React.FC = () => {
+   const { holidays, addHoliday, deleteHoliday } = useAppContext();
+   const [isAdding, setIsAdding] = useState(false);
+   const [newDate, setNewDate] = useState('');
+   const [newName, setNewName] = useState('');
+
+   const handleAdd = (e: React.FormEvent) => {
+      e.preventDefault();
+      if(newDate && newName.trim()) {
+         addHoliday({ date: newDate, name: newName });
+         setIsAdding(false);
+         setNewDate(''); setNewName('');
+      }
+   };
+
+   // Urutkan kalender dari yang paling dekat (recent)
+   const sortedHolidays = [...holidays].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+
+   return (
+      <div className="space-y-6 animate-in fade-in duration-500 pb-10">
+         <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+            <div>
+               <h2 className="text-2xl md:text-3xl font-black text-cyan-50 tracking-widest uppercase">Manajemen Kalender</h2>
+               <p className="text-cyan-500/70 text-xs md:text-sm font-mono mt-1 uppercase">Atur Hari Libur Nasional & Cuti Bersama</p>
+            </div>
+            <button onClick={() => setIsAdding(!isAdding)} className="flex items-center gap-2 px-5 py-3 bg-cyan-600/20 text-cyan-400 hover:bg-cyan-500/30 border border-cyan-500/50 rounded-xl transition-all duration-300 font-black uppercase tracking-widest text-xs shadow-[0_0_15px_rgba(6,182,212,0.2)]">
+               <Plus className="w-4 h-4" /> Tambah Hari Libur
+            </button>
+         </div>
+
+         <div className="bg-[#0A1628]/80 backdrop-blur-md border border-rose-500/30 p-5 md:p-6 rounded-3xl shadow-lg relative overflow-hidden flex items-start gap-4">
+            <div className="bg-rose-950/60 p-3 rounded-xl border border-rose-500/50 shrink-0">
+               <Calendar className="w-6 h-6 text-rose-400" />
+            </div>
+            <div>
+               <h3 className="text-sm font-black text-rose-200 tracking-widest uppercase mb-1">Akhir Pekan (Sabtu & Minggu) Otomatis Libur</h3>
+               <p className="text-xs text-rose-200/70 font-mono leading-relaxed">
+                  Sistem Bot WA Cron Job telah dikonfigurasi untuk <strong className="text-rose-400">TIDAK mengirimkan tagihan absensi / buka shift</strong> pada setiap hari Sabtu & Minggu secara otomatis. Anda hanya perlu menambahkan hari libur di luar akhir pekan (misal: Tanggal Merah) ke dalam daftar di bawah ini.
+               </p>
+            </div>
+         </div>
+
+         {isAdding && (
+            <form onSubmit={handleAdd} className="bg-[#0A1628]/80 backdrop-blur-md border border-cyan-500/30 p-5 md:p-6 rounded-2xl flex flex-col md:flex-row gap-4 items-end shadow-xl animate-in slide-in-from-top-4">
+               <div className="space-y-1.5 w-full md:w-64 shrink-0">
+                  <label className="text-[10px] md:text-xs text-cyan-500 font-bold uppercase tracking-widest ml-1">Tanggal Libur</label>
+                  <input required type="date" value={newDate} onChange={e=>setNewDate(e.target.value)} className="w-full bg-[#050B14] border border-cyan-500/30 rounded-xl px-4 py-3.5 text-white outline-none focus:border-cyan-400 transition-colors text-sm font-mono" />
+               </div>
+               <div className="flex-1 space-y-1.5 w-full">
+                  <label className="text-[10px] md:text-xs text-cyan-500 font-bold uppercase tracking-widest ml-1">Keterangan / Nama Hari Libur</label>
+                  <input required type="text" value={newName} onChange={e=>setNewName(e.target.value)} className="w-full bg-[#050B14] border border-cyan-500/30 rounded-xl px-4 py-3.5 text-white outline-none focus:border-cyan-400 transition-colors text-sm font-mono" placeholder="Contoh: Hari Raya Idul Fitri" />
+               </div>
+               <button type="submit" className="w-full md:w-auto px-8 py-3.5 bg-cyan-600 hover:bg-cyan-500 text-white font-black uppercase tracking-widest text-xs rounded-xl transition-all duration-300 shadow-lg active:scale-95">Simpan</button>
+            </form>
+         )}
+
+         <div className="bg-[#0A1628]/60 backdrop-blur-md border border-cyan-500/20 rounded-[1.5rem] overflow-hidden flex flex-col shadow-xl">
+            <div className="overflow-x-auto custom-scrollbar">
+               <table className="w-full text-left border-collapse min-w-[600px]">
+                  <thead>
+                     <tr className="bg-[#050B14]/80 border-b border-cyan-500/30 text-cyan-500 text-[10px] tracking-[0.2em] uppercase font-black">
+                        <th className="p-4 md:p-5 w-48">Tanggal</th>
+                        <th className="p-4 md:p-5">Keterangan Libur</th>
+                        <th className="p-4 md:p-5 text-right w-32">Opsi</th>
+                     </tr>
+                  </thead>
+                  <tbody className="divide-y divide-cyan-900/30">
+                     {sortedHolidays.map((h, i) => (
+                        <tr key={h.id || i} className="hover:bg-cyan-900/20 transition-colors duration-200 text-cyan-50 group">
+                           <td className="p-4 md:p-5">
+                              <span className="font-mono text-sm tracking-widest font-bold text-rose-300 bg-rose-950/40 px-3 py-1.5 rounded-lg border border-rose-500/30 inline-flex items-center gap-2">
+                                 <Calendar className="w-3.5 h-3.5"/>
+                                 {new Date(h.date).toLocaleDateString('id-ID', {day: '2-digit', month: 'long', year: 'numeric'})}
+                              </span>
+                           </td>
+                           <td className="p-4 md:p-5 font-bold text-sm uppercase tracking-wide">{h.name}</td>
+                           <td className="p-4 md:p-5 text-right">
+                              <button onClick={() => {if(confirm(`Hapus kalender libur ${h.name}?`)) deleteHoliday(h.id);}} className="p-2.5 text-rose-500 hover:text-white hover:bg-rose-600 rounded-xl transition-all duration-300 border border-transparent hover:border-rose-500/50 hover:shadow-[0_0_15px_rgba(244,63,94,0.4)] active:scale-95">
+                                 <Trash2 className="w-5 h-5" />
+                              </button>
+                           </td>
+                        </tr>
+                     ))}
+                     {sortedHolidays.length === 0 && (
+                        <tr><td colSpan={3} className="p-16 text-center text-cyan-800 font-mono text-sm uppercase tracking-widest">Belum ada hari libur yang ditambahkan.</td></tr>
+                     )}
+                  </tbody>
+               </table>
+            </div>
          </div>
       </div>
    );
@@ -2991,7 +3107,8 @@ const AdminLayout: React.FC<{ children: React.ReactNode, activeRoute: string, se
     { id: 'admin-students', icon: Database, label: 'Data Mahasiswa' },
     { id: 'admin-reports', icon: FileText, label: 'Riwayat Absensi' },
     { id: 'admin-geofence', icon: Map, label: 'Pengaturan Lokasi' },
-    { id: 'admin-settings', icon: Calendar, label: 'Jadwal Absen' },
+    { id: 'admin-settings', icon: Clock, label: 'Jadwal Absen' },
+    { id: 'admin-calendar', icon: Calendar, label: 'Manajemen Kalender' },
     { id: 'admin-formats', icon: MessageSquare, label: 'Manajemen Format' },
     { id: 'admin-management', icon: ShieldCheck, label: 'Kelola Admin' },
   ];
@@ -3039,7 +3156,6 @@ const AdminLayout: React.FC<{ children: React.ReactNode, activeRoute: string, se
         </div>
       </aside>
 
-      {/* UPDATE PENTING GBR 2: DITAMBAHKAN OVERFLOW-X-HIDDEN UNTUK MENCEGAH SCROLL KE SAMPING */}
       <main className="flex-1 flex flex-col relative overflow-y-auto overflow-x-hidden w-full h-screen custom-scrollbar">
         {/* RESPONSIVE HEADER & STATUS BADGE */}
         <header className="sticky top-0 p-4 md:p-6 flex justify-between md:justify-end items-center z-30 w-full bg-[#0A1628]/80 backdrop-blur-xl border-b border-cyan-900/50 shadow-[0_4px_30px_rgba(0,0,0,0.5)]">
@@ -3119,13 +3235,14 @@ export default function App() {
       {route === 'student' && <AttendanceWizard />}
       {route === 'admin-login' && <AdminLogin onLogin={() => setRoute('admin-dashboard')} />}
       
-      {['admin-dashboard', 'admin-students', 'admin-clusters', 'admin-settings', 'admin-reports', 'admin-geofence', 'admin-management', 'admin-formats'].includes(route) && (
+      {['admin-dashboard', 'admin-students', 'admin-clusters', 'admin-settings', 'admin-reports', 'admin-geofence', 'admin-management', 'admin-formats', 'admin-calendar'].includes(route) && (
         <AdminLayout activeRoute={route} setRoute={setRoute}>
           {route === 'admin-dashboard' && <AdminDashboardHome />}
           {route === 'admin-students' && <AdminStudents />}
           {route === 'admin-clusters' && <AdminClusters />}
           {route === 'admin-geofence' && <AdminGeofence />}
           {route === 'admin-settings' && <AdminSettings />}
+          {route === 'admin-calendar' && <AdminCalendar />}
           {route === 'admin-reports' && <AdminReports />}
           {route === 'admin-management' && <AdminManagement />}
           {route === 'admin-formats' && <AdminFormats />} 
