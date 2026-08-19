@@ -175,7 +175,7 @@ const CloudStore = {
 interface Cluster { id: string; name: string; startDate?: string; endDate?: string; }
 interface Session { id: string; name: string; startTime: string; endTime: string; toleranceMinutes: number; isActive: boolean; }
 interface Log { id: string; nim: string; name: string; clusterName?: string; timestamp: string; sessionName: string; status: 'Hadir' | 'Terlambat'; location: { lat: number; lng: number }; photoBase64: string; deviceId: string; }
-interface Student { id: string; nim: string; name: string; password?: string; deviceId?: string | null; clusterId?: string; }
+interface Student { id: string; nim: string; name: string; no_hp?: string; password?: string; deviceId?: string | null; clusterId?: string; }
 interface Geofence { lat: number; lng: number; radius: number; name?: string; }
 interface AdminUser { id: string; username: string; password?: string; }
 interface ChatFormat { id: number; title: string; description: string; template: string; }
@@ -1878,7 +1878,7 @@ const AdminClusters: React.FC = () => {
 const AdminStudents: React.FC = () => {
   const { students, addStudent, updateStudent, bulkAddStudents, deleteStudent, clusters } = useAppContext();
   const [isAdding, setIsAdding] = useState(false);
-  const [newS, setNewS] = useState({ name: '', nim: '', password: '', clusterId: '' });
+  const [newS, setNewS] = useState({ name: '', nim: '', no_hp: '', password: '', clusterId: '' });
   const [editingStudent, setEditingStudent] = useState<Student | null>(null);
   
   const [search, setSearch] = useState('');
@@ -1900,15 +1900,35 @@ const AdminStudents: React.FC = () => {
 
   const handleAdd = (e: React.FormEvent) => {
     e.preventDefault();
-    addStudent({ ...newS, password: newS.password || defaultBulkPassword });
+    let parsedHp = '';
+    if (newS.no_hp) {
+       parsedHp = String(newS.no_hp).replace(/[^0-9]/g, '');
+       if (parsedHp.startsWith('0')) parsedHp = '62' + parsedHp.slice(1);
+       else if (parsedHp.startsWith('8')) parsedHp = '62' + parsedHp;
+    }
+    
+    addStudent({ ...newS, no_hp: parsedHp, password: newS.password || defaultBulkPassword });
     setIsAdding(false);
-    setNewS({ name: '', nim: '', password: '', clusterId: '' });
+    setNewS({ name: '', nim: '', no_hp: '', password: '', clusterId: '' });
   };
 
   const handleUpdate = (e: React.FormEvent) => {
     e.preventDefault();
     if(editingStudent) {
-       updateStudent(editingStudent.id, { name: editingStudent.name, nim: editingStudent.nim, password: editingStudent.password, clusterId: editingStudent.clusterId });
+       let parsedHp = '';
+       if (editingStudent.no_hp) {
+          parsedHp = String(editingStudent.no_hp).replace(/[^0-9]/g, '');
+          if (parsedHp.startsWith('0')) parsedHp = '62' + parsedHp.slice(1);
+          else if (parsedHp.startsWith('8')) parsedHp = '62' + parsedHp;
+       }
+
+       updateStudent(editingStudent.id, { 
+          name: editingStudent.name, 
+          nim: editingStudent.nim, 
+          no_hp: parsedHp,
+          password: editingStudent.password, 
+          clusterId: editingStudent.clusterId 
+       });
        setEditingStudent(null);
     }
   };
@@ -1919,13 +1939,51 @@ const AdminStudents: React.FC = () => {
      }
   };
 
-  // EXCEL (XLSX) BULK UPLOAD SUPPORT - DYNAMIC LOAD (SUPER UPGRADE)
+  // FUNGSI KIRIM WA INDIVIDUAL
+  const handleSingleWA = async (st: Student) => {
+      if (!st.no_hp) return alert(`Data No. WA untuk ${st.name} kosong! Silakan edit data mahasiswa terlebih dahulu.`);
+      
+      const clusterObj = clusters.find(c => c.id === st.clusterId);
+      const clusterName = clusterObj?.name || 'Tanpa Kelompok';
+      const tglMulai = clusterObj?.startDate ? new Date(clusterObj.startDate).toLocaleDateString('id-ID') : 'Belum Diatur';
+      const tglAkhir = clusterObj?.endDate ? new Date(clusterObj.endDate).toLocaleDateString('id-ID') : 'Belum Diatur';
+
+      try {
+          const res = await fetch('/api/wa', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                  no_hp: st.no_hp,
+                  scenario: 25,
+                  data: {
+                      namaLengkap: st.name,
+                      nim: st.nim,
+                      kelompok: clusterName,
+                      tanggalMulai: tglMulai,
+                      tanggalAkhir: tglAkhir,
+                      password: st.password || 'Tidak diketahui',
+                      link: window.location.origin
+                  }
+              })
+          });
+          const result = await res.json();
+          if (result.success) {
+              alert(`✅ Kredensial WA berhasil dikirim ke antrian untuk ${st.name} (${st.no_hp}).`);
+          } else {
+              alert(`❌ Gagal mengirim WA: ${result.error}`);
+          }
+      } catch (err) {
+          alert('❌ Terjadi kesalahan jaringan saat memanggil API WA.');
+      }
+  }
+
+  // EXCEL (XLSX) BULK UPLOAD SUPPORT - DYNAMIC LOAD (SUPER UPGRADE WA)
   const handleBulkUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
     if (!selectedClusterForBulk) {
-       alert("Pilih Kelompok (Angkatan) terlebih dahulu di tombol 'PILIH KELOMPOK (IMPORT)' sebelum upload file Excel.");
+       alert("Pilih Kelompok (Angkatan) terlebih dahulu di tombol 'PILIH KELOMPOK (DEFAULT)' sebelum upload file Excel.");
        e.target.value = ''; // reset input
        return;
     }
@@ -1935,22 +1993,20 @@ const AdminStudents: React.FC = () => {
       const data = await file.arrayBuffer();
       const workbook = XLSX.read(data);
       const worksheet = workbook.Sheets[workbook.SheetNames[0]];
-      // Expecting standard columns, row 1 as header. (Nama, NIM, Kelompok)
       const jsonData: any[] = XLSX.utils.sheet_to_json(worksheet);
       
       const newSt: Omit<Student, 'id'>[] = [];
       let missingClusterCount = 0;
 
       jsonData.forEach(row => {
-         // Flexible matching for typical column names in Indonesia
          const name = row['Nama'] || row['NAMA'] || row['nama'] || row['Nama Lengkap'] || row['Name'];
          const nim = row['NIM'] || row['NIM '] || row['nim'] || row['Nomor Induk'];
+         const noHpRaw = row['No WA'] || row['NO WA'] || row['No. WA'] || row['Nomor WA'] || row['no_hp'] || row['WA'];
          const clusterCol = row['Kelompok'] || row['KELOMPOK'] || row['Cluster'] || row['Angkatan'];
          
          if (name && nim) {
             let finalClusterId = selectedClusterForBulk;
             
-            // Prioritaskan Kelompok dari File Excel jika kolom tersedia
             if (clusterCol) {
                 const found = clusters.find(c => c.name.toLowerCase().trim() === String(clusterCol).toLowerCase().trim());
                 if (found) {
@@ -1962,10 +2018,18 @@ const AdminStudents: React.FC = () => {
                 missingClusterCount++;
             }
 
+            let parsedHp = '';
+            if (noHpRaw) {
+               parsedHp = String(noHpRaw).replace(/[^0-9]/g, '');
+               if (parsedHp.startsWith('0')) parsedHp = '62' + parsedHp.slice(1);
+               else if (parsedHp.startsWith('8')) parsedHp = '62' + parsedHp;
+            }
+
             newSt.push({ 
                name: String(name).trim(), 
                nim: String(nim).trim(), 
-               password: defaultBulkPassword, // Menggunakan state dari input box
+               no_hp: parsedHp,
+               password: defaultBulkPassword, 
                clusterId: finalClusterId || ''
             });
          }
@@ -1977,8 +2041,47 @@ const AdminStudents: React.FC = () => {
                e.target.value = ''; return;
            }
         }
+        
         bulkAddStudents(newSt);
-        alert(`✅ Sistem Berhasil mengimpor ${newSt.length} mahasiswa dengan default password '${defaultBulkPassword}'.`);
+        
+        // TRIGGER BULK WA CONFIRMATION
+        const sendWa = confirm(`✅ Sistem Berhasil mengimpor ${newSt.length} mahasiswa.\n\nApakah Anda ingin langsung MENGIRIM KREDENSIAL (WhatsApp) ke semua mahasiswa baru ini sekarang?`);
+        
+        if (sendWa) {
+           alert('Memproses pengiriman ke antrian WA... Mohon tunggu dan jangan tutup halaman ini.');
+           let count = 0;
+           for(const st of newSt) {
+               if(!st.no_hp) continue;
+               const cObj = clusters.find(c => c.id === st.clusterId);
+               const cName = cObj?.name || 'Tanpa Kelompok';
+               
+               try {
+                   await fetch('/api/wa', {
+                       method: 'POST',
+                       headers: { 'Content-Type': 'application/json' },
+                       body: JSON.stringify({
+                           no_hp: st.no_hp,
+                           scenario: 25,
+                           data: {
+                               namaLengkap: st.name,
+                               nim: st.nim,
+                               kelompok: cName,
+                               tanggalMulai: cObj?.startDate ? new Date(cObj.startDate).toLocaleDateString('id-ID') : 'Belum Diatur',
+                               tanggalAkhir: cObj?.endDate ? new Date(cObj.endDate).toLocaleDateString('id-ID') : 'Belum Diatur',
+                               password: st.password,
+                               link: window.location.origin
+                           }
+                       })
+                   });
+                   count++;
+               } catch(e) {}
+               // Fast queueing delay
+               await new Promise(r => setTimeout(r, 200)); 
+           }
+           alert(`🚀 Berhasil memasukkan ${count} pesan ke Antrian Bot WA!`);
+        } else {
+           alert(`✅ Data tersimpan tanpa mengirim notifikasi WhatsApp.`);
+        }
       } else {
         alert('❌ Gagal mendeteksi data. Pastikan format kolom baris pertama memiliki header "Nama" dan "NIM".');
       }
@@ -2059,15 +2162,18 @@ const AdminStudents: React.FC = () => {
                       ✨ SUPER UPGRADE
                    </span>
                 </div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-x-4 gap-y-2 text-[9px] md:text-[10px] text-cyan-100/80 font-mono leading-relaxed">
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-x-4 gap-y-2 text-[9px] md:text-[10px] text-cyan-100/80 font-mono leading-relaxed">
                    <div className="space-y-1">
                       <p><span className="text-purple-400 font-bold bg-purple-950/50 px-1 rounded">Kolom A</span> Nama Lengkap <span className="text-purple-300 font-bold">*Wajib</span></p>
                    </div>
                    <div className="space-y-1">
                       <p><span className="text-purple-400 font-bold bg-purple-950/50 px-1 rounded">Kolom B</span> NIM / Stambuk <span className="text-purple-300 font-bold">*Wajib</span></p>
                    </div>
+                   <div className="space-y-1">
+                      <p><span className="text-emerald-400 font-bold bg-emerald-950/50 px-1 rounded">Kolom C</span> No. WA (628x) <span className="text-emerald-300 italic">(Ops)</span></p>
+                   </div>
                    <div className="space-y-1 sm:col-span-2 md:col-span-1">
-                      <p><span className="text-emerald-400 font-bold bg-emerald-950/50 px-1 rounded">Kolom C</span> Kelompok <span className="text-emerald-300 italic">(Opsional)</span></p>
+                      <p><span className="text-emerald-400 font-bold bg-emerald-950/50 px-1 rounded">Kolom D</span> Kel. / Cluster <span className="text-emerald-300 italic">(Ops)</span></p>
                    </div>
                 </div>
                 <p className="text-[8px] text-cyan-500 italic mt-2.5 border-t border-cyan-900/50 pt-2">*Pastikan Baris 1 pada file Excel diisi Header. Jika kolom C kosong, data otomatis masuk ke kelompok dropdown. <strong className="text-emerald-400">Password default menyesuaikan input box di atas.</strong></p>
@@ -2077,23 +2183,27 @@ const AdminStudents: React.FC = () => {
       </div>
 
       {isAdding && (
-        <form onSubmit={handleAdd} className="bg-[#0A1628]/90 backdrop-blur-md border border-cyan-500/50 p-5 md:p-6 rounded-[1.5rem] grid grid-cols-1 md:grid-cols-5 gap-4 items-end animate-in slide-in-from-top-4 shadow-[0_10px_30px_rgba(0,0,0,0.5)]">
+        <form onSubmit={handleAdd} className="bg-[#0A1628]/90 backdrop-blur-md border border-cyan-500/50 p-5 md:p-6 rounded-[1.5rem] grid grid-cols-1 md:grid-cols-6 gap-4 items-end animate-in slide-in-from-top-4 shadow-[0_10px_30px_rgba(0,0,0,0.5)]">
           <div className="space-y-1.5 md:col-span-2">
             <label className="text-[9px] md:text-[10px] text-cyan-500 font-bold uppercase tracking-widest ml-1">Nama Mahasiswa</label>
             <input required type="text" value={newS.name} onChange={e=>setNewS({...newS, name: e.target.value})} className="w-full bg-[#050B14] border border-cyan-500/30 rounded-xl px-4 py-3 text-cyan-50 outline-none focus:border-cyan-400 font-mono text-sm" placeholder="Nama Lengkap..." />
           </div>
-          <div className="space-y-1.5">
+          <div className="space-y-1.5 md:col-span-1">
             <label className="text-[9px] md:text-[10px] text-cyan-500 font-bold uppercase tracking-widest ml-1">NIM</label>
-            <input required type="text" value={newS.nim} onChange={e=>setNewS({...newS, nim: e.target.value})} className="w-full bg-[#050B14] border border-cyan-500/30 rounded-xl px-4 py-3 text-cyan-50 outline-none focus:border-cyan-400 font-mono text-sm" placeholder="Nomor Induk Mahasiswa..." />
+            <input required type="text" value={newS.nim} onChange={e=>setNewS({...newS, nim: e.target.value})} className="w-full bg-[#050B14] border border-cyan-500/30 rounded-xl px-4 py-3 text-cyan-50 outline-none focus:border-cyan-400 font-mono text-sm" placeholder="Nomor Induk..." />
           </div>
-          <div className="space-y-1.5">
+          <div className="space-y-1.5 md:col-span-1">
+            <label className="text-[9px] md:text-[10px] text-cyan-500 font-bold uppercase tracking-widest ml-1">No. WA (628x)</label>
+            <input type="text" value={newS.no_hp} onChange={e=>setNewS({...newS, no_hp: e.target.value})} className="w-full bg-[#050B14] border border-cyan-500/30 rounded-xl px-4 py-3 text-cyan-50 outline-none focus:border-cyan-400 font-mono text-sm" placeholder="Contoh: 628123..." />
+          </div>
+          <div className="space-y-1.5 md:col-span-1">
             <label className="text-[9px] md:text-[10px] text-cyan-500 font-bold uppercase tracking-widest ml-1">Kelompok</label>
             <select required value={newS.clusterId} onChange={e=>setNewS({...newS, clusterId: e.target.value})} className="w-full bg-[#050B14] border border-cyan-500/30 rounded-xl px-4 py-3 text-cyan-50 outline-none focus:border-cyan-400 font-bold text-xs uppercase appearance-none cursor-pointer">
                <option value="" disabled>Pilih Kelompok</option>
                {clusters.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
             </select>
           </div>
-          <button type="submit" className="w-full py-3 bg-cyan-600 hover:bg-cyan-500 text-white font-black uppercase tracking-widest text-xs rounded-xl transition-all duration-300 shadow-[0_0_15px_rgba(6,182,212,0.4)] active:scale-95">Simpan Data</button>
+          <button type="submit" className="w-full md:col-span-1 py-3 bg-cyan-600 hover:bg-cyan-500 text-white font-black uppercase tracking-widest text-xs rounded-xl transition-all duration-300 shadow-[0_0_15px_rgba(6,182,212,0.4)] active:scale-95">Simpan</button>
         </form>
       )}
 
@@ -2120,7 +2230,7 @@ const AdminStudents: React.FC = () => {
           <table className="w-full text-left border-collapse min-w-[800px]">
             <thead>
               <tr className="bg-[#050B14]/80 border-b border-cyan-500/20 text-cyan-500 text-[10px] tracking-[0.2em] uppercase font-black">
-                <th className="p-4 md:p-5 whitespace-nowrap">NIM</th>
+                <th className="p-4 md:p-5 whitespace-nowrap">NIM & Kontak</th>
                 <th className="p-4 md:p-5 whitespace-nowrap">Nama Mahasiswa</th>
                 <th className="p-4 md:p-5 whitespace-nowrap">Kelompok</th>
                 <th className="p-4 md:p-5 text-center whitespace-nowrap">Status Login HP</th>
@@ -2130,7 +2240,10 @@ const AdminStudents: React.FC = () => {
             <tbody className="divide-y divide-cyan-900/30">
               {filtered.map(st => (
                 <tr key={st.id} className="hover:bg-cyan-900/20 transition-colors duration-200 text-cyan-50 group">
-                  <td className="p-4 md:p-5 font-mono text-sm tracking-wider">{st.nim}</td>
+                  <td className="p-4 md:p-5 font-mono text-sm tracking-wider">
+                     {st.nim}
+                     {st.no_hp && <div className="text-[10px] text-cyan-500 mt-1 flex items-center gap-1.5"><MessageCircle className="w-3 h-3"/> {st.no_hp}</div>}
+                  </td>
                   <td className="p-4 md:p-5 font-bold text-sm uppercase max-w-[200px] truncate">{st.name}</td>
                   <td className="p-4 md:p-5">
                      <span className="text-[10px] uppercase font-bold tracking-widest text-cyan-300 bg-cyan-950/50 border border-cyan-500/30 px-3 py-1.5 rounded-md shadow-sm">
@@ -2153,8 +2266,7 @@ const AdminStudents: React.FC = () => {
                     <button onClick={() => setEditingStudent(st)} title="Edit Data Mahasiswa" className="p-2 md:p-2.5 text-blue-500 hover:text-blue-300 rounded-xl transition-all duration-300 border border-blue-500/30 bg-blue-950/40 hover:bg-blue-900 hover:-translate-y-0.5 active:scale-95 shadow-sm">
                        <Settings className="w-4 h-4" />
                     </button>
-                    {/* BUTTON KIRIM WA */}
-                    <button onClick={() => { alert(`Sistem segera memanggil REST API (app/api/wa/route.ts) untuk mengirim Kredensial Onboarding (Skenario 25) ke ${st.name}...`); }} title="Kirim Akses ke WA" className="px-3 py-2 text-[10px] font-black uppercase tracking-widest text-emerald-400 bg-emerald-950/50 border border-emerald-500/40 hover:bg-emerald-600 hover:text-white rounded-xl transition-all duration-300 flex items-center gap-2 hover:-translate-y-0.5 active:scale-95 shadow-[0_0_10px_rgba(16,185,129,0.2)]">
+                    <button onClick={() => handleSingleWA(st)} title="Kirim Akses ke WA" className="px-3 py-2 text-[10px] font-black uppercase tracking-widest text-emerald-400 bg-emerald-950/50 border border-emerald-500/40 hover:bg-emerald-600 hover:text-white rounded-xl transition-all duration-300 flex items-center gap-2 hover:-translate-y-0.5 active:scale-95 shadow-[0_0_10px_rgba(16,185,129,0.2)]">
                       <MessageCircle className="w-4 h-4" /> WA
                     </button>
                     <button onClick={() => setSelectedStudentForKTM(st)} title="Cetak Kartu Absen (QR)" className="px-3 py-2 text-[10px] font-black uppercase tracking-widest text-cyan-400 bg-cyan-950/50 border border-cyan-500/40 hover:bg-cyan-600 hover:text-white rounded-xl transition-all duration-300 flex items-center gap-2 hover:-translate-y-0.5 active:scale-95 shadow-[0_0_10px_rgba(6,182,212,0.2)]">
@@ -2185,9 +2297,15 @@ const AdminStudents: React.FC = () => {
                     <label className="text-[10px] text-cyan-500 font-bold uppercase tracking-widest ml-1">Nama Lengkap</label>
                     <input required type="text" value={editingStudent.name} onChange={e=>setEditingStudent({...editingStudent, name: e.target.value})} className="w-full bg-[#050B14] border border-cyan-500/30 rounded-xl px-4 py-3.5 text-cyan-50 outline-none focus:border-cyan-400 font-mono text-sm shadow-inner" />
                  </div>
-                 <div className="space-y-1.5">
-                    <label className="text-[10px] text-cyan-500 font-bold uppercase tracking-widest ml-1">NIM</label>
-                    <input required type="text" value={editingStudent.nim} onChange={e=>setEditingStudent({...editingStudent, nim: e.target.value})} className="w-full bg-[#050B14] border border-cyan-500/30 rounded-xl px-4 py-3.5 text-cyan-50 outline-none focus:border-cyan-400 font-mono text-sm shadow-inner" />
+                 <div className="grid grid-cols-2 gap-4">
+                     <div className="space-y-1.5">
+                        <label className="text-[10px] text-cyan-500 font-bold uppercase tracking-widest ml-1">NIM</label>
+                        <input required type="text" value={editingStudent.nim} onChange={e=>setEditingStudent({...editingStudent, nim: e.target.value})} className="w-full bg-[#050B14] border border-cyan-500/30 rounded-xl px-4 py-3.5 text-cyan-50 outline-none focus:border-cyan-400 font-mono text-sm shadow-inner" />
+                     </div>
+                     <div className="space-y-1.5">
+                        <label className="text-[10px] text-cyan-500 font-bold uppercase tracking-widest ml-1">No. WhatsApp</label>
+                        <input type="text" value={editingStudent.no_hp || ''} onChange={e=>setEditingStudent({...editingStudent, no_hp: e.target.value})} className="w-full bg-[#050B14] border border-cyan-500/30 rounded-xl px-4 py-3.5 text-cyan-50 outline-none focus:border-cyan-400 font-mono text-sm shadow-inner" placeholder="628..." />
+                     </div>
                  </div>
                  <div className="space-y-1.5">
                     <label className="text-[10px] text-cyan-500 font-bold uppercase tracking-widest ml-1">Ubah Sandi</label>
@@ -2200,7 +2318,7 @@ const AdminStudents: React.FC = () => {
                        {clusters.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
                     </select>
                  </div>
-                 <button type="submit" className="w-full py-4 mt-6 bg-cyan-600 hover:bg-cyan-500 text-white font-black tracking-widest uppercase text-xs rounded-xl transition-all duration-300 shadow-[0_10px_20px_rgba(6,182,212,0.4)] active:scale-95 border border-cyan-400/50">
+                 <button type="submit" className="w-full py-4 mt-6 bg-cyan-600 hover:bg-cyan-500 text-white font-black tracking-widest uppercase text-xs rounded-2xl transition-all duration-300 shadow-[0_10px_20px_rgba(6,182,212,0.4)] active:scale-95 border border-cyan-400/50">
                     Simpan Perubahan
                  </button>
               </div>
@@ -2408,187 +2526,6 @@ const AdminReports: React.FC = () => {
   );
 };
 
-const AdminGeofence: React.FC = () => {
-  const { geofence, updateGeofence } = useAppContext();
-  const [lat, setLat] = useState(geofence.lat.toString());
-  const [lng, setLng] = useState(geofence.lng.toString());
-  const [radius, setRadius] = useState(geofence.radius.toString());
-  const [locationName, setLocationName] = useState(geofence.name || 'Gedung Kampus Pusat');
-
-  const handleSave = (e: React.FormEvent) => {
-    e.preventDefault();
-    updateGeofence({ lat: parseFloat(lat), lng: parseFloat(lng), radius: parseInt(radius), name: locationName });
-    alert('Pengaturan lokasi absensi berhasil disimpan!');
-  };
-
-  const getMyLocation = () => {
-    if (navigator.geolocation) {
-      navigator.geolocation.getCurrentPosition(
-        (pos) => { setLat(pos.coords.latitude.toString()); setLng(pos.coords.longitude.toString()); },
-        () => alert('Gagal mendeteksi lokasi GPS Anda saat ini.')
-      );
-    }
-  };
-
-  return (
-    <div className="space-y-6 animate-in fade-in duration-500 max-w-3xl pb-10">
-      <div>
-        <h2 className="text-2xl md:text-3xl font-black text-cyan-50 tracking-widest uppercase">Pengaturan Lokasi Absen</h2>
-        <p className="text-cyan-500/70 text-xs md:text-sm font-mono mt-1 uppercase">Tentukan batas area kampus atau tempat kerja</p>
-      </div>
-
-      <form onSubmit={handleSave} className="bg-[#0A1628]/80 backdrop-blur-md border border-cyan-500/30 p-6 md:p-8 rounded-[2rem] space-y-6 md:space-y-8 shadow-[0_15px_40px_rgba(0,0,0,0.5)]">
-        <div className="p-5 bg-cyan-950/30 border border-cyan-500/30 rounded-2xl flex items-start gap-4 shadow-inner relative overflow-hidden">
-          <div className="absolute left-0 top-0 w-1 h-full bg-cyan-500"></div>
-          <Navigation className="w-7 h-7 text-cyan-400 mt-1 shrink-0 drop-shadow-[0_0_8px_rgba(6,182,212,0.8)]" />
-          <p className="text-xs text-cyan-100/90 leading-relaxed font-mono uppercase tracking-wide">Mahasiswa hanya bisa melakukan absen jika lokasi GPS mereka berada dalam jangkauan jarak (<b>Batas Radius Maksimal</b>) dari koordinat lokasi yang Anda tentukan di bawah ini.</p>
-        </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-5 md:gap-6">
-          <div className="space-y-1.5 md:col-span-2">
-             <label className="text-[10px] text-cyan-500 font-bold uppercase tracking-widest ml-1">Nama Lokasi Absen</label>
-             <input required type="text" value={locationName} onChange={e=>setLocationName(e.target.value)} className="w-full bg-[#050B14] border border-cyan-500/30 rounded-xl px-4 py-3.5 text-cyan-50 outline-none focus:border-cyan-400 transition-colors shadow-inner text-sm font-mono" placeholder="Contoh: Gedung Rektorat" />
-          </div>
-          <div className="space-y-1.5">
-            <label className="text-[10px] text-cyan-500 font-bold uppercase tracking-widest ml-1">Latitude</label>
-            <input required type="number" step="any" value={lat} onChange={e=>setLat(e.target.value)} className="w-full bg-[#050B14] border border-cyan-500/30 rounded-xl px-4 py-3.5 text-cyan-50 outline-none focus:border-cyan-400 transition-colors shadow-inner font-mono text-sm" />
-          </div>
-          <div className="space-y-1.5">
-            <label className="text-[10px] text-cyan-500 font-bold uppercase tracking-widest ml-1">Longitude</label>
-            <input required type="number" step="any" value={lng} onChange={e=>setLng(e.target.value)} className="w-full bg-[#050B14] border border-cyan-500/30 rounded-xl px-4 py-3.5 text-cyan-50 outline-none focus:border-cyan-400 transition-colors shadow-inner font-mono text-sm" />
-          </div>
-        </div>
-
-        <div className="space-y-1.5">
-           <label className="text-[10px] text-cyan-500 font-bold uppercase tracking-widest ml-1">Batas Jarak Radius (Meter)</label>
-           <input required type="number" min="10" value={radius} onChange={e=>setRadius(e.target.value)} className="w-full bg-[#050B14] border border-cyan-500/30 rounded-xl px-4 py-4 text-cyan-400 outline-none focus:border-cyan-400 transition-colors shadow-inner font-black text-lg md:text-xl text-center tracking-widest" />
-        </div>
-
-        <div className="flex flex-col md:flex-row gap-3 md:gap-4 pt-8 border-t border-cyan-900/50">
-          <button type="button" onClick={getMyLocation} className="w-full md:w-auto px-6 py-4 bg-[#050B14] hover:bg-cyan-950/40 border border-cyan-500/40 text-cyan-400 font-black tracking-widest uppercase text-xs rounded-xl transition-all duration-300 flex items-center justify-center gap-3 active:scale-95 shadow-sm">
-            <MapPin className="w-4 h-4" /> Gunakan Lokasi Saya Saat Ini
-          </button>
-          <button type="submit" className="w-full md:flex-1 py-4 bg-cyan-600 hover:bg-cyan-500 text-white font-black tracking-[0.15em] uppercase text-xs rounded-xl transition-all duration-300 shadow-[0_0_20px_rgba(6,182,212,0.4)] active:scale-95 border border-cyan-400/50">
-            Simpan Lokasi
-          </button>
-        </div>
-      </form>
-    </div>
-  );
-};
-
-const AdminSettings: React.FC = () => {
-  const { sessions, updateSession, addSession, deleteSession } = useAppContext();
-  const [isAdding, setIsAdding] = useState(false);
-  const [editingSessId, setEditingSessId] = useState<string | null>(null);
-  
-  const [formSess, setFormSess] = useState({ name: '', startTime: '', endTime: '', toleranceMinutes: 15 });
-
-  const handleSave = (e: React.FormEvent) => {
-    e.preventDefault(); 
-    if (editingSessId) {
-       updateSession(editingSessId, { ...formSess });
-    } else {
-       addSession({ ...formSess, isActive: true }); 
-    }
-    setIsAdding(false); setEditingSessId(null); 
-    setFormSess({ name: '', startTime: '', endTime: '', toleranceMinutes: 15 });
-  };
-
-  const startEdit = (sess: Session) => {
-     setIsAdding(true);
-     setEditingSessId(sess.id);
-     setFormSess({ name: sess.name, startTime: sess.startTime, endTime: sess.endTime, toleranceMinutes: sess.toleranceMinutes });
-  }
-
-  const cancelForm = () => {
-     setIsAdding(false); setEditingSessId(null);
-     setFormSess({ name: '', startTime: '', endTime: '', toleranceMinutes: 15 });
-  }
-
-  return (
-    <div className="space-y-6 animate-in fade-in duration-500 pb-10">
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-        <div>
-           <h2 className="text-2xl md:text-3xl font-black text-cyan-50 tracking-widest uppercase">Pengaturan Jadwal Shift</h2>
-           <p className="text-cyan-500/70 text-xs md:text-sm font-mono mt-1 uppercase">Kelola jadwal jam kehadiran mahasiswa</p>
-        </div>
-        <button onClick={() => {cancelForm(); setIsAdding(true);}} className="flex items-center gap-2 px-6 py-3 bg-cyan-600/20 text-cyan-400 hover:bg-cyan-500/30 border border-cyan-500/50 rounded-xl transition-all duration-300 font-black uppercase tracking-widest text-xs shadow-[0_0_15px_rgba(6,182,212,0.2)] w-full md:w-auto justify-center">
-           <Plus className="w-4 h-4" /> Tambah Jadwal Baru
-        </button>
-      </div>
-
-      {isAdding && (
-        <form onSubmit={handleSave} className="bg-[#0A1628]/90 backdrop-blur-md border border-cyan-500/50 p-6 md:p-8 rounded-3xl grid grid-cols-1 md:grid-cols-5 gap-5 md:gap-6 items-end animate-in slide-in-from-top-4 shadow-[0_15px_40px_rgba(0,0,0,0.5)] relative">
-          
-          <div className="absolute top-4 right-4 cursor-pointer text-cyan-600 hover:text-cyan-400" onClick={cancelForm}><X className="w-5 h-5"/></div>
-
-          <div className="space-y-1.5 md:col-span-2">
-             <label className="text-[10px] text-cyan-500 font-bold uppercase tracking-widest ml-1">Nama Shift</label>
-             <input required type="text" value={formSess.name} onChange={e=>setFormSess({...formSess, name: e.target.value})} className="w-full bg-[#050B14] border border-cyan-500/30 rounded-xl px-4 py-3.5 text-cyan-50 outline-none focus:border-cyan-400 font-mono text-sm" placeholder="Contoh: Shift Pagi / Kelas A" />
-          </div>
-          <div className="space-y-1.5">
-             <label className="text-[10px] text-cyan-500 font-bold uppercase tracking-widest ml-1">Jam Mulai</label>
-             <input required type="time" value={formSess.startTime} onChange={e=>setFormSess({...formSess, startTime: e.target.value})} className="w-full bg-[#050B14] border border-cyan-500/30 rounded-xl px-4 py-3.5 text-cyan-50 outline-none focus:border-cyan-400 font-mono text-sm" />
-          </div>
-          <div className="space-y-1.5">
-             <label className="text-[10px] text-cyan-500 font-bold uppercase tracking-widest ml-1">Jam Berakhir</label>
-             <input required type="time" value={formSess.endTime} onChange={e=>setFormSess({...formSess, endTime: e.target.value})} className="w-full bg-[#050B14] border border-cyan-500/30 rounded-xl px-4 py-3.5 text-cyan-50 outline-none focus:border-cyan-400 font-mono text-sm" />
-          </div>
-          <div className="space-y-1.5">
-             <label className="text-[10px] text-cyan-500 font-bold uppercase tracking-widest ml-1">Toleransi Tutup Sesi (+ Dari Jam Berakhir)</label>
-             <div className="relative">
-                <input required type="number" min="0" value={formSess.toleranceMinutes} onChange={e=>setFormSess({...formSess, toleranceMinutes: parseInt(e.target.value)})} className="w-full bg-[#050B14] border border-cyan-500/30 rounded-xl pl-4 pr-12 py-3.5 text-cyan-50 outline-none focus:border-cyan-400 font-mono text-sm" />
-                <span className="absolute right-4 top-1/2 -translate-y-1/2 text-cyan-600 text-xs font-mono font-bold">MENIT</span>
-             </div>
-          </div>
-          <button type="submit" className="md:col-span-5 w-full py-4 bg-cyan-600 hover:bg-cyan-500 text-white font-black uppercase tracking-widest text-xs rounded-xl transition-all duration-300 shadow-[0_0_15px_rgba(6,182,212,0.4)] active:scale-95 mt-2">
-             {editingSessId ? 'Simpan Perubahan' : 'Buat Jadwal Shift'}
-          </button>
-        </form>
-      )}
-
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 md:gap-6">
-        {sessions.map(session => (
-          <div key={session.id} className={cn("p-6 rounded-[2rem] border transition-all duration-300 hover:shadow-lg group relative overflow-hidden", session.isActive ? "bg-[#0A1628]/80 border-cyan-500/30 hover:border-cyan-400/60 backdrop-blur-md shadow-[0_10px_30px_rgba(0,0,0,0.5)]" : "bg-[#050B14]/80 opacity-60 border-cyan-900 hover:opacity-100")}>
-            
-            <div className="absolute top-0 right-0 w-24 h-24 bg-cyan-600/5 rounded-bl-full pointer-events-none"></div>
-
-            <div className="flex justify-between items-start mb-6 relative z-10">
-              <h3 className="text-xl font-black text-cyan-50 uppercase tracking-widest max-w-[60%]">{session.name}</h3>
-              <div className="flex gap-2">
-                <button onClick={() => updateSession(session.id, { isActive: !session.isActive })} className={cn("px-4 py-2 text-[9px] font-black uppercase tracking-widest rounded-lg border transition-all duration-300 shadow-sm active:scale-95 flex items-center gap-1", session.isActive ? "bg-emerald-950/50 text-emerald-400 border-emerald-500/40 shadow-[0_0_10px_rgba(16,185,129,0.2)]" : "bg-slate-900/80 text-slate-500 border-slate-700")}>
-                   {session.isActive ? <><Activity className="w-3 h-3"/> Aktif</> : 'Nonaktif'}
-                </button>
-              </div>
-            </div>
-            
-            <div className="space-y-4 text-xs font-mono bg-[#050B14] p-5 rounded-2xl border border-cyan-500/20 relative z-10 shadow-inner">
-              <div className="flex justify-between items-center text-cyan-400/80">
-                 <div className="flex items-center gap-3"><Clock className="w-4 h-4 text-cyan-500"/> Jam Tepat Waktu</div>
-                 <span className="text-cyan-50 font-bold bg-[#0A1628] px-3 py-1.5 rounded-lg border border-cyan-500/20">{session.startTime} - {session.endTime}</span>
-              </div>
-              <div className="flex justify-between items-center text-cyan-400/80">
-                 <div className="flex items-center gap-3"><ActivitySquare className="w-4 h-4 text-purple-500"/> Toleransi (Tutup Sesi)</div>
-                 <span className="text-purple-300 font-bold bg-purple-950/40 px-3 py-1.5 rounded-lg border border-purple-500/30">+{session.toleranceMinutes} Menit</span>
-              </div>
-            </div>
-
-            <div className="flex justify-end gap-2 mt-5 relative z-10">
-               <button onClick={() => startEdit(session)} className="flex items-center gap-2 px-4 py-2 text-[10px] font-black uppercase tracking-widest bg-blue-950/50 text-blue-400 hover:bg-blue-600 hover:text-white border border-blue-500/30 rounded-xl transition-all duration-300 active:scale-95">
-                 <Edit className="w-3.5 h-3.5" /> Edit
-               </button>
-               <button onClick={() => {if(confirm(`Yakin ingin menghapus jadwal ${session.name}?`)) deleteSession(session.id);}} className="flex items-center gap-2 px-4 py-2 text-[10px] font-black uppercase tracking-widest bg-rose-950/50 text-rose-400 hover:bg-rose-600 hover:text-white border border-rose-500/30 rounded-xl transition-all duration-300 active:scale-95">
-                 <Trash2 className="w-3.5 h-3.5" /> Hapus
-               </button>
-            </div>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-};
-
 // ==========================================
 // ADMIN FORMATS (CRUD REALTIME TEMPLATE WA)
 // ==========================================
@@ -2629,131 +2566,37 @@ const AdminFormats: React.FC = () => {
         {formats.map((f) => (
           <div key={f.id} className="bg-[#0A1628]/60 backdrop-blur-md border border-cyan-500/20 p-5 rounded-2xl flex flex-col gap-4 group hover:border-cyan-500/50 transition-all shadow-lg relative overflow-hidden">
              <div className="flex justify-between items-start">
-                <div>
-                  <span className="bg-cyan-900 text-cyan-300 px-2 py-1 rounded-md text-[9px] font-black tracking-widest uppercase border border-cyan-500/40">ID Skenario: {f.id}</span>
-                  <h3 className="text-base font-black text-white uppercase mt-3 tracking-wider">{f.title}</h3>
-                  <p className="text-[10px] text-cyan-500/80 font-mono leading-relaxed mt-1">{f.description}</p>
-                </div>
-                {editingId !== f.id && (
-                  <button onClick={() => handleEdit(f)} className="p-2 bg-blue-500/10 hover:bg-blue-500/20 text-blue-400 border border-blue-500/20 rounded-lg transition-all active:scale-95">
-                    <Edit className="w-4 h-4" />
-                  </button>
-                )}
+               <div>
+                 <span className="bg-cyan-900 text-cyan-300 px-2 py-1 rounded-md text-[9px] font-black tracking-widest uppercase border border-cyan-500/40">ID Skenario: {f.id}</span>
+                 <h3 className="text-base font-black text-white uppercase mt-3 tracking-wider">{f.title}</h3>
+                 <p className="text-[10px] text-cyan-500/80 font-mono leading-relaxed mt-1">{f.description}</p>
+               </div>
+               {editingId !== f.id && (
+                 <button onClick={() => handleEdit(f)} className="p-2 bg-blue-500/10 hover:bg-blue-500/20 text-blue-400 border border-blue-500/20 rounded-lg transition-all active:scale-95">
+                   <Edit className="w-4 h-4" />
+                 </button>
+               )}
              </div>
 
              {editingId === f.id ? (
-                <div className="flex flex-col gap-3 mt-2">
-                  <textarea 
-                    className="w-full bg-[#050B14] border border-cyan-500/50 rounded-xl p-3 text-cyan-50 outline-none focus:border-cyan-400 font-mono text-xs leading-relaxed min-h-[150px] custom-scrollbar" 
-                    value={editTemplate} 
-                    onChange={(e) => setEditTemplate(e.target.value)} 
-                  />
-                  <div className="flex gap-2 justify-end">
-                    <button onClick={() => setEditingId(null)} className="px-4 py-2 bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/20 rounded-lg text-[10px] font-black uppercase tracking-wider transition-all">Batal</button>
-                    <button onClick={() => handleSave(f.id)} className="px-4 py-2 bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-400 border border-emerald-500/30 rounded-lg text-[10px] font-black uppercase tracking-wider transition-all flex items-center gap-2"><CheckCircle2 className="w-3.5 h-3.5"/> Simpan Ke Cloud</button>
-                  </div>
-                </div>
+               <div className="flex flex-col gap-3 mt-2">
+                 <textarea 
+                   className="w-full bg-[#050B14] border border-cyan-500/50 rounded-xl p-3 text-cyan-50 outline-none focus:border-cyan-400 font-mono text-xs leading-relaxed min-h-[150px] custom-scrollbar" 
+                   value={editTemplate} 
+                   onChange={(e) => setEditTemplate(e.target.value)} 
+                 />
+                 <div className="flex gap-2 justify-end">
+                   <button onClick={() => setEditingId(null)} className="px-4 py-2 bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/20 rounded-lg text-[10px] font-black uppercase tracking-wider transition-all">Batal</button>
+                   <button onClick={() => handleSave(f.id)} className="px-4 py-2 bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-400 border border-emerald-500/30 rounded-lg text-[10px] font-black uppercase tracking-wider transition-all flex items-center gap-2"><CheckCircle2 className="w-3.5 h-3.5"/> Simpan Ke Cloud</button>
+                 </div>
+               </div>
              ) : (
-                <div className="bg-[#050B14] border border-cyan-900/50 p-4 rounded-xl mt-2 relative">
-                   <pre className="text-[10px] text-cyan-100 font-mono whitespace-pre-wrap leading-relaxed">{f.template}</pre>
-                </div>
+               <div className="bg-[#050B14] border border-cyan-900/50 p-4 rounded-xl mt-2 relative">
+                  <pre className="text-[10px] text-cyan-100 font-mono whitespace-pre-wrap leading-relaxed">{f.template}</pre>
+               </div>
              )}
           </div>
         ))}
-      </div>
-    </div>
-  );
-};
-
-const AdminManagement: React.FC = () => {
-  const { admins, addAdmin, updateAdmin, deleteAdmin } = useAppContext();
-  const [isAdding, setIsAdding] = useState(false);
-  const [newAd, setNewAd] = useState({ username: '', password: '' });
-  const [editingId, setEditingId] = useState<string | null>(null);
-  const [editUser, setEditUser] = useState('');
-  const [editPass, setEditPass] = useState('');
-
-  const handleAdd = (e: React.FormEvent) => {
-    e.preventDefault();
-    if(newAd.username.trim() && newAd.password.trim()) {
-       addAdmin(newAd);
-       setIsAdding(false); 
-       setNewAd({ username: '', password: '' });
-    }
-  };
-
-  const handleUpdate = (e: React.FormEvent) => {
-     e.preventDefault();
-     if(editingId && editUser.trim()) {
-        updateAdmin(editingId, { username: editUser, password: editPass });
-        setEditingId(null); 
-        setEditUser('');
-        setEditPass('');
-     }
-  }
-
-  return (
-    <div className="space-y-6 animate-in fade-in duration-500 pb-10">
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-        <div>
-          <h2 className="text-2xl md:text-3xl font-black text-cyan-50 tracking-widest uppercase">Kelola Akun Admin</h2>
-          <p className="text-cyan-500/70 text-xs md:text-sm font-mono uppercase mt-1">Tambah atau atur akses masuk ke Dashboard</p>
-        </div>
-        <button onClick={() => setIsAdding(!isAdding)} className="flex items-center gap-2 px-5 py-3 bg-cyan-600/20 text-cyan-400 hover:bg-cyan-500/30 border border-cyan-500/50 rounded-xl transition-all duration-300 font-black uppercase tracking-widest text-xs shadow-[0_0_15px_rgba(6,182,212,0.2)]">
-          <Plus className="w-4 h-4" /> Tambah Admin Baru
-        </button>
-      </div>
-
-      {isAdding && (
-        <form onSubmit={handleAdd} className="bg-[#0A1628]/80 backdrop-blur-md border border-cyan-500/30 p-5 md:p-6 rounded-2xl flex flex-col md:flex-row gap-4 items-end shadow-xl animate-in slide-in-from-top-4">
-          <div className="flex-1 space-y-1.5 w-full">
-            <label className="text-[10px] md:text-xs text-cyan-500 font-bold uppercase tracking-widest ml-1">Username Admin Baru</label>
-            <input required type="text" value={newAd.username} onChange={e=>setNewAd({...newAd, username: e.target.value})} className="w-full bg-[#050B14] border border-cyan-500/30 rounded-xl px-4 py-3.5 text-white outline-none focus:border-cyan-400 transition-colors text-sm font-mono" placeholder="Ketik Username..." />
-          </div>
-          <div className="flex-1 space-y-1.5 w-full">
-            <label className="text-[10px] md:text-xs text-cyan-500 font-bold uppercase tracking-widest ml-1">Password Baru</label>
-            <input required type="text" value={newAd.password} onChange={e=>setNewAd({...newAd, password: e.target.value})} className="w-full bg-[#050B14] border border-cyan-500/30 rounded-xl px-4 py-3.5 text-white outline-none focus:border-cyan-400 transition-colors text-sm font-mono" placeholder="Ketik Password..." />
-          </div>
-          <button type="submit" className="w-full md:w-auto px-8 py-3.5 bg-cyan-600 hover:bg-cyan-500 text-white font-black uppercase tracking-widest text-xs rounded-xl transition-all duration-300 shadow-lg active:scale-95">Simpan Admin</button>
-        </form>
-      )}
-
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-         {admins.map(a => (
-            <div key={a.id} className="bg-[#0A1628]/60 backdrop-blur-md border border-cyan-500/20 p-5 rounded-2xl flex flex-col gap-4 group hover:border-cyan-500/50 transition-all duration-300 shadow-lg">
-               {editingId === a.id ? (
-                  <form onSubmit={handleUpdate} className="flex flex-col gap-3">
-                     <div className="flex gap-2">
-                         <User className="w-5 h-5 text-cyan-600" />
-                         <input autoFocus required placeholder="Username" type="text" value={editUser} onChange={e=>setEditUser(e.target.value)} className="w-full bg-[#050B14] border border-cyan-500/50 rounded-lg px-3 py-2 text-white outline-none text-sm font-mono" />
-                     </div>
-                     <div className="flex gap-2">
-                         <Key className="w-5 h-5 text-cyan-600" />
-                         <input required placeholder="Password" type="text" value={editPass} onChange={e=>setEditPass(e.target.value)} className="w-full bg-[#050B14] border border-cyan-500/50 rounded-lg px-3 py-2 text-white outline-none text-sm font-mono" />
-                     </div>
-                     <div className="flex gap-2 justify-end mt-2">
-                         <button type="submit" className="bg-emerald-500/20 text-emerald-400 p-2 rounded-lg border border-emerald-500/30 flex-1 flex justify-center"><CheckCircle2 className="w-4 h-4"/></button>
-                         <button type="button" onClick={()=>setEditingId(null)} className="bg-rose-500/20 text-rose-400 p-2 rounded-lg border border-rose-500/30 flex-1 flex justify-center"><X className="w-4 h-4"/></button>
-                     </div>
-                  </form>
-               ) : (
-                  <>
-                     <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 bg-cyan-950/50 rounded-xl flex items-center justify-center border border-cyan-500/30"><ShieldCheck className="w-5 h-5 text-cyan-400" /></div>
-                        <div>
-                           <h3 className="font-bold text-white text-base tracking-wide font-mono">{a.username}</h3>
-                           <p className="text-[10px] text-cyan-500 tracking-widest uppercase mt-0.5">Admin Dashboard</p>
-                        </div>
-                     </div>
-                     <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                        <button onClick={()=>{setEditingId(a.id); setEditUser(a.username); setEditPass(a.password || '');}} className="flex-1 flex justify-center items-center gap-2 py-2 bg-blue-500/10 hover:bg-blue-500/20 text-blue-400 border border-blue-500/20 rounded-lg text-[10px] uppercase font-bold tracking-wider"><Edit className="w-3.5 h-3.5"/> Edit</button>
-                        <button onClick={()=>{if(confirm(`Yakin ingin menghapus Admin ${a.username}?`)) deleteAdmin(a.id);}} className="flex-1 flex justify-center items-center gap-2 py-2 bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/20 rounded-lg text-[10px] uppercase font-bold tracking-wider"><Trash2 className="w-3.5 h-3.5"/> Hapus</button>
-                     </div>
-                  </>
-               )}
-            </div>
-         ))}
-         {admins.length === 0 && <div className="col-span-full p-8 text-center border-2 border-dashed border-cyan-900 rounded-2xl text-cyan-700 font-mono text-sm uppercase">Belum Ada Admin Terdaftar</div>}
       </div>
     </div>
   );
