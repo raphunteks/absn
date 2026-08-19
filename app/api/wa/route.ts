@@ -62,7 +62,7 @@ class Redis {
 }
 
 // =====================================================================
-// DAFTAR TEMPLATE DEFAULT LENGKAP (SEBAGAI FALLBACK/SEEDING AWAL)
+// FALLBACK SEEDING TEMPLATES (TERMASUK SKENARIO 15, 16, & 19 BARU)
 // =====================================================================
 const defaultFormats = [
   { id: 1, title: "Pembukaan Sesi", description: "Dikirim tepat saat jam shift dimulai.", template: "🔔 *NOTIFIKASI ABSENSI DIBUKA* 🔔\n\nHalo *[Nama Lengkap]*, sesi absensi untuk *[Shift]* Dept. RKG hari ini telah resmi *DIBUKA*.\n\n📋 *Detail Sesi Absensi:*\n• Kelompok: *[Kelompok]*\n• Jam Tepat Waktu: *[Jam Sesi]* WITA\n• Batas Tutup Sesi: *[Jam Tutup]* WITA\n\nYuk, segera lakukan validasi kehadiran Anda sekarang melalui portal resmi kami:\n[Link]\n\nSelamat bertugas! 🏥" },
@@ -89,12 +89,11 @@ const defaultFormats = [
 ];
 
 // =====================================================================
-// AUTO-SEEDING FUNCTIONS
+// AUTO-SEEDING DARI REDIS & JSON EKSTERNAL
 // =====================================================================
 async function initFormatsInRedis() {
   const redis = Redis.fromEnv();
   const existingFormats = await redis.get('axaxyz_formats');
-  
   if (!existingFormats || existingFormats.length === 0) {
     await redis.set('axaxyz_formats', defaultFormats);
     return defaultFormats;
@@ -105,7 +104,6 @@ async function initFormatsInRedis() {
 async function initHolidaysInRedis() {
   const redis = Redis.fromEnv();
   const existingHolidays = await redis.get('axaxyz_holidays');
-  
   if (!existingHolidays || existingHolidays.length === 0) {
     // Dynamic import mapping for Calendar2026 JSON Object
     const rawCal: any = calendar2026Raw;
@@ -123,12 +121,10 @@ async function initHolidaysInRedis() {
   return existingHolidays;
 }
 
-
 // =====================================================================
 // GET REQUEST: MENGAMBIL ANTRIAN (BOT) & MENAMPILKAN DOCS (BROWSER)
 // =====================================================================
 export async function GET(request: NextRequest) {
-  // Jika Bot mengirimkan parameter ?action=pull
   const { searchParams } = new URL(request.url);
   const action = searchParams.get('action');
 
@@ -138,7 +134,6 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ success: true, queue }, { status: 200 });
   }
 
-  // Auto-seed formats & holidays
   await initFormatsInRedis();
   await initHolidaysInRedis();
 
@@ -148,9 +143,7 @@ export async function GET(request: NextRequest) {
     bot_pull_endpoint: "GET https://absensi.maksaarsyad.xyz/api/wa?action=pull",
     method: "POST",
     description: "REST API Gateway All-in-One: Merakit pesan dari template dinamis Redis & Memasukkannya ke dalam Queue untuk di-pull oleh Bot WA.",
-    headers: {
-      "Content-Type": "application/json"
-    },
+    headers: { "Content-Type": "application/json" },
     payload_example: {
       no_hp: "6281234567890",
       scenario: 18,
@@ -179,7 +172,6 @@ export async function GET(request: NextRequest) {
   return NextResponse.json(apiDocs, { status: 200 });
 }
 
-
 // =====================================================================
 // POST REQUEST: GENERATE WHATSAPP MESSAGE & PUSH KE QUEUE (REDIS)
 // =====================================================================
@@ -202,7 +194,9 @@ export async function POST(request: Request) {
     // ============================================================
     if (scenario === 16 || scenario === 19) {
         let students = await redis.get('axaxyz_students') || [];
-        const studentIndex = students.findIndex((s: any) => s.noHp === no_hp || s.noHp === no_hp.replace('62', '0'));
+        // Pastikan format input bot wa (08xxx / 628xxx) ter-match ke database
+        let inputNoHp = no_hp.toString();
+        const studentIndex = students.findIndex((s: any) => s.noHp === inputNoHp || s.noHp === inputNoHp.replace(/^62/, '0') || s.noHp === inputNoHp.replace(/^0/, '62'));
         
         if (studentIndex === -1) {
             return NextResponse.json({ success: false, error: "Nomor WA tidak terdaftar di sistem database." }, { status: 404 });
@@ -211,7 +205,7 @@ export async function POST(request: Request) {
         const st = students[studentIndex];
         
         if (scenario === 16) {
-            // Process Logout Device
+            // Process Logout Device Skenario 16
             if (!st.deviceId) {
                 return NextResponse.json({ success: false, error: "Perangkat Anda sudah dalam keadaan tidak terikat (logout)." }, { status: 400 });
             }
@@ -221,7 +215,7 @@ export async function POST(request: Request) {
         }
         
         if (scenario === 19) {
-            // Process Reset Password (4 digit random number)
+            // Process Reset Password Skenario 19 (4 digit random number)
             const newPass = Math.floor(1000 + Math.random() * 9000).toString();
             students[studentIndex].password = newPass;
             data.namaLengkap = st.name;
@@ -234,15 +228,13 @@ export async function POST(request: Request) {
         await redis.set('axaxyz_students', students);
     }
 
-    // Pastikan Format Tersedia (Ambil dari Redis)
+    // Pastikan Format Tersedia (Ambil langsung dari Redis)
     const formats = await initFormatsInRedis();
 
-    // Default Variables Fallback
     const link = data.link || "https://absensi.maksaarsyad.xyz/";
     const tglMulai = data.tanggalMulai || "Belum Diatur";
     const tglAkhir = data.tanggalAkhir || "Belum Diatur";
 
-    // Cari Skenario yang Cocok dari Database
     const matchedFormat = formats.find((f: any) => f.id === scenario);
 
     if (!matchedFormat) {
@@ -252,7 +244,7 @@ export async function POST(request: Request) {
        );
     }
 
-    // Proses Replacement String Dinamis
+    // Replace String Dinamis Aman
     let messageText = matchedFormat.template
       .replace(/\[Nama Lengkap\]/g, String(data.namaLengkap || ''))
       .replace(/\[NIM\]/g, String(data.nim || ''))
@@ -274,7 +266,7 @@ export async function POST(request: Request) {
       .replace(/\[Total Alpha\]/g, String(data.totalAlpha || '0'))
       .replace(/\[Link\]/g, String(link));
 
-    // Proses Khusus Variabel Gabungan [Status Kehadiran]
+    // Variabel Gabungan Khusus [Status Kehadiran]
     if (data.statusAkhir) {
       let strStatus = "";
       if (data.statusAkhir === "Hadir") strStatus = `🟢 *TEPAT WAKTU / HADIR* (Terekam pada: *${data.jamAbsen}* WITA)`;
@@ -286,14 +278,11 @@ export async function POST(request: Request) {
 
     // PUSH KE MESSAGE QUEUE (REDIS)
     const currentQueue = await redis.get('axaxyz_wa_queue') || [];
-    
-    // Pesan baru dengan ID unik agar mudah dihapus oleh Bot nanti
     const newMessage = { 
        id: Math.random().toString(36).substr(2, 9), 
        target_number: String(no_hp), 
        formatted_message: messageText 
     };
-    
     currentQueue.push(newMessage);
     await redis.set('axaxyz_wa_queue', currentQueue);
 
@@ -321,10 +310,7 @@ export async function DELETE(request: Request) {
 
     const redis = Redis.fromEnv();
     let currentQueue = await redis.get('axaxyz_wa_queue') || [];
-    
-    // Hapus pesan yang sudah dikirim bot berdasarkan ID
     currentQueue = currentQueue.filter((msg: any) => msg.id !== message_id);
-    
     await redis.set('axaxyz_wa_queue', currentQueue);
 
     return NextResponse.json({ success: true, message: `Antrian dengan ID ${message_id} berhasil dihapus.` }, { status: 200 });
