@@ -123,14 +123,14 @@ export async function GET(request: NextRequest) {
       "Content-Type": "application/json"
     },
     payload_example: {
-      no_hp: "081234567890",
-      scenario: 25,
+      no_hp: "6281234567890",
+      scenario: 18,
       data: {
         namaLengkap: "M. Azhar Arsyad",
         nim: "161202300030",
         kelompok: "Cluster II 2025",
         shift: "Shift Pagi",
-        jamSesi: "07:30 - 08:45",
+        jamSesi: "07:30",
         jamTutup: "08:55",
         jamAbsen: "07:45",
         statusAkhir: "Hadir",
@@ -139,11 +139,11 @@ export async function GET(request: NextRequest) {
         password: "123",
         radius: "500",
         lokasiGeofence: "Gedung Rektorat",
-        pesanCustom: "Praktikum dialihkan ke Ruang B lantai 2",
+        pesanCustom: "Praktikum dialihkan ke Ruang B lantai 2 (Skenario 18)",
         link: "https://absensi.maksaarsyad.xyz/"
       }
     },
-    available_scenarios: "Silakan lihat UI /apidocs untuk visualisasi dinamis."
+    available_scenarios: "Silakan login ke Admin Panel -> Manajemen Format untuk melihat dan mengatur seluruh Skenario ID secara dinamis."
   };
 
   return NextResponse.json(apiDocs, { status: 200 });
@@ -167,7 +167,7 @@ export async function POST(request: Request) {
     // Pastikan Format Tersedia (Ambil dari Redis, sekalian Auto-seed)
     const formats = await initFormatsInRedis();
 
-    // Default Variables Fallback
+    // Default Variables Fallback untuk mengatasi Error Null
     const link = data.link || "https://absensi.maksaarsyad.xyz/";
     const tglMulai = data.tanggalMulai || "Belum Diatur";
     const tglAkhir = data.tanggalAkhir || "Belum Diatur";
@@ -182,27 +182,27 @@ export async function POST(request: Request) {
        );
     }
 
-    // Proses Replacement String Dinamis
+    // Proses Replacement String Dinamis (Mencegah crash dengan String conversion)
     let messageText = matchedFormat.template
-      .replace(/\[Nama Lengkap\]/g, data.namaLengkap || '')
-      .replace(/\[NIM\]/g, data.nim || '')
-      .replace(/\[Kelompok\]/g, data.kelompok || '')
-      .replace(/\[Shift\]/g, data.shift || '')
-      .replace(/\[Jam Sesi\]/g, data.jamSesi || '')
-      .replace(/\[Jam Tutup\]/g, data.jamTutup || '')
-      .replace(/\[Jam Absen\]/g, data.jamAbsen || '')
-      .replace(/\[Tanggal Mulai\]/g, tglMulai)
-      .replace(/\[Tanggal Akhir\]/g, tglAkhir)
-      .replace(/\[Tanggal\]/g, data.tanggal || '')
-      .replace(/\[Password\]/g, data.password || '')
-      .replace(/\[Pesan Custom\]/g, data.pesanCustom || '')
-      .replace(/\[Radius\]/g, data.radius || '')
-      .replace(/\[Nama Lokasi Geofence\]/g, data.lokasiGeofence || '')
-      .replace(/\[Total Mhs\]/g, data.totalMhs?.toString() || '0')
-      .replace(/\[Total Hadir\]/g, data.totalHadir?.toString() || '0')
-      .replace(/\[Total Terlambat\]/g, data.totalTerlambat?.toString() || '0')
-      .replace(/\[Total Alpha\]/g, data.totalAlpha?.toString() || '0')
-      .replace(/\[Link\]/g, link);
+      .replace(/\[Nama Lengkap\]/g, String(data.namaLengkap || ''))
+      .replace(/\[NIM\]/g, String(data.nim || ''))
+      .replace(/\[Kelompok\]/g, String(data.kelompok || ''))
+      .replace(/\[Shift\]/g, String(data.shift || ''))
+      .replace(/\[Jam Sesi\]/g, String(data.jamSesi || ''))
+      .replace(/\[Jam Tutup\]/g, String(data.jamTutup || ''))
+      .replace(/\[Jam Absen\]/g, String(data.jamAbsen || ''))
+      .replace(/\[Tanggal Mulai\]/g, String(tglMulai))
+      .replace(/\[Tanggal Akhir\]/g, String(tglAkhir))
+      .replace(/\[Tanggal\]/g, String(data.tanggal || ''))
+      .replace(/\[Password\]/g, String(data.password || ''))
+      .replace(/\[Pesan Custom\]/g, String(data.pesanCustom || ''))
+      .replace(/\[Radius\]/g, String(data.radius || ''))
+      .replace(/\[Nama Lokasi Geofence\]/g, String(data.lokasiGeofence || ''))
+      .replace(/\[Total Mhs\]/g, String(data.totalMhs || '0'))
+      .replace(/\[Total Hadir\]/g, String(data.totalHadir || '0'))
+      .replace(/\[Total Terlambat\]/g, String(data.totalTerlambat || '0'))
+      .replace(/\[Total Alpha\]/g, String(data.totalAlpha || '0'))
+      .replace(/\[Link\]/g, String(link));
 
     // Proses Khusus Variabel Gabungan (Seperti [Status Kehadiran])
     if (data.statusAkhir) {
@@ -221,7 +221,7 @@ export async function POST(request: Request) {
     // Pesan baru dengan ID unik agar mudah dihapus oleh Bot nanti
     const newMessage = { 
        id: Math.random().toString(36).substr(2, 9), 
-       target_number: no_hp, 
+       target_number: String(no_hp), 
        formatted_message: messageText 
     };
     
@@ -231,7 +231,7 @@ export async function POST(request: Request) {
     // Mengembalikan JSON Response Sukses ke Frontend Web
     return NextResponse.json({
       success: true,
-      message: "Pesan dirakit dan dimasukkan ke Antrian (Queue).",
+      message: "Pesan berhasil dirakit dan dimasukkan ke Antrian (Queue).",
       data: newMessage
     }, { status: 200 });
 
@@ -249,7 +249,7 @@ export async function POST(request: Request) {
 export async function DELETE(request: Request) {
   try {
     const { message_id } = await request.json();
-    if (!message_id) return NextResponse.json({ success: false, error: "message_id wajib dikirim" }, { status: 400 });
+    if (!message_id) return NextResponse.json({ success: false, error: "message_id wajib dikirim dalam payload JSON." }, { status: 400 });
 
     const redis = Redis.fromEnv();
     let currentQueue = await redis.get('axaxyz_wa_queue') || [];
@@ -259,7 +259,7 @@ export async function DELETE(request: Request) {
     
     await redis.set('axaxyz_wa_queue', currentQueue);
 
-    return NextResponse.json({ success: true, message: "Antrian berhasil dihapus." }, { status: 200 });
+    return NextResponse.json({ success: true, message: `Antrian dengan ID ${message_id} berhasil dihapus.` }, { status: 200 });
   } catch (error: any) {
     return NextResponse.json({ success: false, error: error.message }, { status: 500 });
   }
