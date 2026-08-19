@@ -121,6 +121,7 @@ const calculateDistance = (lat1: number, lon1: number, lat2: number, lon2: numbe
   return R * c; 
 };
 
+// EXPORT TO EXCEL DYNAMICALLY
 const exportToExcel = async (logs: Log[]) => {
   try {
     const XLSX = await loadXlsx();
@@ -371,7 +372,6 @@ const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const sendWA = async (noHp: string, scenarioId: number, payloadData: any) => {
       if(!noHp) return;
       try {
-          // Fallback Link URL origin untuk dikirimkan ke pesan WA
           if (!payloadData.link && typeof window !== 'undefined') {
               payloadData.link = window.location.origin;
           }
@@ -390,7 +390,6 @@ const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
         const student = students.find(s => s.nim === ownerNim);
         if (student) {
             updateStudent(student.id, { deviceId: null });
-            // TRIGGER WA SKENARIO 5: KEAMANAN LOGOUT
             if (student.noHp) {
                 sendWA(student.noHp, 5, { 
                     namaLengkap: student.name, 
@@ -412,7 +411,7 @@ const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   useEffect(() => {
      if (typeof window === 'undefined') return;
      const isAdmin = localStorage.getItem('axaxyz_admin_auth') === 'true';
-     if (!isAdmin || !isCloudSync) return; // Hanya aktif saat cloud sync (Redis) nyala
+     if (!isAdmin || !isCloudSync) return; 
 
      const cronInterval = setInterval(async () => {
          const now = new Date();
@@ -422,12 +421,12 @@ const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
          for (const sess of sessions) {
              if (!sess.isActive) continue;
 
-             // SKENARIO 1: PEMBUKAAN SESI (Tepat jam startTime)
+             // SKENARIO 1: PEMBUKAAN SESI
              if (sess.startTime === currentHHMM) {
                  const flagKey = `wa_scen1_${todayStr}_${sess.id}`;
                  const isSent = await CloudStore.get(flagKey);
                  if (!isSent) {
-                     await CloudStore.set(flagKey, true); // Lock to avoid duplicate
+                     await CloudStore.set(flagKey, true); 
                      students.forEach(st => {
                          const c = clusters.find(cl=>cl.id === st.clusterId);
                          sendWA(st.noHp || '', 1, { 
@@ -441,7 +440,7 @@ const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
                  }
              }
 
-             // SKENARIO 2: PENGINGAT SISA WAKTU (Tepat jam endTime, sisa waktu tolerance)
+             // SKENARIO 2: PENGINGAT SISA WAKTU
              if (sess.endTime === currentHHMM) {
                  const flagKey = `wa_scen2_${todayStr}_${sess.id}`;
                  const isSent = await CloudStore.get(flagKey);
@@ -460,7 +459,7 @@ const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
                  }
              }
 
-             // SKENARIO 4 & 9: REKAP AKHIR & SP OTOMATIS (1 Menit setelah Tolerance habis)
+             // SKENARIO 4 & 9: REKAP AKHIR & SP OTOMATIS
              const [endH, endM] = sess.endTime.split(':').map(Number);
              const endTotal = endH * 60 + endM + sess.toleranceMinutes;
              const currentTotal = now.getHours() * 60 + now.getMinutes();
@@ -477,7 +476,6 @@ const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
                          const stAkhir = log ? log.status : 'Alpha';
                          const jAbsen = log ? new Date(log.timestamp).toLocaleTimeString('id-ID', {hour:'2-digit', minute:'2-digit'}) : '-';
                          
-                         // Kirim Skenario 4 (Rekap Akhir Harian per Shift)
                          sendWA(st.noHp || '', 4, { 
                              namaLengkap: st.name, 
                              shift: sess.name, 
@@ -488,9 +486,7 @@ const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
                          });
 
                          // LOGIKA SKENARIO 9 (SP OTOMATIS JIKA ALPHA >= 3)
-                         // -> FIX ERROR KOMPILASI LOGIC TYPE
                          if (stAkhir === 'Alpha') {
-                             // Hitung total alpha dan telat secara historis dengan benar
                              let totalAlphaHist = 0;
                              let totalTelatHist = 0;
                              if (c && c.startDate) {
@@ -520,8 +516,8 @@ const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
                                  }
                              }
                              
-                             if (totalAlphaHist >= 3) { // Threshold SP Otomatis: 3x Alpha
-                                 const spFlagKey = `wa_scen9_${st.nim}_${totalAlphaHist}`; // Flag per tingkat SP
+                             if (totalAlphaHist >= 3) { 
+                                 const spFlagKey = `wa_scen9_${st.nim}_${totalAlphaHist}`;
                                  const isSpSent = await CloudStore.get(spFlagKey);
                                  if (!isSpSent) {
                                      await CloudStore.set(spFlagKey, true);
@@ -539,7 +535,7 @@ const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
              }
          }
 
-         // SKENARIO 17: HARI TERAKHIR STASE (Cek Jam 10:00 Pagi)
+         // SKENARIO 17: HARI TERAKHIR STASE
          if (currentHHMM === '10:00') {
              const flagKey = `wa_scen17_${todayStr}`;
              const isSent = await CloudStore.get(flagKey);
@@ -554,7 +550,7 @@ const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
              }
          }
 
-         // SKENARIO 20: REKAP ADMIN (Cek Jam 23:50 Malam)
+         // SKENARIO 20: REKAP ADMIN
          if (currentHHMM === '23:50') {
              const flagKey = `wa_scen20_${todayStr}`;
              const isSent = await CloudStore.get(flagKey);
@@ -566,7 +562,7 @@ const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
                  const tAlpha = (students.length * activeSessCount) - (tHadir + tTelat);
                  
                  admins.forEach(ad => { 
-                    if (ad.noHp) { // Kirim ke admin jika nomor HP nya didaftarkan
+                    if (ad.noHp) {
                         sendWA(ad.noHp, 20, {
                             tanggal: new Date().toLocaleDateString('id-ID', {weekday: 'long', day:'numeric', month:'long'}),
                             totalMhs: students.length,
@@ -579,7 +575,7 @@ const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
              }
          }
          
-     }, 60000); // Jalan setiap 1 Menit
+     }, 60000); 
      
      return () => clearInterval(cronInterval);
   }, [isCloudSync, sessions, students, logs, clusters, admins]);
@@ -1154,7 +1150,6 @@ const QRScanner: React.FC<{ activeSessionName: string, onComplete: (data: {nim: 
       if (foundStudent.clusterId) clusterName = clusters.find(c => c.id === foundStudent.clusterId)?.name || '';
 
       if (foundStudent.deviceId && foundStudent.deviceId !== finalDeviceId) {
-        // TRIGGER WA SKENARIO 11: LOGIN ILEGAL
         if (foundStudent.noHp) {
             sendWA(foundStudent.noHp, 11, { 
                 namaLengkap: foundStudent.name, 
@@ -1361,7 +1356,7 @@ const AttendanceWizard: React.FC = () => {
         </div>
       </header>
 
-      <main className="flex-1 flex flex-col relative z-10 w-full max-w-[1400px] mx-auto px-4 py-6 md:py-10 overflow-y-auto custom-scrollbar">
+      <main className="flex-1 flex flex-col relative z-10 w-full max-w-[1400px] mx-auto px-4 py-6 md:py-10 overflow-y-auto overflow-x-hidden custom-scrollbar">
         {step > 0 && step < 5 && (
           <div className="mb-8 md:mb-16 max-w-2xl mx-auto w-full px-2 relative z-20">
             <div className="flex justify-between relative">
@@ -1660,6 +1655,7 @@ const AdminDashboardHome: React.FC = () => {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-5 min-h-[350px]">
+        
         <div className="lg:col-span-2 bg-[#0A1628]/60 backdrop-blur-md border border-cyan-500/20 p-6 rounded-[1.5rem] flex flex-col shadow-lg relative overflow-hidden">
           <div className="absolute top-0 right-0 w-32 h-32 bg-cyan-600/10 rounded-bl-[100px] pointer-events-none"></div>
           <h3 className="text-sm font-black text-cyan-50 mb-6 tracking-widest uppercase flex items-center gap-2"><Activity className="w-4 h-4 text-cyan-400"/> Tren Absensi Harian</h3>
@@ -1882,7 +1878,6 @@ const AdminStudents: React.FC = () => {
   const [selectedStudentForKTM, setSelectedStudentForKTM] = useState<Student | null>(null);
   const [isBroadcasting, setIsBroadcasting] = useState(false);
   
-  // Custom Broadcast State
   const [isCustomBroadcastOpen, setIsCustomBroadcastOpen] = useState(false);
   const [customMessage, setCustomMessage] = useState('');
 
@@ -1911,13 +1906,11 @@ const AdminStudents: React.FC = () => {
        let phone = editingStudent.noHp?.trim() || '';
        if (phone.startsWith('0')) phone = '62' + phone.substring(1);
        
-       // CEK PERUBAHAN PASSWORD UNTUK TRIGGER WA SKENARIO 14
        const oldStudentData = students.find(s => s.id === editingStudent.id);
        const isPasswordChanged = oldStudentData?.password !== editingStudent.password;
 
        updateStudent(editingStudent.id, { name: editingStudent.name, nim: editingStudent.nim, noHp: phone, password: editingStudent.password, clusterId: editingStudent.clusterId });
        
-       // TRIGGER WA SKENARIO 14: UBAH PASSWORD
        if (isPasswordChanged && phone) {
            sendWA(phone, 14, {
                namaLengkap: editingStudent.name,
@@ -2055,7 +2048,6 @@ const AdminStudents: React.FC = () => {
          if (!s.noHp) continue;
          const myCluster = clusters.find(c => c.id === s.clusterId);
          try {
-             // TRIGGER WA SKENARIO 18: PESAN BROADCAST CUSTOM
              await sendWA(s.noHp, 18, {
                  kelompok: myCluster?.name || 'Semua Kelompok',
                  pesanCustom: customMessage
@@ -2091,66 +2083,79 @@ const AdminStudents: React.FC = () => {
           </div>
         </div>
         
-        <div className="flex flex-col xl:flex-row gap-4 w-full items-start">
-          <div className="flex flex-col sm:flex-row gap-3 w-full xl:w-auto bg-[#0A1628]/80 p-3 rounded-2xl border border-cyan-500/20 shadow-lg items-center shrink-0">
+        {/* NEW LAYOUT: ACTION ROW FIRST, THEN EXCEL GUIDE */}
+        <div className="flex flex-col gap-4 w-full">
+          
+          {/* Action Row (Dropdowns & Buttons) */}
+          <div className="flex flex-wrap lg:flex-nowrap gap-3 w-full bg-[#0A1628]/80 p-4 rounded-2xl border border-cyan-500/20 shadow-lg items-center">
              
-             <div className="flex flex-col w-full sm:w-auto gap-1">
-               <div className="flex items-center bg-[#050B14] border border-purple-500/30 rounded-xl px-2 h-11 w-full sm:w-44 focus-within:border-purple-400 transition-colors">
-                  <select value={selectedClusterForBulk} onChange={e=>setSelectedClusterForBulk(e.target.value)} className="bg-transparent text-purple-100 text-xs font-bold uppercase outline-none w-full cursor-pointer appearance-none px-2 text-center sm:text-left">
+             {/* KELOMPOK DROPDOWN */}
+             <div className="flex flex-col w-full lg:w-auto flex-1 min-w-[200px] gap-1">
+               <div className="flex items-center bg-[#050B14] border border-purple-500/30 rounded-xl px-2 h-12 w-full focus-within:border-purple-400 transition-colors">
+                  <select value={selectedClusterForBulk} onChange={e=>setSelectedClusterForBulk(e.target.value)} className="bg-transparent text-purple-100 text-xs font-bold uppercase outline-none w-full cursor-pointer appearance-none px-2 text-center lg:text-left">
                      <option value="" disabled>PILIH KELOMPOK (DEFAULT)</option>
                      {clusters.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
                   </select>
                </div>
              </div>
 
-             <div className="flex flex-col w-full sm:w-auto gap-1">
-               <div className="flex items-center bg-[#050B14] border border-purple-500/30 rounded-xl px-3 h-11 w-full sm:w-32 focus-within:border-purple-400 transition-colors" title="Sandi otomatis untuk import">
+             {/* INPUT DEFAULT PASSWORD */}
+             <div className="flex flex-col w-full lg:w-auto flex-1 min-w-[150px] gap-1">
+               <div className="flex items-center bg-[#050B14] border border-purple-500/30 rounded-xl px-3 h-12 w-full focus-within:border-purple-400 transition-colors" title="Sandi otomatis untuk import">
                   <Key className="w-3.5 h-3.5 text-purple-400 mr-2 shrink-0" />
                   <input type="text" value={defaultBulkPassword} onChange={handleDefaultPassChange} className="bg-transparent text-purple-100 text-xs font-bold w-full outline-none placeholder-purple-500/50" placeholder="Sandi Default" />
                </div>
              </div>
              
-             <label className="flex flex-1 sm:flex-none w-full sm:w-auto justify-center items-center gap-2 px-6 py-3 sm:py-2.5 bg-gradient-to-r from-purple-600/30 to-fuchsia-600/30 text-purple-300 hover:from-purple-500/50 hover:to-fuchsia-500/50 border border-purple-400/50 rounded-xl transition-all duration-300 font-black uppercase text-[10px] md:text-xs cursor-pointer active:scale-95 shadow-[0_0_15px_rgba(147,51,234,0.3)] whitespace-nowrap">
+             <label className="flex w-full lg:w-auto justify-center items-center gap-2 px-6 h-12 bg-gradient-to-r from-purple-600/30 to-fuchsia-600/30 text-purple-300 hover:from-purple-500/50 hover:to-fuchsia-500/50 border border-purple-400/50 rounded-xl transition-all duration-300 font-black uppercase text-[10px] md:text-xs cursor-pointer active:scale-95 shadow-[0_0_15px_rgba(147,51,234,0.3)] whitespace-nowrap">
                 <Upload className="w-4 h-4" /> Import Excel
                 <input type="file" accept=".xlsx, .xls" className="hidden" onChange={handleBulkUpload} />
              </label>
              
-             <button onClick={() => setIsAdding(!isAdding)} className="flex flex-1 sm:flex-none w-full sm:w-auto justify-center items-center gap-2 px-6 py-3 sm:py-2.5 bg-cyan-600/20 text-cyan-400 hover:bg-cyan-600/40 border border-cyan-500/50 rounded-xl transition-all duration-300 font-black uppercase text-[10px] md:text-xs active:scale-95 shadow-[0_0_10px_rgba(6,182,212,0.3)] whitespace-nowrap">
+             <button onClick={() => setIsAdding(!isAdding)} className="flex w-full lg:w-auto justify-center items-center gap-2 px-6 h-12 bg-cyan-600/20 text-cyan-400 hover:bg-cyan-600/40 border border-cyan-500/50 rounded-xl transition-all duration-300 font-black uppercase text-[10px] md:text-xs active:scale-95 shadow-[0_0_10px_rgba(6,182,212,0.3)] whitespace-nowrap">
                 <Plus className="w-4 h-4" /> Input Manual
              </button>
           </div>
 
-          <div className="bg-gradient-to-br from-[#050B14]/90 to-[#0A1628]/90 p-4 rounded-2xl border border-purple-500/40 flex flex-col sm:flex-row items-start sm:items-center gap-3 md:gap-4 shadow-[0_10px_30px_rgba(147,51,234,0.15)] relative overflow-hidden group w-full xl:flex-1">
-             <div className="absolute top-0 right-0 w-32 h-32 bg-purple-600/10 rounded-bl-[100px] pointer-events-none transition-transform group-hover:scale-110"></div>
-             <div className="bg-purple-950/60 p-2.5 rounded-xl border border-purple-500/50 shrink-0 relative z-10 shadow-[inset_0_0_15px_rgba(147,51,234,0.3)]">
-                <FileText className="w-5 h-5 text-purple-400" />
+          {/* EXCEL GUIDE (Moved Below Action Row) */}
+          <div className="bg-gradient-to-br from-[#050B14]/90 to-[#0A1628]/90 p-5 rounded-2xl border border-purple-500/40 flex flex-col md:flex-row items-start md:items-center gap-4 md:gap-6 shadow-[0_10px_30px_rgba(147,51,234,0.15)] relative overflow-hidden group w-full">
+             <div className="absolute top-0 right-0 w-40 h-40 bg-purple-600/10 rounded-bl-[120px] pointer-events-none transition-transform group-hover:scale-110"></div>
+             
+             <div className="bg-purple-950/60 p-3 rounded-xl border border-purple-500/50 shrink-0 relative z-10 shadow-[inset_0_0_15px_rgba(147,51,234,0.3)]">
+                <FileText className="w-6 h-6 text-purple-400" />
              </div>
+             
              <div className="flex-1 relative z-10 w-full">
-                <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-2 gap-2">
-                   <p className="text-[11px] md:text-xs text-purple-200 font-black uppercase tracking-[0.15em] flex items-center gap-2 drop-shadow-md">
+                <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-3 gap-2">
+                   <p className="text-xs md:text-sm text-purple-200 font-black uppercase tracking-[0.15em] flex items-center gap-2 drop-shadow-md">
                       Panduan Format Excel (2D Array)
                    </p>
-                   <span className="bg-gradient-to-r from-purple-600 to-fuchsia-600 text-white border border-purple-400/50 px-2.5 py-1 rounded-lg text-[8px] font-black tracking-[0.2em] shadow-[0_0_15px_rgba(192,38,211,0.5)]">
+                   <span className="bg-gradient-to-r from-purple-600 to-fuchsia-600 text-white border border-purple-400/50 px-3 py-1 rounded-lg text-[9px] font-black tracking-[0.2em] shadow-[0_0_15px_rgba(192,38,211,0.5)]">
                       ✨ SUPER UPGRADE
                    </span>
                 </div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-x-4 gap-y-2 text-[9px] md:text-[10px] text-cyan-100/80 font-mono leading-relaxed">
+                
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-x-4 gap-y-3 text-[10px] md:text-xs text-cyan-100/80 font-mono leading-relaxed">
                    <div>
-                      <p><span className="text-purple-400 font-bold bg-purple-950/50 px-1 rounded">Kolom A</span> Nama <span className="text-purple-300 font-bold">*Wajib</span></p>
+                      <p><span className="text-purple-400 font-bold bg-purple-950/50 px-1.5 py-0.5 rounded mr-1">Kolom A</span> Nama <span className="text-purple-300 font-bold ml-1">*Wajib</span></p>
                    </div>
                    <div>
-                      <p><span className="text-purple-400 font-bold bg-purple-950/50 px-1 rounded">Kolom B</span> NIM <span className="text-purple-300 font-bold">*Wajib</span></p>
+                      <p><span className="text-purple-400 font-bold bg-purple-950/50 px-1.5 py-0.5 rounded mr-1">Kolom B</span> NIM <span className="text-purple-300 font-bold ml-1">*Wajib</span></p>
                    </div>
                    <div>
-                      <p><span className="text-blue-400 font-bold bg-blue-950/50 px-1 rounded">Kolom C</span> No WA <span className="text-blue-300 font-bold">*Wajib</span></p>
+                      <p><span className="text-blue-400 font-bold bg-blue-950/50 px-1.5 py-0.5 rounded mr-1">Kolom C</span> No WA <span className="text-blue-300 font-bold ml-1">*Wajib</span></p>
                    </div>
                    <div>
-                      <p><span className="text-emerald-400 font-bold bg-emerald-950/50 px-1 rounded">Kolom D</span> Kelompok <span className="text-emerald-300 italic">(Ops.)</span></p>
+                      <p><span className="text-emerald-400 font-bold bg-emerald-950/50 px-1.5 py-0.5 rounded mr-1">Kolom D</span> Kelompok <span className="text-emerald-300 italic ml-1">(Ops.)</span></p>
                    </div>
                 </div>
-                <p className="text-[8px] text-cyan-500 italic mt-2.5 border-t border-cyan-900/50 pt-2">*Baris 1 wajib Header. Kolom C otomatis diformat ke 628xxx. Jika D kosong, masuk ke kelompok default dropdown. Sandi ikuti input box.</p>
+                
+                <p className="text-[9px] md:text-[10px] text-cyan-500 italic mt-3 border-t border-cyan-900/50 pt-2.5">
+                   *Baris 1 wajib Header. Kolom C otomatis diformat ke 628xxx. Jika Kolom D kosong, data akan otomatis masuk ke kelompok yang Anda pilih pada Dropdown di atas. Sandi akun akan mengikuti isian input box 'Sandi Default'.
+                </p>
              </div>
           </div>
+          
         </div>
       </div>
 
@@ -3034,7 +3039,8 @@ const AdminLayout: React.FC<{ children: React.ReactNode, activeRoute: string, se
         </div>
       </aside>
 
-      <main className="flex-1 flex flex-col relative overflow-y-auto w-full h-screen custom-scrollbar">
+      {/* UPDATE PENTING GBR 2: DITAMBAHKAN OVERFLOW-X-HIDDEN UNTUK MENCEGAH SCROLL KE SAMPING */}
+      <main className="flex-1 flex flex-col relative overflow-y-auto overflow-x-hidden w-full h-screen custom-scrollbar">
         {/* RESPONSIVE HEADER & STATUS BADGE */}
         <header className="sticky top-0 p-4 md:p-6 flex justify-between md:justify-end items-center z-30 w-full bg-[#0A1628]/80 backdrop-blur-xl border-b border-cyan-900/50 shadow-[0_4px_30px_rgba(0,0,0,0.5)]">
            <button className="md:hidden p-2.5 bg-[#050B14] border border-cyan-500/30 rounded-xl text-cyan-400 transition-colors active:scale-95 shadow-[0_0_10px_rgba(6,182,212,0.2)]" onClick={() => setIsMobileMenuOpen(true)}>
