@@ -1,7 +1,7 @@
-import { NextResponse } from 'next/server';
+import { NextResponse, NextRequest } from 'next/server';
 
 // =====================================================================
-// REDIS CLIENT UNTUK CLOUD SYNC TEMPLATE WA
+// REDIS CLIENT UNTUK CLOUD SYNC TEMPLATE WA & QUEUE BOT
 // =====================================================================
 class Redis {
   url: string;
@@ -97,18 +97,28 @@ async function initFormatsInRedis() {
 }
 
 // =====================================================================
-// API DOCS: GET REQUEST
-// Akses dokumentasi di: https://absensi.maksaarsyad.xyz/api/wa
+// GET REQUEST: MENGAMBIL ANTRIAN (BOT) & MENAMPILKAN DOCS (BROWSER)
 // =====================================================================
-export async function GET() {
-  // Jalankan Auto-Seed untuk memastikan Redis terisi
+export async function GET(request: NextRequest) {
+  // Jika Bot mengirimkan parameter ?action=pull
+  const { searchParams } = new URL(request.url);
+  const action = searchParams.get('action');
+
+  if (action === 'pull') {
+    const redis = Redis.fromEnv();
+    const queue = await redis.get('axaxyz_wa_queue') || [];
+    return NextResponse.json({ success: true, queue }, { status: 200 });
+  }
+
+  // Jika diakses biasa oleh Browser: Tampilkan API Docs
   await initFormatsInRedis();
 
   const apiDocs = {
     app_name: "Sistem Absensi Dept. RKG",
     endpoint: "https://absensi.maksaarsyad.xyz/api/wa",
+    bot_pull_endpoint: "GET https://absensi.maksaarsyad.xyz/api/wa?action=pull",
     method: "POST",
-    description: "REST API Gateway untuk Bot WhatsApp. Menggunakan Template Dinamis dari Database (CloudStore).",
+    description: "REST API Gateway All-in-One: Merakit pesan dari template dinamis Redis & Memasukkannya ke dalam Queue untuk di-pull oleh Bot WA.",
     headers: {
       "Content-Type": "application/json"
     },
@@ -140,7 +150,7 @@ export async function GET() {
 }
 
 // =====================================================================
-// POST REQUEST: GENERATE WHATSAPP MESSAGE (DINAMIS DARI REDIS)
+// POST REQUEST: GENERATE WHATSAPP MESSAGE & PUSH KE QUEUE (REDIS)
 // =====================================================================
 export async function POST(request: Request) {
   try {
@@ -204,15 +214,25 @@ export async function POST(request: Request) {
       messageText = messageText.replace(/\[Status Kehadiran\]/g, strStatus);
     }
 
-    // Mengembalikan JSON Response Sukses
+    // PUSH KE MESSAGE QUEUE (REDIS)
+    const redis = Redis.fromEnv();
+    const currentQueue = await redis.get('axaxyz_wa_queue') || [];
+    
+    // Pesan baru dengan ID unik agar mudah dihapus oleh Bot nanti
+    const newMessage = { 
+       id: Math.random().toString(36).substr(2, 9), 
+       target_number: no_hp, 
+       formatted_message: messageText 
+    };
+    
+    currentQueue.push(newMessage);
+    await redis.set('axaxyz_wa_queue', currentQueue);
+
+    // Mengembalikan JSON Response Sukses ke Frontend Web
     return NextResponse.json({
       success: true,
-      target_number: no_hp,
-      formatted_message: messageText,
-      meta_info: {
-        scenario_executed: scenario,
-        timestamp: new Date().toISOString()
-      }
+      message: "Pesan dirakit dan dimasukkan ke Antrian (Queue).",
+      data: newMessage
     }, { status: 200 });
 
   } catch (error: any) {
@@ -220,5 +240,27 @@ export async function POST(request: Request) {
       { success: false, error: "Gagal memproses request", details: error.message },
       { status: 500 }
     );
+  }
+}
+
+// =====================================================================
+// DELETE REQUEST: MENGHAPUS PESAN DARI ANTRIAN SETELAH BOT BERHASIL
+// =====================================================================
+export async function DELETE(request: Request) {
+  try {
+    const { message_id } = await request.json();
+    if (!message_id) return NextResponse.json({ success: false, error: "message_id wajib dikirim" }, { status: 400 });
+
+    const redis = Redis.fromEnv();
+    let currentQueue = await redis.get('axaxyz_wa_queue') || [];
+    
+    // Hapus pesan yang sudah dikirim bot berdasarkan ID
+    currentQueue = currentQueue.filter((msg: any) => msg.id !== message_id);
+    
+    await redis.set('axaxyz_wa_queue', currentQueue);
+
+    return NextResponse.json({ success: true, message: "Antrian berhasil dihapus." }, { status: 200 });
+  } catch (error: any) {
+    return NextResponse.json({ success: false, error: error.message }, { status: 500 });
   }
 }
