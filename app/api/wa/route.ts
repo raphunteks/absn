@@ -1,4 +1,5 @@
 import { NextResponse, NextRequest } from 'next/server';
+import calendar2026Raw from './calender2026.json';
 
 // =====================================================================
 // REDIS CLIENT UNTUK CLOUD SYNC TEMPLATE WA & QUEUE BOT
@@ -61,41 +62,7 @@ class Redis {
 }
 
 // =====================================================================
-// DATA KALENDER LIBUR INDONESIA 2026 (RAW JSON)
-// =====================================================================
-const calendar2026Raw: any = {
-    "2026-01-01": { "holiday": true, "summary": ["Hari Tahun Baru"] },
-    "2026-01-16": { "holiday": true, "summary": ["Isra Mikraj Nabi Muhammad"] },
-    "2026-02-16": { "holiday": true, "summary": ["Cuti Bersama Tahun Baru Imlek"] },
-    "2026-02-17": { "holiday": true, "summary": ["Tahun Baru Imlek"] },
-    "2026-02-19": { "holiday": false, "summary": ["1 Ramadan"] },
-    "2026-03-18": { "holiday": true, "summary": ["Cuti Bersama Hari Suci Nyepi"] },
-    "2026-03-19": { "holiday": true, "summary": ["Hari Suci Nyepi (Tahun Baru Saka)"] },
-    "2026-03-20": { "holiday": true, "summary": ["Cuti Bersama Idul Fitri"] },
-    "2026-03-21": { "holiday": true, "summary": ["Hari Idul Fitri"] },
-    "2026-03-22": { "holiday": true, "summary": ["Hari Idul Fitri"] },
-    "2026-03-23": { "holiday": true, "summary": ["Cuti Bersama Idul Fitri"] },
-    "2026-03-24": { "holiday": true, "summary": ["Cuti Bersama Idul Fitri"] },
-    "2026-04-03": { "holiday": true, "summary": ["Wafat Isa Almasih"] },
-    "2026-04-05": { "holiday": true, "summary": ["Hari Paskah"] },
-    "2026-05-01": { "holiday": true, "summary": ["Hari Buruh Internasional"] },
-    "2026-05-14": { "holiday": true, "summary": ["Kenaikan Isa Al Masih"] },
-    "2026-05-15": { "holiday": true, "summary": ["Cuti Bersama Kenaikan Isa Al Masih"] },
-    "2026-05-27": { "holiday": true, "summary": ["Idul Adha (Lebaran Haji)"] },
-    "2026-05-28": { "holiday": true, "summary": ["Idul Adha (Lebaran Haji)"] },
-    "2026-05-31": { "holiday": true, "summary": ["Hari Raya Waisak"] },
-    "2026-06-01": { "holiday": true, "summary": ["Hari Lahir Pancasila"] },
-    "2026-06-16": { "holiday": true, "summary": ["Hari Kedua Muharram"] },
-    "2026-06-17": { "holiday": false, "summary": ["Satu Muharam / Tahun Baru Hijriah"] },
-    "2026-08-17": { "holiday": true, "summary": ["Hari Proklamasi Kemerdekaan R.I."] },
-    "2026-08-25": { "holiday": true, "summary": ["Maulid Nabi Muhammad"] },
-    "2026-12-24": { "holiday": true, "summary": ["Cuti Bersama Natal"] },
-    "2026-12-25": { "holiday": true, "summary": ["Hari Raya Natal"] },
-    "2026-12-31": { "holiday": false, "summary": ["Malam Tahun Baru"] }
-};
-
-// =====================================================================
-// DAFTAR TEMPLATE DEFAULT LENGKAP (21 SKENARIO)
+// DAFTAR TEMPLATE DEFAULT LENGKAP (SEBAGAI FALLBACK/SEEDING AWAL)
 // =====================================================================
 const defaultFormats = [
   { id: 1, title: "Pembukaan Sesi", description: "Dikirim tepat saat jam shift dimulai.", template: "🔔 *NOTIFIKASI ABSENSI DIBUKA* 🔔\n\nHalo *[Nama Lengkap]*, sesi absensi untuk *[Shift]* Dept. RKG hari ini telah resmi *DIBUKA*.\n\n📋 *Detail Sesi Absensi:*\n• Kelompok: *[Kelompok]*\n• Jam Tepat Waktu: *[Jam Sesi]* WITA\n• Batas Tutup Sesi: *[Jam Tutup]* WITA\n\nYuk, segera lakukan validasi kehadiran Anda sekarang melalui portal resmi kami:\n[Link]\n\nSelamat bertugas! 🏥" },
@@ -140,13 +107,14 @@ async function initHolidaysInRedis() {
   const existingHolidays = await redis.get('axaxyz_holidays');
   
   if (!existingHolidays || existingHolidays.length === 0) {
-    // Convert Raw JSON Object to Array required by the App
-    const defaultHolidays = Object.keys(calendar2026Raw)
-      .filter(key => key !== 'info' && calendar2026Raw[key].holiday)
+    // Dynamic import mapping for Calendar2026 JSON Object
+    const rawCal: any = calendar2026Raw;
+    const defaultHolidays = Object.keys(rawCal)
+      .filter(key => key !== 'info' && rawCal[key].holiday)
       .map((key, index) => ({
          id: `hol_2026_${index}`,
          date: key,
-         name: calendar2026Raw[key].summary[0]
+         name: rawCal[key].summary[0]
       }));
 
     await redis.set('axaxyz_holidays', defaultHolidays);
@@ -205,7 +173,7 @@ export async function GET(request: NextRequest) {
       }
     },
     smart_logic: "Untuk Bot Command !logout kirimkan scenario: 16 dan !reset kirimkan scenario: 19 hanya dengan 'no_hp'. API akan mencari nama, membuat password acak 4 digit, dan update database secara realtime.",
-    available_scenarios: "Silakan login ke Admin Panel -> Manajemen Format untuk melihat dan mengatur seluruh Skenario ID secara dinamis."
+    available_scenarios: "Silakan login ke Admin Panel -> Manajemen Format atau lihat UI /apidocs untuk melihat/mengatur seluruh Skenario secara dinamis."
   };
 
   return NextResponse.json(apiDocs, { status: 200 });
@@ -249,6 +217,7 @@ export async function POST(request: Request) {
             }
             students[studentIndex].deviceId = null;
             data.namaLengkap = st.name;
+            data.link = data.link || "https://absensi.maksaarsyad.xyz/";
         }
         
         if (scenario === 19) {
@@ -258,17 +227,17 @@ export async function POST(request: Request) {
             data.namaLengkap = st.name;
             data.nim = st.nim;
             data.password = newPass;
+            data.link = data.link || "https://absensi.maksaarsyad.xyz/";
         }
 
         // Save updated students back to Redis Realtime!
         await redis.set('axaxyz_students', students);
     }
 
-
-    // Pastikan Format Tersedia (Ambil dari Redis, sekalian Auto-seed)
+    // Pastikan Format Tersedia (Ambil dari Redis)
     const formats = await initFormatsInRedis();
 
-    // Default Variables Fallback untuk mengatasi Error Null
+    // Default Variables Fallback
     const link = data.link || "https://absensi.maksaarsyad.xyz/";
     const tglMulai = data.tanggalMulai || "Belum Diatur";
     const tglAkhir = data.tanggalAkhir || "Belum Diatur";
@@ -283,7 +252,7 @@ export async function POST(request: Request) {
        );
     }
 
-    // Proses Replacement String Dinamis (Mencegah crash dengan String conversion)
+    // Proses Replacement String Dinamis
     let messageText = matchedFormat.template
       .replace(/\[Nama Lengkap\]/g, String(data.namaLengkap || ''))
       .replace(/\[NIM\]/g, String(data.nim || ''))
@@ -305,7 +274,7 @@ export async function POST(request: Request) {
       .replace(/\[Total Alpha\]/g, String(data.totalAlpha || '0'))
       .replace(/\[Link\]/g, String(link));
 
-    // Proses Khusus Variabel Gabungan (Seperti [Status Kehadiran])
+    // Proses Khusus Variabel Gabungan [Status Kehadiran]
     if (data.statusAkhir) {
       let strStatus = "";
       if (data.statusAkhir === "Hadir") strStatus = `🟢 *TEPAT WAKTU / HADIR* (Terekam pada: *${data.jamAbsen}* WITA)`;
@@ -328,7 +297,6 @@ export async function POST(request: Request) {
     currentQueue.push(newMessage);
     await redis.set('axaxyz_wa_queue', currentQueue);
 
-    // Mengembalikan JSON Response Sukses ke Frontend Web
     return NextResponse.json({
       success: true,
       message: "Pesan berhasil dirakit dan dimasukkan ke Antrian (Queue).",
