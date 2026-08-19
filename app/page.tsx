@@ -746,7 +746,6 @@ const StudentDashboard: React.FC<{ onStartAbsen: () => void, linkedNim: string |
 // ==========================================
 // PORTAL MAHASISWA WIZARD / KOMPONEN LAINNYA
 // ==========================================
-// (Waktu, Lokasi, Scanner, Selfie, Success - Tetap sama seperti aslinya, diringkas untuk kelengkapan)
 const TimeCheck: React.FC<{ onComplete: (data: { sessionName: string; status: 'Hadir' | 'Terlambat' }) => void }> = ({ onComplete }) => {
   const { sessions } = useAppContext();
   const [currentTime, setCurrentTime] = useState(new Date());
@@ -793,6 +792,9 @@ const TimeCheck: React.FC<{ onComplete: (data: { sessionName: string; status: 'H
               <div className="pl-2">
                 <p className="text-cyan-50 font-black text-lg md:text-xl tracking-wide">{activeSession.session.name}</p>
                 <p className="text-xs md:text-sm text-cyan-400/80 font-mono mt-1">{activeSession.session.startTime} - {activeSession.session.endTime}</p>
+                <p className="text-[10px] md:text-xs text-slate-500 mt-2 font-mono uppercase">
+                  Batas Hadir: {activeSession.session.endTime} | Tutup Sesi: {Math.floor(activeSession.endWithTolerance / 60).toString().padStart(2, '0')}:{(activeSession.endWithTolerance % 60).toString().padStart(2, '0')}
+                </p>
               </div>
               <span className={cn("px-4 py-2 text-xs font-black uppercase tracking-widest rounded-xl shadow-lg border", activeSession.status === 'Hadir' ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/30" : "bg-amber-500/10 text-amber-400 border-amber-500/30")}>
                 {activeSession.status}
@@ -858,14 +860,18 @@ const LocationCheck: React.FC<{ onComplete: (loc: {lat: number, lng: number}) =>
           <div className="text-emerald-400 space-y-3 mt-6">
             <ActivitySquare className="w-16 h-16 mx-auto drop-shadow-[0_0_20px_rgba(16,185,129,0.8)]" />
             <p className="font-black text-xl uppercase tracking-widest text-emerald-300">Lokasi Sesuai</p>
+            <p className="text-xs text-emerald-500/80 font-mono mt-1">Jarak Anda: {Math.round(distance || 0)}m dari titik pusat absen.</p>
           </div>
         )}
         {status === 'error' && (
           <div className="space-y-6 mt-4">
             <div className="p-5 bg-rose-950/40 border border-rose-500/40 rounded-2xl">
               <p className="text-xs font-black text-rose-200 uppercase tracking-wide leading-relaxed">{errorMsg}</p>
+              {distance && <p className="text-[10px] text-rose-400 mt-3 font-mono bg-rose-950 inline-block px-3 py-1.5 rounded-lg border border-rose-500/20">Jarak saat ini: {Math.round(distance)}m (Maksimal: {geofence.radius}m)</p>}
             </div>
-            <button onClick={checkLocation} className="w-full py-4 bg-transparent border border-cyan-500/50 hover:bg-cyan-500/10 text-cyan-400 rounded-2xl text-xs uppercase font-black">Cek Ulang Lokasi</button>
+            <button onClick={checkLocation} className="w-full py-4 bg-transparent border border-cyan-500/50 hover:bg-cyan-500/10 text-cyan-400 rounded-2xl text-xs uppercase font-black flex items-center justify-center gap-3">
+              <RefreshCcw className="w-4 h-4" /> Cek Ulang Lokasi
+            </button>
           </div>
         )}
       </div>
@@ -978,7 +984,7 @@ const QRScanner: React.FC<{ activeSessionName: string, onComplete: (data: {nim: 
 
   const stopScanner = () => { if (qrScannerRef.current) qrScannerRef.current.stop().catch(() => {}); setIsScanning(false); };
 
-  if (isAutoLoggingIn) return <div className="p-8 text-center"><Loader2 className="w-12 h-12 text-cyan-400 animate-spin mx-auto"/></div>;
+  if (isAutoLoggingIn) return <div className="p-8 text-center flex flex-col items-center justify-center space-y-4 relative z-10"><Loader2 className="w-12 h-12 text-cyan-400 animate-spin"/><p className="text-cyan-300 font-mono uppercase tracking-widest text-xs animate-pulse">Menyiapkan sistem untuk Anda...</p></div>;
 
   return (
     <div className="flex flex-col items-center justify-center p-4 md:p-8 space-y-6 max-w-md mx-auto animate-in slide-in-from-right duration-500 w-full">
@@ -988,14 +994,17 @@ const QRScanner: React.FC<{ activeSessionName: string, onComplete: (data: {nim: 
             {isScanning ? <Camera className="w-10 h-10 text-cyan-400 animate-pulse" /> : <QrCode className="w-10 h-10 text-cyan-400" />}
           </div>
           <h3 className="text-2xl font-black text-white mb-2 tracking-widest uppercase">Masuk Akun</h3>
+          <p className="text-cyan-500/70 text-xs font-mono uppercase tracking-wide">Pindai QR Code atau Input Manual</p>
         </div>
 
         {isScanning ? (
           <div className="space-y-4 animate-in fade-in zoom-in">
              <div className="relative w-full rounded-2xl overflow-hidden border border-cyan-500 bg-black aspect-square">
                 <div id="qr-reader-box" className="w-full h-full opacity-80 mix-blend-screen"></div>
+                <div className="absolute inset-0 pointer-events-none bg-[linear-gradient(transparent_50%,rgba(6,182,212,0.1)_50%)] bg-[length:100%_4px]"></div>
+                <div className="absolute inset-0 pointer-events-none"><div className="w-full h-full bg-gradient-to-b from-transparent via-cyan-500/30 to-transparent animate-[scan_2s_ease-in-out_infinite] border-b-2 border-cyan-400"></div></div>
              </div>
-             <button onClick={stopScanner} className="w-full py-4 bg-transparent border border-rose-500/50 text-rose-400 rounded-xl font-black transition-all">Batalkan Kamera</button>
+             <button onClick={stopScanner} className="w-full py-4 bg-transparent border border-rose-500/50 text-rose-400 rounded-xl font-black transition-all uppercase tracking-widest text-xs">Batalkan Kamera</button>
           </div>
         ) : (
           <div className="space-y-6">
@@ -1008,18 +1017,27 @@ const QRScanner: React.FC<{ activeSessionName: string, onComplete: (data: {nim: 
                <div className="flex-grow border-t border-cyan-500/50"></div>
             </div>
             <div className="space-y-1.5">
-              <input type="text" placeholder="Ketik NIM..." className="w-full bg-[#050B14] py-4 px-4 text-cyan-50 font-mono outline-none border border-cyan-500/30 rounded-xl" value={nimInput} onChange={(e) => setNimInput(e.target.value)} />
+              <label className="text-[9px] text-cyan-500/80 font-bold uppercase tracking-[0.2em] ml-1">Nomor Induk Mahasiswa (NIM)</label>
+              <div className="flex items-center bg-[#050B14] border border-cyan-500/30 rounded-xl overflow-hidden focus-within:border-cyan-400 transition-all duration-300">
+                 <div className="pl-4 pr-2 text-cyan-600"><Fingerprint className="w-5 h-5"/></div>
+                 <input type="text" placeholder="Ketik NIM..." className="w-full bg-transparent py-4 pr-4 text-cyan-50 font-mono outline-none" value={nimInput} onChange={(e) => setNimInput(e.target.value)} />
+              </div>
             </div>
             {students.length > 0 && (
               <div className="space-y-1.5">
-                <input type="password" placeholder="Ketik Sandi..." className="w-full bg-[#050B14] py-4 px-4 text-cyan-50 font-mono outline-none border border-cyan-500/30 rounded-xl" value={passInput} onChange={(e) => setPassInput(e.target.value)} />
+                <label className="text-[9px] text-cyan-500/80 font-bold uppercase tracking-[0.2em] ml-1">Kata Sandi (Password)</label>
+                <div className="flex items-center bg-[#050B14] border border-cyan-500/30 rounded-xl overflow-hidden focus-within:border-cyan-400 transition-all duration-300">
+                   <div className="pl-4 pr-2 text-cyan-600"><Key className="w-5 h-5"/></div>
+                   <input type="password" placeholder="Ketik Sandi..." className="w-full bg-transparent py-4 pr-4 text-cyan-50 font-mono outline-none" value={passInput} onChange={(e) => setPassInput(e.target.value)} />
+                </div>
               </div>
             )}
-            {error && <div className="p-4 bg-rose-950/40 border border-rose-500/40 rounded-xl text-xs font-mono text-rose-200">{error}</div>}
-            <button onClick={() => handleVerify()} className="w-full py-4 mt-4 bg-cyan-600 hover:bg-cyan-500 text-white font-black tracking-widest uppercase text-xs rounded-2xl">Lanjut Verifikasi</button>
+            {error && <div className="p-4 bg-rose-950/40 border border-rose-500/40 rounded-xl flex items-start gap-3"><AlertCircle className="w-5 h-5 text-rose-400 shrink-0 mt-0.5" /><p className="text-xs font-mono text-rose-200 uppercase tracking-wide">{error}</p></div>}
+            <button onClick={() => handleVerify()} className="w-full py-4 mt-4 bg-cyan-600 hover:bg-cyan-500 text-white font-black tracking-widest uppercase text-xs rounded-2xl shadow-[0_0_20px_rgba(6,182,212,0.4)]">Lanjut Verifikasi</button>
           </div>
         )}
       </div>
+      <style>{`@keyframes scan { 0% { transform: translateY(-100%); } 50% { transform: translateY(100%); } 100% { transform: translateY(-100%); } }`}</style>
     </div>
   );
 };
@@ -1059,17 +1077,33 @@ const SelfieCapture: React.FC<{ onComplete: (base64: string) => void }> = ({ onC
     <div className="flex flex-col items-center justify-center p-4 md:p-6 space-y-6 w-full max-w-md mx-auto animate-in slide-in-from-right duration-500 z-10 relative">
       <div className="text-center">
         <h3 className="text-2xl md:text-3xl font-black text-white tracking-widest uppercase">Foto Bukti Hadir</h3>
+        <p className="text-cyan-500/70 text-xs font-mono uppercase mt-2">Posisikan wajah di tengah kamera</p>
       </div>
-      <div className="w-full bg-[#050B14] rounded-3xl overflow-hidden border-2 border-cyan-500/50 aspect-[3/4] md:aspect-video flex items-center justify-center relative">
+      <div className="w-full bg-[#050B14] rounded-3xl overflow-hidden border-2 border-cyan-500/50 aspect-[3/4] md:aspect-video flex items-center justify-center relative shadow-[0_0_40px_rgba(6,182,212,0.3)]">
         {!image ? <video ref={videoRef} autoPlay playsInline muted className="w-full h-full object-cover transform scale-x-[-1]" /> : <img src={image} alt="Selfie Absen" className="w-full h-full object-cover" />}
+        <div className="absolute inset-0 pointer-events-none bg-[linear-gradient(transparent_95%,rgba(6,182,212,0.1)_100%),linear-gradient(90deg,transparent_95%,rgba(6,182,212,0.1)_100%)] bg-[length:40px_40px]"></div>
+        {!image && (
+           <div className="absolute inset-0 pointer-events-none flex items-center justify-center">
+              <div className="relative w-56 h-72">
+                 <div className="absolute top-0 left-0 w-8 h-8 border-t-2 border-l-2 border-cyan-400"></div>
+                 <div className="absolute top-0 right-0 w-8 h-8 border-t-2 border-r-2 border-cyan-400"></div>
+                 <div className="absolute bottom-0 left-0 w-8 h-8 border-b-2 border-l-2 border-cyan-400"></div>
+                 <div className="absolute bottom-0 right-0 w-8 h-8 border-b-2 border-r-2 border-cyan-400"></div>
+                 <div className="absolute w-full h-[1px] bg-cyan-400 shadow-[0_0_10px_rgba(6,182,212,1)] animate-[scan_3s_ease-in-out_infinite]"></div>
+              </div>
+           </div>
+        )}
       </div>
       <div className="w-full mt-4">
         {!image ? (
-          <button onClick={capture} className="w-full py-5 border-2 border-cyan-500 text-cyan-400 font-black tracking-widest uppercase text-sm rounded-2xl flex items-center justify-center gap-4">Ambil Foto Selfie</button>
+          <button onClick={capture} className="w-full py-5 border-2 border-cyan-500 hover:bg-cyan-500/20 text-cyan-400 font-black tracking-widest uppercase text-sm rounded-2xl flex items-center justify-center gap-4 transition-all">
+             <div className="w-6 h-6 rounded-full border-[3px] border-cyan-400 flex items-center justify-center"><div className="w-2 h-2 rounded-full bg-cyan-400 animate-ping"></div></div>
+             Ambil Foto Selfie
+          </button>
         ) : (
           <div className="flex gap-4">
-            <button onClick={() => { setImage(null); startCamera(); }} className="flex-1 py-4 border border-rose-500/50 text-rose-400 font-bold uppercase rounded-xl">Ulangi</button>
-            <button onClick={() => onComplete(image)} className="flex-[2] py-4 bg-cyan-600 text-white font-black uppercase rounded-xl flex items-center justify-center gap-3"><CheckCircle2 className="w-5 h-5" /> Gunakan Foto</button>
+            <button onClick={() => { setImage(null); startCamera(); }} className="flex-1 py-4 border border-rose-500/50 text-rose-400 font-bold uppercase rounded-xl text-xs tracking-widest">Ulangi</button>
+            <button onClick={() => onComplete(image)} className="flex-[2] py-4 bg-cyan-600 text-white font-black uppercase rounded-xl flex items-center justify-center gap-3 text-xs tracking-widest shadow-[0_0_20px_rgba(6,182,212,0.4)]"><CheckCircle2 className="w-5 h-5" /> Gunakan Foto Ini</button>
           </div>
         )}
       </div>
@@ -1079,9 +1113,15 @@ const SelfieCapture: React.FC<{ onComplete: (base64: string) => void }> = ({ onC
 
 const SuccessScreen: React.FC<{ reset: () => void }> = ({ reset }) => (
   <div className="flex flex-col items-center justify-center p-8 space-y-8 text-center animate-in zoom-in duration-500 w-full z-10 relative">
-    <div className="w-36 h-36 bg-[#050B14] border border-emerald-500/50 rounded-full flex items-center justify-center relative z-10 animate-bounce"><ShieldCheck className="w-20 h-20 text-emerald-400" /></div>
-    <h2 className="text-3xl md:text-4xl font-black text-emerald-300 tracking-widest uppercase">Absensi Berhasil!</h2>
-    <button onClick={reset} className="px-10 py-4 border border-cyan-500 text-cyan-400 rounded-2xl font-black tracking-widest uppercase text-sm mt-8">Selesai</button>
+    <div className="relative">
+       <div className="absolute inset-0 bg-emerald-500/20 blur-[50px] rounded-full"></div>
+       <div className="w-36 h-36 bg-[#050B14] border border-emerald-500/50 rounded-full flex items-center justify-center relative z-10 animate-bounce shadow-[0_0_40px_rgba(16,185,129,0.3)]"><ShieldCheck className="w-20 h-20 text-emerald-400" /></div>
+    </div>
+    <div className="space-y-4">
+       <h2 className="text-3xl md:text-4xl font-black text-emerald-300 tracking-widest uppercase">Absensi Berhasil!</h2>
+       <p className="text-cyan-500/70 text-xs font-mono uppercase tracking-wide max-w-sm mx-auto leading-relaxed">Data kehadiran, jam, lokasi, dan foto selfie Anda telah berhasil disimpan.</p>
+    </div>
+    <button onClick={reset} className="px-10 py-4 border border-cyan-500 text-cyan-400 rounded-2xl font-black tracking-widest uppercase text-sm mt-8 transition-all hover:bg-cyan-500/20 shadow-[0_0_20px_rgba(6,182,212,0.2)]">Selesai</button>
   </div>
 );
 
@@ -1117,12 +1157,12 @@ const AttendanceWizard: React.FC = () => {
       
       <header className="w-full p-4 md:p-6 flex justify-between items-center relative z-20 border-b border-cyan-500/20 bg-[#0A1628]/80 backdrop-blur-xl shadow-[0_4px_30px_rgba(0,0,0,0.5)]">
         <div className="flex items-center gap-4">
-          <div className="w-12 h-12 bg-[#050B14] border border-cyan-500/50 rounded-xl flex items-center justify-center p-2"><img src="/axalogo.png" alt="DEPT. RKG" className="w-full h-full object-contain" onError={(e) => { e.currentTarget.style.display = 'none'; e.currentTarget.nextElementSibling?.classList.remove('hidden'); }} /><ActivitySquare className="text-cyan-400 w-full h-full hidden" /></div>
+          <div className="w-12 h-12 bg-[#050B14] border border-cyan-500/50 rounded-xl flex items-center justify-center shadow-[0_0_15px_rgba(6,182,212,0.4)] p-2"><img src="/axalogo.png" alt="DEPT. RKG" className="w-full h-full object-contain" onError={(e) => { e.currentTarget.style.display = 'none'; e.currentTarget.nextElementSibling?.classList.remove('hidden'); }} /><ActivitySquare className="text-cyan-400 w-full h-full hidden" /></div>
           <div className="flex flex-col"><span className="font-black text-lg md:text-2xl tracking-[0.2em] text-cyan-50 uppercase drop-shadow-[0_0_10px_rgba(6,182,212,0.5)]">DEPT. RKG</span><span className="text-[8px] md:text-[10px] text-cyan-400 font-mono tracking-widest uppercase mt-0.5">Sistem Absensi Mahasiswa</span></div>
         </div>
         <div className="flex items-center gap-3">
            {linkedNim && <div className="hidden md:flex items-center gap-2 px-3 py-1.5 bg-[#050B14] border border-cyan-500/30 rounded-lg"><User className="w-3.5 h-3.5 text-cyan-400" /><span className="text-[10px] font-mono text-cyan-300 tracking-widest">{linkedNim}</span></div>}
-           {linkedNim ? <button onClick={studentLogout} className="text-[9px] md:text-[10px] font-black px-4 py-2 bg-rose-950/50 border border-rose-500/50 hover:bg-rose-500 hover:text-white rounded-lg text-rose-400 tracking-[0.15em] uppercase shadow-[0_0_10px_rgba(244,63,94,0.2)] transition-all flex items-center gap-2"><LogOut className="w-3 h-3" /> Keluar</button> : <div className="text-[9px] md:text-[10px] font-black px-4 py-2 bg-cyan-950/50 border border-cyan-500/50 rounded-lg text-cyan-300 tracking-[0.15em] uppercase">Portal Mahasiswa</div>}
+           {linkedNim ? <button onClick={studentLogout} className="text-[9px] md:text-[10px] font-black px-4 py-2 bg-rose-950/50 border border-rose-500/50 hover:bg-rose-500 hover:text-white rounded-lg text-rose-400 tracking-[0.15em] uppercase shadow-[0_0_10px_rgba(244,63,94,0.2)] transition-all flex items-center gap-2"><LogOut className="w-3 h-3" /> Keluar</button> : <div className="text-[9px] md:text-[10px] font-black px-4 py-2 bg-cyan-950/50 border border-cyan-500/50 rounded-lg text-cyan-300 tracking-[0.15em] uppercase shadow-[0_0_10px_rgba(6,182,212,0.2)]">Portal Mahasiswa</div>}
         </div>
       </header>
 
@@ -1131,12 +1171,12 @@ const AttendanceWizard: React.FC = () => {
           <div className="mb-8 md:mb-16 max-w-2xl mx-auto w-full px-2 relative z-20">
             <div className="flex justify-between relative">
               <div className="absolute top-1/2 -translate-y-1/2 left-0 w-full h-[2px] bg-cyan-950"></div>
-              <div className="absolute top-1/2 -translate-y-1/2 left-0 h-[2px] bg-cyan-400 transition-all duration-700 ease-in-out" style={{ width: `${((step - 1) / (steps.length - 1)) * 100}%` }}></div>
+              <div className="absolute top-1/2 -translate-y-1/2 left-0 h-[2px] bg-cyan-400 transition-all duration-700 ease-in-out shadow-[0_0_10px_rgba(6,182,212,0.8)]" style={{ width: `${((step - 1) / (steps.length - 1)) * 100}%` }}></div>
               {steps.map((label, idx) => {
                 const isActive = step === idx + 1; const isPassed = step > idx + 1;
                 return (
                   <div key={label} className="relative z-10 flex flex-col items-center gap-3">
-                    <div className={cn("w-10 h-10 md:w-12 md:h-12 rounded-full flex items-center justify-center text-xs md:text-sm font-black border-2 transition-all duration-500 bg-[#050B14]", isActive ? "border-cyan-400 text-cyan-400 shadow-[0_0_20px_rgba(6,182,212,0.6)] scale-110" : isPassed ? "border-cyan-600 text-cyan-500" : "border-cyan-900 text-cyan-800")}><div>{isPassed ? <CheckCircle2 className="w-5 h-5" /> : idx + 1}</div></div>
+                    <div className={cn("w-10 h-10 md:w-12 md:h-12 rounded-full flex items-center justify-center text-xs md:text-sm font-black border-2 transition-all duration-500 bg-[#050B14]", isActive ? "border-cyan-400 text-cyan-400 shadow-[0_0_20px_rgba(6,182,212,0.6)] scale-110" : isPassed ? "border-cyan-600 text-cyan-500" : "border-cyan-900 text-cyan-800")}><div>{isPassed ? <CheckCircle2 className="w-5 h-5 md:w-6 md:h-6" /> : idx + 1}</div></div>
                     <span className={cn("text-[9px] md:text-[10px] font-mono absolute -bottom-7 w-max tracking-widest uppercase", isActive ? "text-cyan-400 font-bold" : isPassed ? "text-cyan-600" : "text-cyan-900")}>{label}</span>
                   </div>
                 );
@@ -1156,12 +1196,9 @@ const AttendanceWizard: React.FC = () => {
     </div>
   );
 };
-
-
 // ==========================================
 // ADMIN AREA
 // ==========================================
-// (Bagian Login, Dashboard Home, Cluster, Geofence, Settings, Reports, Management tidak saya ubah logika utamanya, namun disatukan dalam script ini)
 
 const AdminLogin: React.FC<{ onLogin: () => void }> = ({ onLogin }) => {
   const { admins } = useAppContext();
@@ -1175,16 +1212,23 @@ const AdminLogin: React.FC<{ onLogin: () => void }> = ({ onLogin }) => {
 
   useEffect(() => {
     let timer: NodeJS.Timeout;
-    if (lockoutTimer > 0) timer = setTimeout(() => setLockoutTimer(lockoutTimer - 1), 1000);
+    if (lockoutTimer > 0) {
+      timer = setTimeout(() => setLockoutTimer(lockoutTimer - 1), 1000);
+    }
     return () => clearTimeout(timer);
   }, [lockoutTimer]);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (lockoutTimer > 0) { setErr(`Sistem terkunci. Coba lagi dalam ${lockoutTimer} detik.`); return; }
-    setIsLoading(true); setErr('');
+    if (lockoutTimer > 0) {
+      setErr(`Sistem terkunci. Silakan coba lagi dalam ${lockoutTimer} detik.`);
+      return;
+    }
+    setIsLoading(true);
+    setErr('');
     await new Promise(resolve => setTimeout(resolve, 800));
 
+    // Verify Env Fallback OR Custom Admin Logic
     const envUser = process.env.NEXT_PUBLIC_ADMIN_USER;
     const envPass = process.env.NEXT_PUBLIC_ADMIN_PASS;
 
@@ -1192,12 +1236,18 @@ const AdminLogin: React.FC<{ onLogin: () => void }> = ({ onLogin }) => {
     const isDbMatch = admins.some(a => a.username === user && a.password === pass);
 
     if (isEnvMatch || isDbMatch) {
-      setAttempts(0); localStorage.setItem('axaxyz_admin_auth', 'true'); onLogin();
+      setAttempts(0);
+      localStorage.setItem('axaxyz_admin_auth', 'true');
+      onLogin();
     } else {
       const newAttempts = attempts + 1;
       setAttempts(newAttempts);
-      if (newAttempts >= 3) { setLockoutTimer(30); setErr('❌ Akses ditolak. Diblokir 30 detik.'); } 
-      else { setErr(`❌ Username/Password salah. (Sisa: ${3 - newAttempts})`); }
+      if (newAttempts >= 3) {
+        setLockoutTimer(30); 
+        setErr('❌ Akses ditolak. Anda diblokir sementara (30 detik).');
+      } else {
+        setErr(`❌ Username atau Password salah. (Sisa percobaan: ${3 - newAttempts})`);
+      }
     }
     setIsLoading(false);
   };
@@ -1205,11 +1255,18 @@ const AdminLogin: React.FC<{ onLogin: () => void }> = ({ onLogin }) => {
   return (
     <div className="min-h-screen flex flex-col items-center justify-center p-4 relative overflow-hidden w-full radiology-bg">
       <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[400px] h-[400px] bg-cyan-600/10 rounded-full blur-[100px] pointer-events-none"></div>
+
       <div className="w-full max-w-md bg-[#0A1628]/90 backdrop-blur-3xl border border-cyan-500/20 p-8 md:p-10 rounded-3xl shadow-[0_20px_60px_rgba(0,0,0,0.8)] relative z-10 animate-in slide-in-from-bottom-8 fade-in duration-700">
         <div className="flex flex-col items-center mb-10">
           <div className="relative mb-6">
             <div className="w-24 h-24 bg-[#050B14] border-2 border-cyan-500/50 rounded-2xl flex items-center justify-center shadow-[0_0_40px_rgba(6,182,212,0.4)] p-4 overflow-hidden transform rotate-45">
-              <div className="-rotate-45 w-full h-full"><img src="/axalogo.png" alt="RKG" className="w-full h-full object-contain filter drop-shadow-[0_0_8px_rgba(6,182,212,0.8)]" onError={(e) => { e.currentTarget.style.display = 'none'; e.currentTarget.nextElementSibling?.classList.remove('hidden'); }} /><ShieldCheck className="w-full h-full text-cyan-400 hidden" /></div>
+              <div className="-rotate-45 w-full h-full">
+                 <img src="/axalogo.png" alt="RKG" className="w-full h-full object-contain filter drop-shadow-[0_0_8px_rgba(6,182,212,0.8)]" onError={(e) => { e.currentTarget.style.display = 'none'; e.currentTarget.nextElementSibling?.classList.remove('hidden'); }} />
+                 <ShieldCheck className="w-full h-full text-cyan-400 hidden" />
+              </div>
+            </div>
+            <div className="absolute -bottom-2 -right-2 w-10 h-10 bg-[#0A1628] rounded-full border-2 border-cyan-500/50 flex items-center justify-center shadow-[0_0_15px_rgba(6,182,212,0.5)]">
+              <Lock className="w-4 h-4 text-cyan-400" />
             </div>
           </div>
           <h2 className="text-2xl md:text-3xl font-black text-cyan-50 tracking-[0.2em] uppercase">Login Admin</h2>
@@ -1217,7 +1274,13 @@ const AdminLogin: React.FC<{ onLogin: () => void }> = ({ onLogin }) => {
         </div>
 
         <form onSubmit={handleLogin} className="space-y-6">
-          {err && <div className="p-4 bg-rose-950/40 border border-rose-500/40 text-rose-300 text-xs font-mono rounded-xl flex items-start gap-3 animate-in shake duration-300"><AlertCircle className="w-5 h-5 shrink-0" /><p className="leading-tight mt-0.5">{err}</p></div>}
+          {err && (
+            <div className="p-4 bg-rose-950/40 border border-rose-500/40 text-rose-300 text-xs font-mono rounded-xl flex items-start gap-3 animate-in shake duration-300 uppercase tracking-wider">
+              <AlertCircle className="w-5 h-5 shrink-0" />
+              <p className="leading-tight mt-0.5">{err}</p>
+            </div>
+          )}
+
           <div className="space-y-2">
             <label className="text-[9px] text-cyan-500/80 font-bold uppercase tracking-[0.2em] ml-1">Username</label>
             <div className="relative flex items-center bg-[#050B14] border border-cyan-500/30 rounded-xl overflow-hidden focus-within:border-cyan-400 transition-all duration-300 shadow-[inset_0_2px_10px_rgba(0,0,0,0.5)]">
@@ -1225,53 +1288,84 @@ const AdminLogin: React.FC<{ onLogin: () => void }> = ({ onLogin }) => {
               <input type="text" value={user} onChange={e=>setUser(e.target.value)} disabled={lockoutTimer > 0 || isLoading} className="w-full bg-transparent py-4 pr-4 text-cyan-50 font-mono outline-none placeholder-cyan-900/50 disabled:opacity-50 text-sm" placeholder="Ketik Username..." required />
             </div>
           </div>
+
           <div className="space-y-2">
             <label className="text-[9px] text-cyan-500/80 font-bold uppercase tracking-[0.2em] ml-1">Password</label>
             <div className="relative flex items-center bg-[#050B14] border border-cyan-500/30 rounded-xl overflow-hidden focus-within:border-cyan-400 transition-all duration-300 shadow-[inset_0_2px_10px_rgba(0,0,0,0.5)]">
               <div className="pl-4 pr-3 text-cyan-600"><Key className="w-4 h-4"/></div>
               <input type={showPass ? 'text' : 'password'} value={pass} onChange={e=>setPass(e.target.value)} disabled={lockoutTimer > 0 || isLoading} className="w-full bg-transparent py-4 pr-12 text-cyan-50 font-mono outline-none placeholder-cyan-900/50 disabled:opacity-50 text-sm" placeholder="••••••••" required />
-              <button type="button" onClick={() => setShowPass(!showPass)} className="absolute right-4 text-cyan-600 hover:text-cyan-400 transition-colors">{showPass ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}</button>
+              <button type="button" onClick={() => setShowPass(!showPass)} className="absolute right-4 text-cyan-600 hover:text-cyan-400 transition-colors">
+                {showPass ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+              </button>
             </div>
           </div>
+
           <button type="submit" disabled={lockoutTimer > 0 || isLoading} className="w-full py-4 mt-8 bg-cyan-600 hover:bg-cyan-500 disabled:bg-cyan-900 disabled:text-cyan-700 disabled:cursor-not-allowed text-white font-black tracking-[0.2em] uppercase text-xs rounded-xl transition-all duration-300 shadow-[0_0_20px_rgba(6,182,212,0.3)] hover:shadow-[0_0_30px_rgba(6,182,212,0.6)] flex justify-center items-center gap-3 active:scale-95 border border-cyan-400/50">
-            {isLoading ? <Loader2 className="w-5 h-5 animate-spin" /> : <>Masuk ke Dashboard <ChevronRight className="w-4 h-4" /></>}
+            {isLoading ? <Loader2 className="w-5 h-5 animate-spin" /> : (
+               <>Masuk ke Dashboard <ChevronRight className="w-4 h-4" /></>
+            )}
           </button>
         </form>
       </div>
+
+      <footer className="text-center py-4 text-[10px] md:text-xs text-cyan-600/60 font-mono tracking-widest relative z-50 w-full mt-auto">
+        <a href="/ourteam" className="hover:text-cyan-400 hover:drop-shadow-[0_0_8px_rgba(6,182,212,0.8)] transition-all duration-300 cursor-pointer">
+          Copyright © 2026 DEPT. RKG RSIGM UMI— All Rights Reserved. Made with ❤️
+        </a>
+      </footer>
     </div>
   );
 };
 
 const AdminDashboardHome: React.FC = () => {
   const { logs, students, clusters, sessions } = useAppContext();
+  
+  // Date Range and Filters
   const { startObj, endObj, FilterUI } = useDateFilter();
   const [selectedCluster, setSelectedCluster] = useState('All');
 
+  // Dynamic Total Days Calculation for robust Alpha metrics
+  const diffTime = Math.abs(endObj.getTime() - startObj.getTime());
+  const totalDaysInRange = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) || 1;
+
+  // Filter Logs based on Date & Cluster (Waktu Lokal)
   const filteredLogs = logs.filter(l => {
     const logDate = new Date(l.timestamp);
     const inDateRange = logDate >= startObj && logDate <= endObj;
+    
     let matchCluster = true;
-    if (selectedCluster !== 'All') matchCluster = l.clusterName === clusters.find(c => c.id === selectedCluster)?.name;
+    if (selectedCluster !== 'All') {
+       matchCluster = l.clusterName === clusters.find(c => c.id === selectedCluster)?.name;
+    }
     return inDateRange && matchCluster;
   });
 
   const filteredStudents = selectedCluster === 'All' ? students : students.filter(s => s.clusterId === selectedCluster);
+
+  // Advanced Student Stats Detail Calculation (For Table)
   const activeSessions = sessions.filter(s => s.isActive);
   
   const studentStats = filteredStudents.map(student => {
      const studentLogs = filteredLogs.filter(l => l.nim === student.nim);
-     let hadir = 0; let terlambat = 0; let alpha = 0; let belumAbsen = 0;
+     let hadir = 0;
+     let terlambat = 0;
+     let alpha = 0;
+     let belumAbsen = 0;
      
+     // Evaluate each day in the date range
      const rangeStart = new Date(startObj);
      const rangeEnd = new Date(endObj); 
      const todayLocal = getLocalYYYYMMDD(new Date());
 
      for (let d = new Date(rangeStart); d <= rangeEnd; d.setDate(d.getDate() + 1)) {
+         // Stop checking if day is in the future
          if (d > new Date()) break;
+
          const dateStrLocal = getLocalYYYYMMDD(d);
          const isToday = dateStrLocal === todayLocal;
          
          activeSessions.forEach(sess => {
+             // Sinkronisasi Bug Fix: Validasi dengan konversi ke YYYY-MM-DD Lokal
              const log = studentLogs.find(l => getLocalYYYYMMDD(l.timestamp) === dateStrLocal && l.sessionName === sess.name);
              if (log) {
                  if (log.status === 'Hadir') hadir++;
@@ -1280,24 +1374,32 @@ const AdminDashboardHome: React.FC = () => {
                  if (isToday) {
                      const currentMinutes = new Date().getHours() * 60 + new Date().getMinutes();
                      const [endH, endM] = sess.endTime.split(':').map(Number);
-                     const endWithTol = (endH * 60 + endM) + sess.toleranceMinutes;
-                     if (currentMinutes > endWithTol) alpha++; 
-                     else belumAbsen++;
+                     const endTotal = endH * 60 + endM;
+                     const endWithTol = endTotal + sess.toleranceMinutes;
+                     
+                     if (currentMinutes > endWithTol) alpha++; // completely missed
+                     else belumAbsen++; // Masih punya waktu untuk absen
                  } else {
-                     if (d < new Date(new Date().setHours(0,0,0,0))) alpha++; 
+                     // Check specifically if the loop date is strictly in the past
+                     if (d < new Date(new Date().setHours(0,0,0,0))) {
+                        alpha++; 
+                     }
                  }
              }
          });
      }
+     
      return { ...student, hadir, terlambat, alpha, belumAbsen };
   });
 
+  // Basic Stats for Top Cards
   const totalLogsCount = filteredLogs.length;
   const onTimeCount = filteredLogs.filter(l => l.status === 'Hadir').length;
   const lateCount = filteredLogs.filter(l => l.status === 'Terlambat').length;
   const totalAlphaCount = studentStats.reduce((acc, curr) => acc + curr.alpha, 0);
   const totalBelumAbsenCount = studentStats.reduce((acc, curr) => acc + curr.belumAbsen, 0);
 
+  // Chart 1: Daily Trend (Area Chart)
   const dailyDataMap: Record<string, { date: string; Hadir: number; Terlambat: number }> = {};
   filteredLogs.forEach(log => {
      const dateStr = new Date(log.timestamp).toLocaleDateString('id-ID', {day: 'numeric', month: 'short'});
@@ -1307,6 +1409,7 @@ const AdminDashboardHome: React.FC = () => {
   });
   const trendData = Object.values(dailyDataMap);
   
+  // Chart 2: Pie Chart Overall
   const pieData = [
      { name: 'Tepat Waktu', value: onTimeCount, color: '#10b981' }, 
      { name: 'Terlambat', value: lateCount, color: '#f59e0b' },
@@ -1315,6 +1418,8 @@ const AdminDashboardHome: React.FC = () => {
 
   return (
     <div className="space-y-6 animate-in fade-in duration-500 pb-10">
+      
+      {/* FILTER SECTION */}
       <div className="bg-[#0A1628]/80 backdrop-blur-md border border-cyan-500/20 p-5 md:p-6 rounded-[1.5rem] flex flex-col xl:flex-row gap-5 justify-between items-start xl:items-end shadow-lg">
          <div>
             <h2 className="text-xl md:text-2xl font-black text-cyan-50 tracking-widest uppercase">Dashboard Absensi</h2>
@@ -1323,7 +1428,7 @@ const AdminDashboardHome: React.FC = () => {
          <div className="flex flex-col sm:flex-row gap-3 w-full xl:w-auto items-start sm:items-end">
             <FilterUI />
             <div className="flex flex-col gap-1 w-full sm:w-auto">
-               <label className="text-[9px] text-cyan-500 uppercase tracking-widest font-bold">Filter Kelompok</label>
+               <label className="text-[9px] text-cyan-500 uppercase tracking-widest font-bold">Filter Kelompok / Angkatan</label>
                <div className="flex items-center bg-[#050B14] border border-cyan-500/30 rounded-xl px-2 h-11 w-full sm:w-auto focus-within:border-cyan-400 transition-colors">
                   <select value={selectedCluster} onChange={e => setSelectedCluster(e.target.value)} className="bg-transparent text-cyan-50 text-xs font-bold uppercase outline-none cursor-pointer px-3 w-full sm:min-w-[150px] h-full">
                      <option value="All">Semua Kelompok</option>
@@ -1334,6 +1439,7 @@ const AdminDashboardHome: React.FC = () => {
          </div>
       </div>
 
+      {/* STATS WIDGETS DENGAN 5 CARD */}
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4 md:gap-5">
         {[
           { title: 'Total Rekam Absen', val: totalLogsCount, icon: ActivitySquare, color: 'text-cyan-400', bg: 'bg-cyan-500/10', border: 'border-cyan-500/30' },
@@ -1354,7 +1460,10 @@ const AdminDashboardHome: React.FC = () => {
         ))}
       </div>
 
+      {/* CHARTS SECTION */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-5 min-h-[350px]">
+        
+        {/* TREND CHART */}
         <div className="lg:col-span-2 bg-[#0A1628]/60 backdrop-blur-md border border-cyan-500/20 p-6 rounded-[1.5rem] flex flex-col shadow-lg relative overflow-hidden">
           <div className="absolute top-0 right-0 w-32 h-32 bg-cyan-600/10 rounded-bl-[100px] pointer-events-none"></div>
           <h3 className="text-sm font-black text-cyan-50 mb-6 tracking-widest uppercase flex items-center gap-2"><Activity className="w-4 h-4 text-cyan-400"/> Tren Absensi Harian</h3>
@@ -1363,8 +1472,14 @@ const AdminDashboardHome: React.FC = () => {
               <ResponsiveContainer width="100%" height="100%">
                 <AreaChart data={trendData} margin={{ top: 0, right: 0, left: -20, bottom: 0 }}>
                   <defs>
-                    <linearGradient id="colorHadir" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="#06b6d4" stopOpacity={0.8}/><stop offset="95%" stopColor="#06b6d4" stopOpacity={0}/></linearGradient>
-                    <linearGradient id="colorTelat" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="#f59e0b" stopOpacity={0.8}/><stop offset="95%" stopColor="#f59e0b" stopOpacity={0}/></linearGradient>
+                    <linearGradient id="colorHadir" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="#06b6d4" stopOpacity={0.8}/>
+                      <stop offset="95%" stopColor="#06b6d4" stopOpacity={0}/>
+                    </linearGradient>
+                    <linearGradient id="colorTelat" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="#f59e0b" stopOpacity={0.8}/>
+                      <stop offset="95%" stopColor="#f59e0b" stopOpacity={0}/>
+                    </linearGradient>
                   </defs>
                   <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" vertical={false} />
                   <XAxis dataKey="date" stroke="#64748b" fontSize={10} tickLine={false} axisLine={false} />
@@ -1378,6 +1493,7 @@ const AdminDashboardHome: React.FC = () => {
           </div>
         </div>
 
+        {/* PIE CHART */}
         <div className="bg-[#0A1628]/60 backdrop-blur-md border border-cyan-500/20 p-6 rounded-[1.5rem] flex flex-col shadow-lg">
           <h3 className="text-sm font-black text-cyan-50 mb-6 tracking-widest uppercase">Komposisi Kehadiran</h3>
           <div className="flex-1 w-full min-h-[250px]">
@@ -1392,23 +1508,29 @@ const AdminDashboardHome: React.FC = () => {
                 </ResponsiveContainer>
              ) : <div className="h-full flex items-center justify-center text-cyan-800 font-mono text-xs uppercase">Grafik Kosong</div>}
           </div>
+          
+          {/* Custom Legend */}
           <div className="flex justify-center gap-4 mt-2">
              {pieData.map(d => (
                 <div key={d.name} className="flex items-center gap-1.5 text-[9px] font-bold uppercase tracking-wider text-slate-300">
-                   <div className="w-2.5 h-2.5 rounded-full" style={{backgroundColor: d.color}}></div>{d.name}
+                   <div className="w-2.5 h-2.5 rounded-full" style={{backgroundColor: d.color}}></div>
+                   {d.name}
                 </div>
              ))}
           </div>
         </div>
         
+        {/* REKAPITULASI KEHADIRAN MAHASISWA */}
         <div className="lg:col-span-3 bg-[#0A1628]/60 backdrop-blur-md border border-cyan-500/20 p-6 rounded-[1.5rem] flex flex-col shadow-lg relative overflow-hidden">
           <div className="absolute top-0 right-0 w-64 h-64 bg-cyan-600/5 rounded-bl-[100px] pointer-events-none"></div>
+          
           <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 relative z-10 gap-3">
              <h3 className="text-sm font-black text-cyan-50 tracking-widest uppercase">Rincian Kehadiran Mahasiswa</h3>
              <div className="text-[10px] text-cyan-400 bg-cyan-950/50 px-3 py-1.5 rounded-lg border border-cyan-500/30 font-mono font-bold tracking-widest uppercase">
                 {studentStats.length} Entitas Mahasiswa
              </div>
           </div>
+          
           <div className="flex-1 w-full overflow-x-auto relative z-10 custom-scrollbar">
              <table className="w-full text-left border-collapse min-w-[800px]">
                 <thead>
@@ -1432,25 +1554,127 @@ const AdminDashboardHome: React.FC = () => {
                                {clusters.find(c => c.id === st.clusterId)?.name || 'TANPA KELOMPOK'}
                             </span>
                          </td>
-                         <td className="p-4 text-center"><span className="inline-flex items-center justify-center w-8 h-8 rounded-full bg-emerald-500/10 text-emerald-400 font-bold text-sm border border-emerald-500/30 group-hover:bg-emerald-500/20">{st.hadir}</span></td>
-                         <td className="p-4 text-center"><span className="inline-flex items-center justify-center w-8 h-8 rounded-full bg-amber-500/10 text-amber-400 font-bold text-sm border border-amber-500/30 group-hover:bg-amber-500/20">{st.terlambat}</span></td>
-                         <td className="p-4 text-center"><span className="inline-flex items-center justify-center w-8 h-8 rounded-full bg-rose-500/10 text-rose-400 font-bold text-sm border border-rose-500/30 group-hover:bg-rose-500/20">{st.alpha}</span></td>
-                         <td className="p-4 text-center"><span className="inline-flex items-center justify-center w-8 h-8 rounded-full bg-purple-500/10 text-purple-400 font-bold text-sm border border-purple-500/30 group-hover:bg-purple-500/20">{st.belumAbsen}</span></td>
+                         <td className="p-4 text-center">
+                            <span className="inline-flex items-center justify-center w-8 h-8 rounded-full bg-emerald-500/10 text-emerald-400 font-bold text-sm border border-emerald-500/30 group-hover:bg-emerald-500/20">{st.hadir}</span>
+                         </td>
+                         <td className="p-4 text-center">
+                            <span className="inline-flex items-center justify-center w-8 h-8 rounded-full bg-amber-500/10 text-amber-400 font-bold text-sm border border-amber-500/30 group-hover:bg-amber-500/20">{st.terlambat}</span>
+                         </td>
+                         <td className="p-4 text-center">
+                            <span className="inline-flex items-center justify-center w-8 h-8 rounded-full bg-rose-500/10 text-rose-400 font-bold text-sm border border-rose-500/30 group-hover:bg-rose-500/20">{st.alpha}</span>
+                         </td>
+                         <td className="p-4 text-center">
+                            <span className="inline-flex items-center justify-center w-8 h-8 rounded-full bg-purple-500/10 text-purple-400 font-bold text-sm border border-purple-500/30 group-hover:bg-purple-500/20">{st.belumAbsen}</span>
+                         </td>
                       </tr>
                    ))}
-                   {studentStats.length === 0 && <tr><td colSpan={7} className="p-12 text-center text-cyan-800 font-mono text-sm uppercase tracking-widest">Tidak ada data mahasiswa untuk filter ini.</td></tr>}
+                   {studentStats.length === 0 && (
+                      <tr><td colSpan={7} className="p-12 text-center text-cyan-800 font-mono text-sm uppercase tracking-widest">Tidak ada data mahasiswa untuk filter ini.</td></tr>
+                   )}
                 </tbody>
              </table>
           </div>
         </div>
+
       </div>
     </div>
   );
 };
 
-// ==========================================
-// ADMIN STUDENTS (UPGRADED WITH BULK WA, XLSX 2D ARRAY & NO WA)
-// ==========================================
+const AdminClusters: React.FC = () => {
+  const { clusters, addCluster, updateCluster, deleteCluster } = useAppContext();
+  const [isAdding, setIsAdding] = useState(false);
+  const [newC, setNewC] = useState({ name: '', startDate: '', endDate: '' });
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editData, setEditData] = useState({ name: '', startDate: '', endDate: '' });
+
+  const handleAdd = (e: React.FormEvent) => {
+    e.preventDefault();
+    if(newC.name.trim()) addCluster(newC);
+    setIsAdding(false); 
+    setNewC({ name: '', startDate: '', endDate: '' });
+  };
+
+  const handleUpdate = (e: React.FormEvent) => {
+     e.preventDefault();
+     if(editingId && editData.name.trim()) updateCluster(editingId, editData);
+     setEditingId(null); 
+     setEditData({ name: '', startDate: '', endDate: '' });
+  }
+
+  return (
+    <div className="space-y-6 animate-in fade-in duration-500 pb-10">
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+        <div>
+          <h2 className="text-2xl md:text-3xl font-black text-cyan-50 tracking-widest uppercase">Data Kelompok / Angkatan</h2>
+          <p className="text-cyan-500/70 text-xs md:text-sm font-mono uppercase mt-1">Kelola Pengelompokan Mahasiswa & Masa Stase</p>
+        </div>
+        <button onClick={() => setIsAdding(!isAdding)} className="flex items-center justify-center gap-2 px-5 py-3 bg-cyan-600/20 text-cyan-400 hover:bg-cyan-500/30 border border-cyan-500/50 rounded-xl transition-all duration-300 font-black uppercase tracking-widest text-xs shadow-[0_0_15px_rgba(6,182,212,0.2)] w-full md:w-auto">
+          <Plus className="w-4 h-4" /> Tambah Kelompok Baru
+        </button>
+      </div>
+
+      {isAdding && (
+        <form onSubmit={handleAdd} className="bg-[#0A1628]/80 backdrop-blur-md border border-cyan-500/30 p-5 md:p-6 rounded-2xl flex flex-col lg:flex-row gap-4 items-end shadow-xl animate-in slide-in-from-top-4">
+          <div className="flex-1 space-y-1.5 w-full">
+            <label className="text-[10px] md:text-xs text-cyan-500 font-bold uppercase tracking-widest ml-1">Nama Kelompok</label>
+            <input required type="text" value={newC.name} onChange={e=>setNewC({...newC, name: e.target.value})} className="w-full bg-[#050B14] border border-cyan-500/30 rounded-xl px-4 py-3.5 text-white outline-none focus:border-cyan-400 transition-colors text-sm font-mono" placeholder="Contoh: Angkatan 2025" />
+          </div>
+          <div className="flex-1 space-y-1.5 w-full">
+            <label className="text-[10px] md:text-xs text-cyan-500 font-bold uppercase tracking-widest ml-1">Mulai Stase RKG</label>
+            <input type="date" value={newC.startDate} onChange={e=>setNewC({...newC, startDate: e.target.value})} className="w-full bg-[#050B14] border border-cyan-500/30 rounded-xl px-4 py-3.5 text-white outline-none focus:border-cyan-400 transition-colors text-sm font-mono" />
+          </div>
+          <div className="flex-1 space-y-1.5 w-full">
+            <label className="text-[10px] md:text-xs text-cyan-500 font-bold uppercase tracking-widest ml-1">Akhir Stase RKG</label>
+            <input type="date" value={newC.endDate} onChange={e=>setNewC({...newC, endDate: e.target.value})} className="w-full bg-[#050B14] border border-cyan-500/30 rounded-xl px-4 py-3.5 text-white outline-none focus:border-cyan-400 transition-colors text-sm font-mono" />
+          </div>
+          <button type="submit" className="w-full lg:w-auto px-8 py-3.5 bg-cyan-600 hover:bg-cyan-500 text-white font-black uppercase tracking-widest text-xs rounded-xl transition-all duration-300 shadow-lg active:scale-95">Simpan</button>
+        </form>
+      )}
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-5">
+         {clusters.map(c => (
+            <div key={c.id} className="bg-[#0A1628]/60 backdrop-blur-md border border-cyan-500/20 p-5 md:p-6 rounded-2xl flex flex-col gap-4 group hover:border-cyan-500/50 transition-all duration-300 shadow-lg relative overflow-hidden">
+               {editingId === c.id ? (
+                  <form onSubmit={handleUpdate} className="flex flex-col gap-3 relative z-10">
+                     <input autoFocus required type="text" placeholder="Nama Kelompok" value={editData.name} onChange={e=>setEditData({...editData, name: e.target.value})} className="w-full bg-[#050B14] border border-cyan-500/50 rounded-lg px-3 py-2 text-white outline-none text-sm font-mono" />
+                     <div className="flex gap-2">
+                        <input type="date" value={editData.startDate} onChange={e=>setEditData({...editData, startDate: e.target.value})} className="w-full bg-[#050B14] border border-cyan-500/50 rounded-lg px-3 py-2 text-white outline-none text-[10px] font-mono" />
+                        <input type="date" value={editData.endDate} onChange={e=>setEditData({...editData, endDate: e.target.value})} className="w-full bg-[#050B14] border border-cyan-500/50 rounded-lg px-3 py-2 text-white outline-none text-[10px] font-mono" />
+                     </div>
+                     <div className="flex gap-2">
+                        <button type="submit" className="flex-1 bg-emerald-500/20 text-emerald-400 p-2 rounded-lg border border-emerald-500/30 flex justify-center"><CheckCircle2 className="w-4 h-4"/></button>
+                        <button type="button" onClick={()=>setEditingId(null)} className="flex-1 bg-rose-500/20 text-rose-400 p-2 rounded-lg border border-rose-500/30 flex justify-center"><X className="w-4 h-4"/></button>
+                     </div>
+                  </form>
+               ) : (
+                  <>
+                     <div className="absolute top-0 right-0 w-24 h-24 bg-cyan-600/5 rounded-bl-[60px] pointer-events-none"></div>
+                     <div className="flex items-start justify-between relative z-10">
+                        <div className="flex items-center gap-3">
+                           <div className="w-10 h-10 bg-cyan-950/50 rounded-xl flex items-center justify-center border border-cyan-500/30 shrink-0"><Network className="w-5 h-5 text-cyan-400" /></div>
+                           <div>
+                              <h3 className="font-bold text-white text-base tracking-wide truncate max-w-[150px]">{c.name}</h3>
+                              <p className="text-[9px] text-cyan-500 font-mono uppercase tracking-widest mt-0.5">
+                                 {c.startDate && c.endDate ? `${new Date(c.startDate).toLocaleDateString('id-ID',{day:'2-digit', month:'short'})} - ${new Date(c.endDate).toLocaleDateString('id-ID',{day:'2-digit', month:'short'})}` : 'Tanggal Stase Belum Diatur'}
+                              </p>
+                           </div>
+                        </div>
+                        <div className="flex gap-2 opacity-100 lg:opacity-0 lg:group-hover:opacity-100 transition-opacity shrink-0">
+                           <button onClick={()=>{setEditingId(c.id); setEditData({name: c.name, startDate: c.startDate || '', endDate: c.endDate || ''});}} className="p-2 bg-blue-500/10 hover:bg-blue-500/20 text-blue-400 border border-blue-500/20 rounded-lg"><Edit className="w-4 h-4"/></button>
+                           <button onClick={()=>{if(confirm(`Hapus kelompok ${c.name}? Data mahasiswa terkait akan terpengaruh.`)) deleteCluster(c.id);}} className="p-2 bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/20 rounded-lg"><Trash2 className="w-4 h-4"/></button>
+                        </div>
+                     </div>
+                  </>
+               )}
+            </div>
+         ))}
+         {clusters.length === 0 && <div className="col-span-full p-8 text-center border-2 border-dashed border-cyan-900 rounded-2xl text-cyan-700 font-mono text-sm uppercase">Belum Ada Kelompok Terdaftar</div>}
+      </div>
+    </div>
+  );
+};
+
 const AdminStudents: React.FC = () => {
   const { students, addStudent, updateStudent, bulkAddStudents, deleteStudent, clusters } = useAppContext();
   const [isAdding, setIsAdding] = useState(false);
@@ -1617,6 +1841,7 @@ const AdminStudents: React.FC = () => {
   return (
     <div className="space-y-6 animate-in fade-in duration-500 h-full flex flex-col w-full relative pb-10">
       
+      {/* HEADER SECTION */}
       <div className="flex flex-col gap-6">
         <div className="shrink-0 flex justify-between items-start">
           <div>
@@ -1630,8 +1855,10 @@ const AdminStudents: React.FC = () => {
         </div>
         
         <div className="flex flex-col xl:flex-row gap-4 w-full items-start">
+          {/* Action Buttons Row */}
           <div className="flex flex-col sm:flex-row gap-3 w-full xl:w-auto bg-[#0A1628]/80 p-3 rounded-2xl border border-cyan-500/20 shadow-lg items-center shrink-0">
              
+             {/* KELOMPOK DROPDOWN */}
              <div className="flex flex-col w-full sm:w-auto gap-1">
                <div className="flex items-center bg-[#050B14] border border-purple-500/30 rounded-xl px-2 h-11 w-full sm:w-44 focus-within:border-purple-400 transition-colors">
                   <select value={selectedClusterForBulk} onChange={e=>setSelectedClusterForBulk(e.target.value)} className="bg-transparent text-purple-100 text-xs font-bold uppercase outline-none w-full cursor-pointer appearance-none px-2 text-center sm:text-left">
@@ -1641,6 +1868,7 @@ const AdminStudents: React.FC = () => {
                </div>
              </div>
 
+             {/* SUPER UPGRADE: INPUT DEFAULT PASSWORD */}
              <div className="flex flex-col w-full sm:w-auto gap-1">
                <div className="flex items-center bg-[#050B14] border border-purple-500/30 rounded-xl px-3 h-11 w-full sm:w-32 focus-within:border-purple-400 transition-colors" title="Sandi otomatis untuk import">
                   <Key className="w-3.5 h-3.5 text-purple-400 mr-2 shrink-0" />
@@ -1658,6 +1886,7 @@ const AdminStudents: React.FC = () => {
              </button>
           </div>
 
+          {/* COMPREHENSIVE SYSTEMATIC GUIDE FOR EXCEL IMPORT */}
           <div className="bg-gradient-to-br from-[#050B14]/90 to-[#0A1628]/90 p-4 rounded-2xl border border-purple-500/40 flex flex-col sm:flex-row items-start sm:items-center gap-3 md:gap-4 shadow-[0_10px_30px_rgba(147,51,234,0.15)] relative overflow-hidden group w-full xl:flex-1">
              <div className="absolute top-0 right-0 w-32 h-32 bg-purple-600/10 rounded-bl-[100px] pointer-events-none transition-transform group-hover:scale-110"></div>
              <div className="bg-purple-950/60 p-2.5 rounded-xl border border-purple-500/50 shrink-0 relative z-10 shadow-[inset_0_0_15px_rgba(147,51,234,0.3)]">
@@ -1668,12 +1897,23 @@ const AdminStudents: React.FC = () => {
                    <p className="text-[11px] md:text-xs text-purple-200 font-black uppercase tracking-[0.15em] flex items-center gap-2 drop-shadow-md">
                       Panduan Format Excel (2D Array)
                    </p>
+                   <span className="bg-gradient-to-r from-purple-600 to-fuchsia-600 text-white border border-purple-400/50 px-2.5 py-1 rounded-lg text-[8px] font-black tracking-[0.2em] shadow-[0_0_15px_rgba(192,38,211,0.5)]">
+                      ✨ SUPER UPGRADE
+                   </span>
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-x-4 gap-y-2 text-[9px] md:text-[10px] text-cyan-100/80 font-mono leading-relaxed">
-                   <div><p><span className="text-purple-400 font-bold bg-purple-950/50 px-1 rounded">Kolom A</span> Nama <span className="text-purple-300">*Wajib</span></p></div>
-                   <div><p><span className="text-purple-400 font-bold bg-purple-950/50 px-1 rounded">Kolom B</span> NIM <span className="text-purple-300">*Wajib</span></p></div>
-                   <div><p><span className="text-blue-400 font-bold bg-blue-950/50 px-1 rounded">Kolom C</span> No WA <span className="text-blue-300">*Wajib</span></p></div>
-                   <div><p><span className="text-emerald-400 font-bold bg-emerald-950/50 px-1 rounded">Kolom D</span> Kelompok <span className="text-emerald-300 italic">(Ops.)</span></p></div>
+                   <div>
+                      <p><span className="text-purple-400 font-bold bg-purple-950/50 px-1 rounded">Kolom A</span> Nama <span className="text-purple-300 font-bold">*Wajib</span></p>
+                   </div>
+                   <div>
+                      <p><span className="text-purple-400 font-bold bg-purple-950/50 px-1 rounded">Kolom B</span> NIM <span className="text-purple-300 font-bold">*Wajib</span></p>
+                   </div>
+                   <div>
+                      <p><span className="text-blue-400 font-bold bg-blue-950/50 px-1 rounded">Kolom C</span> No WA <span className="text-blue-300 font-bold">*Wajib</span></p>
+                   </div>
+                   <div>
+                      <p><span className="text-emerald-400 font-bold bg-emerald-950/50 px-1 rounded">Kolom D</span> Kelompok <span className="text-emerald-300 italic">(Ops.)</span></p>
+                   </div>
                 </div>
                 <p className="text-[8px] text-cyan-500 italic mt-2.5 border-t border-cyan-900/50 pt-2">*Baris 1 wajib Header. Kolom C otomatis diformat ke 628xxx. Jika D kosong, masuk ke kelompok default dropdown. Sandi ikuti input box.</p>
              </div>
@@ -1752,22 +1992,36 @@ const AdminStudents: React.FC = () => {
                   </td>
                   <td className="p-4 md:p-5 text-center">
                     {st.deviceId ? (
-                      <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-950/50 text-emerald-400 text-[10px] font-black uppercase tracking-widest border border-emerald-500/30 shadow-[0_0_10px_rgba(16,185,129,0.2)]"><CheckCircle2 className="w-3.5 h-3.5"/> Terhubung</span>
+                      <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-950/50 text-emerald-400 text-[10px] font-black uppercase tracking-widest border border-emerald-500/30 shadow-[0_0_10px_rgba(16,185,129,0.2)]">
+                         <CheckCircle2 className="w-3.5 h-3.5"/> Terhubung
+                      </span>
                     ) : (
-                      <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-900 text-slate-500 text-[10px] font-black uppercase tracking-widest border border-white/10">Kosong</span>
+                      <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-900 text-slate-500 text-[10px] font-black uppercase tracking-widest border border-white/10">
+                         Kosong
+                      </span>
                     )}
                   </td>
                   <td className="p-4 md:p-5 text-right flex justify-end gap-2">
                     {st.deviceId && (
-                      <button onClick={() => handleUnlinkDevice(st.id, st.name)} title="Lepas Otoritas Perangkat" className="p-2 md:p-2.5 text-amber-500 hover:text-amber-300 rounded-xl transition-all duration-300 border border-amber-500/30 bg-amber-950/40 hover:bg-amber-900 active:scale-95 shadow-sm"><RefreshCcw className="w-4 h-4" /></button>
+                      <button onClick={() => handleUnlinkDevice(st.id, st.name)} title="Lepas Otoritas Perangkat" className="p-2 md:p-2.5 text-amber-500 hover:text-amber-300 rounded-xl transition-all duration-300 border border-amber-500/30 bg-amber-950/40 hover:bg-amber-900 active:scale-95 shadow-sm">
+                         <RefreshCcw className="w-4 h-4" />
+                      </button>
                     )}
-                    <button onClick={() => setEditingStudent(st)} title="Edit Data Mahasiswa" className="p-2 md:p-2.5 text-blue-500 hover:text-blue-300 rounded-xl transition-all duration-300 border border-blue-500/30 bg-blue-950/40 hover:bg-blue-900 active:scale-95 shadow-sm"><Settings className="w-4 h-4" /></button>
-                    <button onClick={() => setSelectedStudentForKTM(st)} title="Cetak Kartu Absen (QR)" className="px-3 py-2 text-[10px] font-black uppercase tracking-widest text-cyan-400 bg-cyan-950/50 border border-cyan-500/40 hover:bg-cyan-600 hover:text-white rounded-xl transition-all duration-300 flex items-center gap-2 active:scale-95 shadow-[0_0_10px_rgba(6,182,212,0.2)]"><ScanFace className="w-4 h-4"/> Cetak</button>
-                    <button onClick={() => {if(confirm(`Hapus permanen mahasiswa ${st.name}?`)) deleteStudent(st.id);}} title="Hapus Mahasiswa" className="p-2 md:p-2.5 text-rose-500 hover:text-white hover:bg-rose-600 rounded-xl transition-all duration-300 border border-rose-500/30 bg-rose-950/40 active:scale-95 shadow-sm"><Trash2 className="w-4 h-4" /></button>
+                    <button onClick={() => setEditingStudent(st)} title="Edit Data Mahasiswa" className="p-2 md:p-2.5 text-blue-500 hover:text-blue-300 rounded-xl transition-all duration-300 border border-blue-500/30 bg-blue-950/40 hover:bg-blue-900 active:scale-95 shadow-sm">
+                       <Settings className="w-4 h-4" />
+                    </button>
+                    <button onClick={() => setSelectedStudentForKTM(st)} title="Cetak Kartu Absen (QR)" className="px-3 py-2 text-[10px] font-black uppercase tracking-widest text-cyan-400 bg-cyan-950/50 border border-cyan-500/40 hover:bg-cyan-600 hover:text-white rounded-xl transition-all duration-300 flex items-center gap-2 active:scale-95 shadow-[0_0_10px_rgba(6,182,212,0.2)]">
+                       <ScanFace className="w-4 h-4"/> Cetak
+                    </button>
+                    <button onClick={() => {if(confirm(`Hapus permanen mahasiswa ${st.name}?`)) deleteStudent(st.id);}} title="Hapus Mahasiswa" className="p-2 md:p-2.5 text-rose-500 hover:text-white hover:bg-rose-600 rounded-xl transition-all duration-300 border border-rose-500/30 bg-rose-950/40 active:scale-95 shadow-sm">
+                       <Trash2 className="w-4 h-4" />
+                    </button>
                   </td>
                 </tr>
               ))}
-              {filtered.length === 0 && <tr><td colSpan={6} className="p-12 text-center text-cyan-800 font-mono text-sm uppercase tracking-widest">Tidak ada data mahasiswa.</td></tr>}
+              {filtered.length === 0 && (
+                 <tr><td colSpan={6} className="p-12 text-center text-cyan-800 font-mono text-sm uppercase tracking-widest">Tidak ada data mahasiswa.</td></tr>
+              )}
             </tbody>
           </table>
         </div>
@@ -1841,6 +2095,7 @@ const AdminStudents: React.FC = () => {
                  </div>
                  <h2 className="text-cyan-50 font-black tracking-[0.2em] text-lg drop-shadow-md">DEPT. RKG</h2>
                  <p className="text-cyan-400 text-[8px] tracking-[0.3em] font-bold uppercase mt-1">Sistem Absensi Mahasiswa</p>
+                 <p className="text-cyan-600 text-[7px] tracking-[0.2em] uppercase mt-1">Kartu Akses Absen</p>
                </div>
 
                <div className="bg-white p-3 rounded-2xl relative z-10 shadow-[0_0_30px_rgba(6,182,212,0.6)] border-4 border-[#0A1628]">
@@ -1976,8 +2231,9 @@ const AdminFormats: React.FC = () => {
 };
 
 // ==========================================
-// ADMIN OTHER COMPONENTS (No major changes required, kept for complete file integrity)
+// ADMIN OTHER COMPONENTS
 // ==========================================
+
 const AdminReports: React.FC = () => {
   const { logs, sessions, clusters, deleteLog } = useAppContext();
   const [search, setSearch] = useState('');
@@ -2081,7 +2337,9 @@ const AdminReports: React.FC = () => {
                     <p className="text-[9px] text-cyan-600/70 mt-2.5 font-mono uppercase tracking-widest bg-[#050B14] inline-block px-2 py-1 rounded-md border border-cyan-900/50">{log.location.lat.toFixed(5)}, {log.location.lng.toFixed(5)}</p>
                   </td>
                   <td className="p-4 md:p-5 text-right">
-                    <button onClick={() => { if(confirm(`Yakin ingin menghapus riwayat kehadiran ${log.name}?`)) deleteLog(log.id); }} title="Hapus Riwayat" className="p-2.5 text-rose-500 hover:text-white hover:bg-rose-600 rounded-xl transition-all duration-300 border border-transparent hover:border-rose-500/50 hover:shadow-[0_0_15px_rgba(244,63,94,0.4)] active:scale-95"><Trash2 className="w-5 h-5" /></button>
+                    <button onClick={() => { if(confirm(`Yakin ingin menghapus riwayat kehadiran ${log.name}?`)) deleteLog(log.id); }} title="Hapus Riwayat" className="p-2.5 text-rose-500 hover:text-white hover:bg-rose-600 rounded-xl transition-all duration-300 border border-transparent hover:border-rose-500/50 hover:shadow-[0_0_15px_rgba(244,63,94,0.4)] active:scale-95">
+                      <Trash2 className="w-5 h-5" />
+                    </button>
                   </td>
                 </tr>
               ))}
@@ -2094,7 +2352,9 @@ const AdminReports: React.FC = () => {
       {previewImage && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-[#050B14]/95 backdrop-blur-2xl p-4 animate-in fade-in zoom-in-95 duration-300" onClick={() => setPreviewImage(null)}>
           <div className="relative max-w-3xl w-full flex flex-col items-center justify-center">
-            <button onClick={() => setPreviewImage(null)} className="absolute -top-14 md:-top-16 right-0 md:-right-8 p-3 bg-rose-950/50 hover:bg-rose-500 hover:text-white rounded-xl transition-all duration-300 text-rose-400 shadow-[0_0_15px_rgba(244,63,94,0.2)] active:scale-90 border border-rose-500/30"><X className="w-6 h-6"/></button>
+            <button onClick={() => setPreviewImage(null)} className="absolute -top-14 md:-top-16 right-0 md:-right-8 p-3 bg-rose-950/50 hover:bg-rose-500 hover:text-white rounded-xl transition-all duration-300 text-rose-400 shadow-[0_0_15px_rgba(244,63,94,0.2)] active:scale-90 border border-rose-500/30">
+              <X className="w-6 h-6"/>
+            </button>
             <div className="relative w-full overflow-hidden rounded-[2rem] border-[4px] md:border-[8px] border-cyan-500/30 shadow-[0_0_80px_rgba(6,182,212,0.4)] bg-black">
                 <div className="absolute inset-0 pointer-events-none bg-[linear-gradient(transparent_95%,rgba(6,182,212,0.2)_100%),linear-gradient(90deg,transparent_95%,rgba(6,182,212,0.2)_100%)] bg-[length:40px_40px] mix-blend-screen opacity-50"></div>
                 <img src={previewImage} alt="Preview Foto Absen" className="max-w-full max-h-[75vh] md:max-h-[85vh] w-full object-contain mx-auto" onClick={e => e.stopPropagation()} />
@@ -2103,6 +2363,281 @@ const AdminReports: React.FC = () => {
           </div>
         </div>
       )}
+    </div>
+  );
+};
+
+const AdminGeofence: React.FC = () => {
+  const { geofence, updateGeofence } = useAppContext();
+  const [lat, setLat] = useState(geofence.lat.toString());
+  const [lng, setLng] = useState(geofence.lng.toString());
+  const [radius, setRadius] = useState(geofence.radius.toString());
+  const [locationName, setLocationName] = useState(geofence.name || 'Gedung Kampus Pusat');
+
+  const handleSave = (e: React.FormEvent) => {
+    e.preventDefault();
+    updateGeofence({ lat: parseFloat(lat), lng: parseFloat(lng), radius: parseInt(radius), name: locationName });
+    alert('Pengaturan lokasi absensi berhasil disimpan!');
+  };
+
+  const getMyLocation = () => {
+    if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        (pos) => { setLat(pos.coords.latitude.toString()); setLng(pos.coords.longitude.toString()); },
+        () => alert('Gagal mendeteksi lokasi GPS Anda saat ini.')
+      );
+    }
+  };
+
+  return (
+    <div className="space-y-6 animate-in fade-in duration-500 max-w-3xl pb-10">
+      <div>
+        <h2 className="text-2xl md:text-3xl font-black text-cyan-50 tracking-widest uppercase">Pengaturan Lokasi Absen</h2>
+        <p className="text-cyan-500/70 text-xs md:text-sm font-mono mt-1 uppercase">Tentukan batas area kampus atau tempat kerja</p>
+      </div>
+
+      <form onSubmit={handleSave} className="bg-[#0A1628]/80 backdrop-blur-md border border-cyan-500/30 p-6 md:p-8 rounded-[2rem] space-y-6 md:space-y-8 shadow-[0_15px_40px_rgba(0,0,0,0.5)]">
+        <div className="p-5 bg-cyan-950/30 border border-cyan-500/30 rounded-2xl flex items-start gap-4 shadow-inner relative overflow-hidden">
+          <div className="absolute left-0 top-0 w-1 h-full bg-cyan-500"></div>
+          <Navigation className="w-7 h-7 text-cyan-400 mt-1 shrink-0 drop-shadow-[0_0_8px_rgba(6,182,212,0.8)]" />
+          <p className="text-xs text-cyan-100/90 leading-relaxed font-mono uppercase tracking-wide">Mahasiswa hanya bisa melakukan absen jika lokasi GPS mereka berada dalam jangkauan jarak (<b>Batas Radius Maksimal</b>) dari koordinat lokasi yang Anda tentukan di bawah ini.</p>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-5 md:gap-6">
+          <div className="space-y-1.5 md:col-span-2">
+             <label className="text-[10px] text-cyan-500 font-bold uppercase tracking-widest ml-1">Nama Lokasi Absen</label>
+             <input required type="text" value={locationName} onChange={e=>setLocationName(e.target.value)} className="w-full bg-[#050B14] border border-cyan-500/30 rounded-xl px-4 py-3.5 text-cyan-50 outline-none focus:border-cyan-400 transition-colors shadow-inner text-sm font-mono" placeholder="Contoh: Gedung Rektorat" />
+          </div>
+          <div className="space-y-1.5">
+            <label className="text-[10px] text-cyan-500 font-bold uppercase tracking-widest ml-1">Latitude</label>
+            <input required type="number" step="any" value={lat} onChange={e=>setLat(e.target.value)} className="w-full bg-[#050B14] border border-cyan-500/30 rounded-xl px-4 py-3.5 text-cyan-50 outline-none focus:border-cyan-400 transition-colors shadow-inner font-mono text-sm" />
+          </div>
+          <div className="space-y-1.5">
+            <label className="text-[10px] text-cyan-500 font-bold uppercase tracking-widest ml-1">Longitude</label>
+            <input required type="number" step="any" value={lng} onChange={e=>setLng(e.target.value)} className="w-full bg-[#050B14] border border-cyan-500/30 rounded-xl px-4 py-3.5 text-cyan-50 outline-none focus:border-cyan-400 transition-colors shadow-inner font-mono text-sm" />
+          </div>
+        </div>
+
+        <div className="space-y-1.5">
+           <label className="text-[10px] text-cyan-500 font-bold uppercase tracking-widest ml-1">Batas Jarak Radius (Meter)</label>
+           <input required type="number" min="10" value={radius} onChange={e=>setRadius(e.target.value)} className="w-full bg-[#050B14] border border-cyan-500/30 rounded-xl px-4 py-4 text-cyan-400 outline-none focus:border-cyan-400 transition-colors shadow-inner font-black text-lg md:text-xl text-center tracking-widest" />
+        </div>
+
+        <div className="flex flex-col md:flex-row gap-3 md:gap-4 pt-8 border-t border-cyan-900/50">
+          <button type="button" onClick={getMyLocation} className="w-full md:w-auto px-6 py-4 bg-[#050B14] hover:bg-cyan-950/40 border border-cyan-500/40 text-cyan-400 font-black tracking-widest uppercase text-xs rounded-xl transition-all duration-300 flex items-center justify-center gap-3 active:scale-95 shadow-sm">
+            <MapPin className="w-4 h-4" /> Gunakan Lokasi Saya Saat Ini
+          </button>
+          <button type="submit" className="w-full md:flex-1 py-4 bg-cyan-600 hover:bg-cyan-500 text-white font-black tracking-[0.15em] uppercase text-xs rounded-xl transition-all duration-300 shadow-[0_0_20px_rgba(6,182,212,0.4)] active:scale-95 border border-cyan-400/50">
+            Simpan Lokasi
+          </button>
+        </div>
+      </form>
+    </div>
+  );
+};
+
+const AdminSettings: React.FC = () => {
+  const { sessions, updateSession, addSession, deleteSession } = useAppContext();
+  const [isAdding, setIsAdding] = useState(false);
+  const [editingSessId, setEditingSessId] = useState<string | null>(null);
+
+  const [formSess, setFormSess] = useState({ name: '', startTime: '', endTime: '', toleranceMinutes: 15 });
+
+  const handleSave = (e: React.FormEvent) => {
+    e.preventDefault(); 
+    if (editingSessId) {
+       updateSession(editingSessId, { ...formSess });
+    } else {
+       addSession({ ...formSess, isActive: true }); 
+    }
+    setIsAdding(false); setEditingSessId(null); 
+    setFormSess({ name: '', startTime: '', endTime: '', toleranceMinutes: 15 });
+  };
+
+  const startEdit = (sess: Session) => {
+     setIsAdding(true);
+     setEditingSessId(sess.id);
+     setFormSess({ name: sess.name, startTime: sess.startTime, endTime: sess.endTime, toleranceMinutes: sess.toleranceMinutes });
+  }
+
+  const cancelForm = () => {
+     setIsAdding(false); setEditingSessId(null);
+     setFormSess({ name: '', startTime: '', endTime: '', toleranceMinutes: 15 });
+  }
+
+  return (
+    <div className="space-y-6 animate-in fade-in duration-500 pb-10">
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+        <div>
+           <h2 className="text-2xl md:text-3xl font-black text-cyan-50 tracking-widest uppercase">Pengaturan Jadwal Shift</h2>
+           <p className="text-cyan-500/70 text-xs md:text-sm font-mono mt-1 uppercase">Kelola jadwal jam kehadiran mahasiswa</p>
+        </div>
+        <button onClick={() => {cancelForm(); setIsAdding(true);}} className="flex items-center gap-2 px-6 py-3 bg-cyan-600/20 text-cyan-400 hover:bg-cyan-500/30 border border-cyan-500/50 rounded-xl transition-all duration-300 font-black uppercase tracking-widest text-xs shadow-[0_0_15px_rgba(6,182,212,0.2)] w-full md:w-auto justify-center">
+           <Plus className="w-4 h-4" /> Tambah Jadwal Baru
+        </button>
+      </div>
+
+      {isAdding && (
+        <form onSubmit={handleSave} className="bg-[#0A1628]/90 backdrop-blur-md border border-cyan-500/50 p-6 md:p-8 rounded-3xl grid grid-cols-1 md:grid-cols-5 gap-5 md:gap-6 items-end animate-in slide-in-from-top-4 shadow-[0_15px_40px_rgba(0,0,0,0.5)] relative">
+
+          <div className="absolute top-4 right-4 cursor-pointer text-cyan-600 hover:text-cyan-400" onClick={cancelForm}><X className="w-5 h-5"/></div>
+
+          <div className="space-y-1.5 md:col-span-2">
+             <label className="text-[10px] text-cyan-500 font-bold uppercase tracking-widest ml-1">Nama Shift</label>
+             <input required type="text" value={formSess.name} onChange={e=>setFormSess({...formSess, name: e.target.value})} className="w-full bg-[#050B14] border border-cyan-500/30 rounded-xl px-4 py-3.5 text-cyan-50 outline-none focus:border-cyan-400 font-mono text-sm" placeholder="Contoh: Shift Pagi / Kelas A" />
+          </div>
+          <div className="space-y-1.5">
+             <label className="text-[10px] text-cyan-500 font-bold uppercase tracking-widest ml-1">Jam Mulai</label>
+             <input required type="time" value={formSess.startTime} onChange={e=>setFormSess({...formSess, startTime: e.target.value})} className="w-full bg-[#050B14] border border-cyan-500/30 rounded-xl px-4 py-3.5 text-cyan-50 outline-none focus:border-cyan-400 font-mono text-sm" />
+          </div>
+          <div className="space-y-1.5">
+             <label className="text-[10px] text-cyan-500 font-bold uppercase tracking-widest ml-1">Jam Berakhir</label>
+             <input required type="time" value={formSess.endTime} onChange={e=>setFormSess({...formSess, endTime: e.target.value})} className="w-full bg-[#050B14] border border-cyan-500/30 rounded-xl px-4 py-3.5 text-cyan-50 outline-none focus:border-cyan-400 font-mono text-sm" />
+          </div>
+          <div className="space-y-1.5">
+             <label className="text-[10px] text-cyan-500 font-bold uppercase tracking-widest ml-1">Toleransi Tutup Sesi (+ Dari Berakhir)</label>
+             <div className="relative">
+                <input required type="number" min="0" value={formSess.toleranceMinutes} onChange={e=>setFormSess({...formSess, toleranceMinutes: parseInt(e.target.value)})} className="w-full bg-[#050B14] border border-cyan-500/30 rounded-xl pl-4 pr-12 py-3.5 text-cyan-50 outline-none focus:border-cyan-400 font-mono text-sm" />
+                <span className="absolute right-4 top-1/2 -translate-y-1/2 text-cyan-600 text-xs font-mono font-bold">MENIT</span>
+             </div>
+          </div>
+          <button type="submit" className="md:col-span-5 w-full py-4 bg-cyan-600 hover:bg-cyan-500 text-white font-black uppercase tracking-widest text-xs rounded-xl transition-all duration-300 shadow-[0_0_15px_rgba(6,182,212,0.4)] active:scale-95 mt-2">
+             {editingSessId ? 'Simpan Perubahan' : 'Buat Jadwal Shift'}
+          </button>
+        </form>
+      )}
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 md:gap-6">
+        {sessions.map(session => (
+          <div key={session.id} className={cn("p-6 rounded-[2rem] border transition-all duration-300 hover:shadow-lg group relative overflow-hidden", session.isActive ? "bg-[#0A1628]/80 border-cyan-500/30 hover:border-cyan-400/60 backdrop-blur-md shadow-[0_10px_30px_rgba(0,0,0,0.5)]" : "bg-[#050B14]/80 opacity-60 border-cyan-900 hover:opacity-100")}>
+            
+            <div className="absolute top-0 right-0 w-24 h-24 bg-cyan-600/5 rounded-bl-full pointer-events-none"></div>
+
+            <div className="flex justify-between items-start mb-6 relative z-10">
+              <h3 className="text-xl font-black text-cyan-50 uppercase tracking-widest max-w-[60%]">{session.name}</h3>
+              <div className="flex gap-2">
+                <button onClick={() => updateSession(session.id, { isActive: !session.isActive })} className={cn("px-4 py-2 text-[9px] font-black uppercase tracking-widest rounded-lg border transition-all duration-300 shadow-sm active:scale-95 flex items-center gap-1", session.isActive ? "bg-emerald-950/50 text-emerald-400 border-emerald-500/40 shadow-[0_0_10px_rgba(16,185,129,0.2)]" : "bg-slate-900/80 text-slate-500 border-slate-700")}>
+                   {session.isActive ? <><Activity className="w-3 h-3"/> Aktif</> : 'Nonaktif'}
+                </button>
+              </div>
+            </div>
+            
+            <div className="space-y-4 text-xs font-mono bg-[#050B14] p-5 rounded-2xl border border-cyan-500/20 relative z-10 shadow-inner">
+              <div className="flex justify-between items-center text-cyan-400/80">
+                 <div className="flex items-center gap-3"><Clock className="w-4 h-4 text-cyan-500"/> Jam Tepat Waktu</div>
+                 <span className="text-cyan-50 font-bold bg-[#0A1628] px-3 py-1.5 rounded-lg border border-cyan-500/20">{session.startTime} - {session.endTime}</span>
+              </div>
+              <div className="flex justify-between items-center text-cyan-400/80">
+                 <div className="flex items-center gap-3"><ActivitySquare className="w-4 h-4 text-purple-500"/> Toleransi (Tutup Sesi)</div>
+                 <span className="text-purple-300 font-bold bg-purple-950/40 px-3 py-1.5 rounded-lg border border-purple-500/30">+{session.toleranceMinutes} Menit</span>
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-2 mt-5 relative z-10">
+               <button onClick={() => startEdit(session)} className="flex items-center gap-2 px-4 py-2 text-[10px] font-black uppercase tracking-widest bg-blue-950/50 text-blue-400 hover:bg-blue-600 hover:text-white border border-blue-500/30 rounded-xl transition-all duration-300 active:scale-95">
+                 <Edit className="w-3.5 h-3.5" /> Edit
+               </button>
+               <button onClick={() => {if(confirm(`Yakin ingin menghapus jadwal ${session.name}?`)) deleteSession(session.id);}} className="flex items-center gap-2 px-4 py-2 text-[10px] font-black uppercase tracking-widest bg-rose-950/50 text-rose-400 hover:bg-rose-600 hover:text-white border border-rose-500/30 rounded-xl transition-all duration-300 active:scale-95">
+                 <Trash2 className="w-3.5 h-3.5" /> Hapus
+               </button>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+};
+
+const AdminManagement: React.FC = () => {
+  const { admins, addAdmin, updateAdmin, deleteAdmin } = useAppContext();
+  const [isAdding, setIsAdding] = useState(false);
+  const [newAd, setNewAd] = useState({ username: '', password: '' });
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editUser, setEditUser] = useState('');
+  const [editPass, setEditPass] = useState('');
+
+  const handleAdd = (e: React.FormEvent) => {
+    e.preventDefault();
+    if(newAd.username.trim() && newAd.password.trim()) {
+       addAdmin(newAd);
+       setIsAdding(false); 
+       setNewAd({ username: '', password: '' });
+    }
+  };
+
+  const handleUpdate = (e: React.FormEvent) => {
+     e.preventDefault();
+     if(editingId && editUser.trim()) {
+        updateAdmin(editingId, { username: editUser, password: editPass });
+        setEditingId(null); 
+        setEditUser('');
+        setEditPass('');
+     }
+  }
+
+  return (
+    <div className="space-y-6 animate-in fade-in duration-500 pb-10">
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+        <div>
+          <h2 className="text-2xl md:text-3xl font-black text-cyan-50 tracking-widest uppercase">Kelola Akun Admin</h2>
+          <p className="text-cyan-500/70 text-xs md:text-sm font-mono uppercase mt-1">Tambah atau atur akses masuk ke Dashboard</p>
+        </div>
+        <button onClick={() => setIsAdding(!isAdding)} className="flex items-center gap-2 px-5 py-3 bg-cyan-600/20 text-cyan-400 hover:bg-cyan-500/30 border border-cyan-500/50 rounded-xl transition-all duration-300 font-black uppercase tracking-widest text-xs shadow-[0_0_15px_rgba(6,182,212,0.2)]">
+          <Plus className="w-4 h-4" /> Tambah Admin Baru
+        </button>
+      </div>
+
+      {isAdding && (
+        <form onSubmit={handleAdd} className="bg-[#0A1628]/80 backdrop-blur-md border border-cyan-500/30 p-5 md:p-6 rounded-2xl flex flex-col md:flex-row gap-4 items-end shadow-xl animate-in slide-in-from-top-4">
+          <div className="flex-1 space-y-1.5 w-full">
+            <label className="text-[10px] md:text-xs text-cyan-500 font-bold uppercase tracking-widest ml-1">Username Admin Baru</label>
+            <input required type="text" value={newAd.username} onChange={e=>setNewAd({...newAd, username: e.target.value})} className="w-full bg-[#050B14] border border-cyan-500/30 rounded-xl px-4 py-3.5 text-white outline-none focus:border-cyan-400 transition-colors text-sm font-mono" placeholder="Ketik Username..." />
+          </div>
+          <div className="flex-1 space-y-1.5 w-full">
+            <label className="text-[10px] md:text-xs text-cyan-500 font-bold uppercase tracking-widest ml-1">Password Baru</label>
+            <input required type="text" value={newAd.password} onChange={e=>setNewAd({...newAd, password: e.target.value})} className="w-full bg-[#050B14] border border-cyan-500/30 rounded-xl px-4 py-3.5 text-white outline-none focus:border-cyan-400 transition-colors text-sm font-mono" placeholder="Ketik Password..." />
+          </div>
+          <button type="submit" className="w-full md:w-auto px-8 py-3.5 bg-cyan-600 hover:bg-cyan-500 text-white font-black uppercase tracking-widest text-xs rounded-xl transition-all duration-300 shadow-lg active:scale-95">Simpan Admin</button>
+        </form>
+      )}
+
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+         {admins.map(a => (
+            <div key={a.id} className="bg-[#0A1628]/60 backdrop-blur-md border border-cyan-500/20 p-5 rounded-2xl flex flex-col gap-4 group hover:border-cyan-500/50 transition-all duration-300 shadow-lg">
+               {editingId === a.id ? (
+                  <form onSubmit={handleUpdate} className="flex flex-col gap-3">
+                     <div className="flex gap-2">
+                         <User className="w-5 h-5 text-cyan-600" />
+                         <input autoFocus required placeholder="Username" type="text" value={editUser} onChange={e=>setEditUser(e.target.value)} className="w-full bg-[#050B14] border border-cyan-500/50 rounded-lg px-3 py-2 text-white outline-none text-sm font-mono" />
+                     </div>
+                     <div className="flex gap-2">
+                         <Key className="w-5 h-5 text-cyan-600" />
+                         <input required placeholder="Password" type="text" value={editPass} onChange={e=>setEditPass(e.target.value)} className="w-full bg-[#050B14] border border-cyan-500/50 rounded-lg px-3 py-2 text-white outline-none text-sm font-mono" />
+                     </div>
+                     <div className="flex gap-2 justify-end mt-2">
+                         <button type="submit" className="bg-emerald-500/20 text-emerald-400 p-2 rounded-lg border border-emerald-500/30 flex-1 flex justify-center"><CheckCircle2 className="w-4 h-4"/></button>
+                         <button type="button" onClick={()=>setEditingId(null)} className="bg-rose-500/20 text-rose-400 p-2 rounded-lg border border-rose-500/30 flex-1 flex justify-center"><X className="w-4 h-4"/></button>
+                     </div>
+                  </form>
+               ) : (
+                  <>
+                     <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 bg-cyan-950/50 rounded-xl flex items-center justify-center border border-cyan-500/30"><ShieldCheck className="w-5 h-5 text-cyan-400" /></div>
+                        <div>
+                           <h3 className="font-bold text-white text-base tracking-wide font-mono">{a.username}</h3>
+                           <p className="text-[10px] text-cyan-500 tracking-widest uppercase mt-0.5">Admin Dashboard</p>
+                        </div>
+                     </div>
+                     <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <button onClick={()=>{setEditingId(a.id); setEditUser(a.username); setEditPass(a.password || '');}} className="flex-1 flex justify-center items-center gap-2 py-2 bg-blue-500/10 hover:bg-blue-500/20 text-blue-400 border border-blue-500/20 rounded-lg text-[10px] uppercase font-bold tracking-wider"><Edit className="w-3.5 h-3.5"/> Edit</button>
+                        <button onClick={()=>{if(confirm(`Yakin ingin menghapus Admin ${a.username}?`)) deleteAdmin(a.id);}} className="flex-1 flex justify-center items-center gap-2 py-2 bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/20 rounded-lg text-[10px] uppercase font-bold tracking-wider"><Trash2 className="w-3.5 h-3.5"/> Hapus</button>
+                     </div>
+                  </>
+               )}
+            </div>
+         ))}
+         {admins.length === 0 && <div className="col-span-full p-8 text-center border-2 border-dashed border-cyan-900 rounded-2xl text-cyan-700 font-mono text-sm uppercase">Belum Ada Admin Terdaftar</div>}
+      </div>
     </div>
   );
 };
@@ -2131,15 +2666,30 @@ const AdminLayout: React.FC<{ children: React.ReactNode, activeRoute: string, se
 
   return (
     <div className="min-h-screen bg-[#050B14] flex text-cyan-50 font-sans w-full overflow-hidden relative radiology-bg">
-      {isMobileMenuOpen && <div className="fixed inset-0 bg-[#050B14]/90 z-40 md:hidden backdrop-blur-md animate-in fade-in duration-300" onClick={() => setIsMobileMenuOpen(false)}></div>}
+      {/* MOBILE MENU OVERLAY */}
+      {isMobileMenuOpen && (
+         <div className="fixed inset-0 bg-[#050B14]/90 z-40 md:hidden backdrop-blur-md animate-in fade-in duration-300" onClick={() => setIsMobileMenuOpen(false)}></div>
+      )}
 
-      <aside className={cn("fixed inset-y-0 left-0 z-50 w-[280px] md:w-72 bg-[#0A1628]/95 border-r border-cyan-500/20 flex flex-col backdrop-blur-3xl transition-transform duration-500 ease-[cubic-bezier(0.16,1,0.3,1)] md:relative md:translate-x-0 shadow-[20px_0_50px_rgba(0,0,0,0.8)] md:shadow-none", isMobileMenuOpen ? "translate-x-0" : "-translate-x-full")}>
+      {/* RESPONSIVE SIDEBAR */}
+      <aside className={cn(
+         "fixed inset-y-0 left-0 z-50 w-[280px] md:w-72 bg-[#0A1628]/95 border-r border-cyan-500/20 flex flex-col backdrop-blur-3xl transition-transform duration-500 ease-[cubic-bezier(0.16,1,0.3,1)] md:relative md:translate-x-0 shadow-[20px_0_50px_rgba(0,0,0,0.8)] md:shadow-none",
+         isMobileMenuOpen ? "translate-x-0" : "-translate-x-full"
+      )}>
         <div className="p-6 md:p-8 border-b border-cyan-900/50 flex items-center justify-between">
           <div className="flex items-center gap-4">
-             <div className="w-12 h-12 bg-[#050B14] border border-cyan-500/50 rounded-xl flex items-center justify-center shadow-[0_0_15px_rgba(6,182,212,0.4)] overflow-hidden p-2"><img src="/axalogo.png" alt="Logo" className="w-full h-full object-contain filter drop-shadow-[0_0_5px_rgba(6,182,212,0.8)]" onError={(e) => { e.currentTarget.style.display = 'none'; e.currentTarget.nextElementSibling?.classList.remove('hidden'); }} /><ActivitySquare className="text-cyan-400 w-full h-full hidden" /></div>
-             <div className="flex flex-col"><span className="font-black text-lg md:text-xl tracking-[0.2em] text-cyan-50 uppercase drop-shadow-[0_0_10px_rgba(6,182,212,0.5)]">DEPT. RKG</span><span className="text-[7px] md:text-[8px] text-cyan-400 font-mono tracking-[0.3em] uppercase mt-1">Admin Panel</span></div>
+             <div className="w-12 h-12 bg-[#050B14] border border-cyan-500/50 rounded-xl flex items-center justify-center shadow-[0_0_15px_rgba(6,182,212,0.4)] overflow-hidden p-2">
+                <img src="/axalogo.png" alt="Logo" className="w-full h-full object-contain filter drop-shadow-[0_0_5px_rgba(6,182,212,0.8)]" onError={(e) => { e.currentTarget.style.display = 'none'; e.currentTarget.nextElementSibling?.classList.remove('hidden'); }} />
+                <ActivitySquare className="text-cyan-400 w-full h-full hidden" />
+             </div>
+             <div className="flex flex-col">
+                <span className="font-black text-lg md:text-xl tracking-[0.2em] text-cyan-50 uppercase drop-shadow-[0_0_10px_rgba(6,182,212,0.5)]">DEPT. RKG</span>
+                <span className="text-[7px] md:text-[8px] text-cyan-400 font-mono tracking-[0.3em] uppercase mt-1">Admin Panel</span>
+             </div>
           </div>
-          <button className="md:hidden p-2 bg-cyan-950/50 border border-cyan-500/30 rounded-xl text-cyan-400 transition-colors" onClick={() => setIsMobileMenuOpen(false)}><X className="w-5 h-5"/></button>
+          <button className="md:hidden p-2 bg-cyan-950/50 border border-cyan-500/30 rounded-xl text-cyan-400 transition-colors" onClick={() => setIsMobileMenuOpen(false)}>
+             <X className="w-5 h-5"/>
+          </button>
         </div>
         
         <nav className="flex-1 p-4 md:p-5 space-y-3 overflow-y-auto custom-scrollbar">
@@ -2151,13 +2701,19 @@ const AdminLayout: React.FC<{ children: React.ReactNode, activeRoute: string, se
         </nav>
         
         <div className="p-4 md:p-5 border-t border-cyan-900/50">
-          <button onClick={handleLogout} className="w-full flex items-center justify-center gap-3 px-5 py-4 rounded-xl text-rose-400 bg-rose-950/30 hover:bg-rose-600 hover:text-white transition-all duration-300 text-[10px] font-black uppercase tracking-[0.2em] border border-rose-500/30 active:scale-95 shadow-sm hover:shadow-[0_0_15px_rgba(244,63,94,0.4)]"><LogOut className="w-4 h-4" /> Keluar (Logout)</button>
+          <button onClick={handleLogout} className="w-full flex items-center justify-center gap-3 px-5 py-4 rounded-xl text-rose-400 bg-rose-950/30 hover:bg-rose-600 hover:text-white transition-all duration-300 text-[10px] font-black uppercase tracking-[0.2em] border border-rose-500/30 active:scale-95 shadow-sm hover:shadow-[0_0_15px_rgba(244,63,94,0.4)]">
+             <LogOut className="w-4 h-4" /> Keluar (Logout)
+          </button>
         </div>
       </aside>
 
       <main className="flex-1 flex flex-col relative overflow-y-auto w-full h-screen custom-scrollbar">
+        {/* RESPONSIVE HEADER & STATUS BADGE */}
         <header className="sticky top-0 p-4 md:p-6 flex justify-between md:justify-end items-center z-30 w-full bg-[#0A1628]/80 backdrop-blur-xl border-b border-cyan-900/50 shadow-[0_4px_30px_rgba(0,0,0,0.5)]">
-           <button className="md:hidden p-2.5 bg-[#050B14] border border-cyan-500/30 rounded-xl text-cyan-400 transition-colors active:scale-95 shadow-[0_0_10px_rgba(6,182,212,0.2)]" onClick={() => setIsMobileMenuOpen(true)}><Menu className="w-5 h-5" /></button>
+           <button className="md:hidden p-2.5 bg-[#050B14] border border-cyan-500/30 rounded-xl text-cyan-400 transition-colors active:scale-95 shadow-[0_0_10px_rgba(6,182,212,0.2)]" onClick={() => setIsMobileMenuOpen(true)}>
+              <Menu className="w-5 h-5" />
+           </button>
+           
            <div className="flex items-center gap-2.5 px-4 md:px-5 py-2 md:py-2.5 bg-[#050B14] border border-cyan-500/30 rounded-xl text-[9px] md:text-[10px] font-bold shadow-[0_0_20px_rgba(0,0,0,0.5)] transition-all font-mono">
                {syncStatus === 'syncing' && <><RefreshCcw className="w-3.5 h-3.5 md:w-4 md:h-4 animate-spin text-cyan-400"/> <span className="text-cyan-400 tracking-[0.2em] uppercase">Menyimpan...</span></>}
                {syncStatus === 'synced' && <><Cloud className="w-3.5 h-3.5 md:w-4 md:h-4 text-emerald-400 drop-shadow-[0_0_5px_rgba(16,185,129,0.8)]"/> <span className="text-emerald-400 tracking-[0.2em] uppercase">Tersimpan Online</span></>}
@@ -2166,6 +2722,7 @@ const AdminLayout: React.FC<{ children: React.ReactNode, activeRoute: string, se
            </div>
         </header>
 
+        {/* Global Lighting Effects */}
         <div className="absolute top-[-10%] right-[-10%] w-[50%] h-[50%] bg-cyan-600/10 rounded-full blur-[120px] pointer-events-none"></div>
         <div className="absolute bottom-[-10%] left-[-10%] w-[50%] h-[50%] bg-blue-600/10 rounded-full blur-[120px] pointer-events-none"></div>
         
@@ -2178,6 +2735,7 @@ const AdminLayout: React.FC<{ children: React.ReactNode, activeRoute: string, se
         </footer>
       </main>
       
+      {/* GLOBAL SCROLLBAR STYLING */}
       <style>{`
         .custom-scrollbar::-webkit-scrollbar { width: 4px; height: 4px; }
         .custom-scrollbar::-webkit-scrollbar-track { background: #050B14; }
@@ -2203,6 +2761,7 @@ export default function App() {
       link.type = 'image/png';
       document.title = "Sistem Absensi Mahasiswa - DEPT. RKG";
 
+      // SEO Google Site Verification (Gold Standard GSC)
       let metaGsc = document.querySelector("meta[name='google-site-verification']");
       if (!metaGsc) {
         metaGsc = document.createElement('meta');
