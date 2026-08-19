@@ -104,7 +104,7 @@ export default function ApiDocs() {
      jamAbsen: "07:45",
      tanggalMulai: "01/08/2026",
      tanggalAkhir: "31/08/2026",
-     tanggal: "19/08/2026",
+     tanggal: "20/08/2026",
      password: "123",
      radius: "500",
      lokasiGeofence: "Gedung Rektorat",
