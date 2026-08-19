@@ -226,6 +226,7 @@ const defaultSessions: Session[] = [
 const defaultGeofence: Geofence = { lat: -6.200000, lng: 106.816666, radius: 500, name: 'Gedung Kampus Pusat' };
 const defaultClusters: Cluster[] = [{ id: 'c1', name: 'Angkatan 2024' }, { id: 'c2', name: 'Angkatan 2025' }];
 
+// UPDATE: FULL TEMPLATES TERMASUK SKENARIO 15, 16, & 19
 const initialDefaultFormatsWA: FormatWA[] = [
   { id: 1, title: "Pembukaan Sesi", description: "Dikirim tepat saat jam shift dimulai.", template: "🔔 *NOTIFIKASI ABSENSI DIBUKA* 🔔\n\nHalo *[Nama Lengkap]*, sesi absensi untuk *[Shift]* Dept. RKG hari ini telah resmi *DIBUKA*.\n\n📋 *Detail Sesi Absensi:*\n• Kelompok: *[Kelompok]*\n• Jam Tepat Waktu: *[Jam Sesi]* WITA\n• Batas Tutup Sesi: *[Jam Tutup]* WITA\n\nYuk, segera lakukan validasi kehadiran Anda sekarang melalui portal resmi kami:\n[Link]\n\nSelamat bertugas! 🏥" },
   { id: 2, title: "Pengingat Sisa Waktu", description: "Hanya untuk MHS yang belum absen (Sisa toleransi).", template: "⚠️ *PENGINGAT TERAKHIR ABSENSI* ⚠️\n\nPanggilan kepada *[Nama Lengkap]*! Sistem mendeteksi Anda *BELUM* melakukan absensi untuk *[Shift]* hari ini.\n\nWaktu absensi Anda hampir habis. Sesi ini akan ditutup secara permanen pada pukul *[Jam Tutup]* WITA. Jika Anda tidak melakukan absensi setelah jam tersebut, sistem akan otomatis mencatat status Anda sebagai *TIDAK HADIR (ALPHA)*.\n\nMohon segera menuju area batas kampus dan selesaikan absen Anda di sini:\n[Link]" },
@@ -241,8 +242,11 @@ const initialDefaultFormatsWA: FormatWA[] = [
   { id: 12, title: "Penghapusan Admin", description: "Peringatan saat absen dibatalkan karena kecurangan.", template: "❌ *PEMBATALAN RIWAYAT KEHADIRAN* ❌\n\nPerhatian *[Nama Lengkap]* (*[Kelompok]*),\nAdmin Dept. RKG baru saja meninjau dan **MENGHAPUS** data kehadiran Anda untuk *[Shift]* tertanggal *[Tanggal]*.\n\n*Alasan:* Foto bukti kehadiran tidak valid / Indikasi ketidaksesuaian data.\nStatus kehadiran Anda pada sesi tersebut saat ini dikembalikan menjadi *TIDAK HADIR*.\n\nMohon untuk selalu menggunakan foto *selfie real-time* dan mematuhi tata tertib absensi Dept. RKG." },
   { id: 13, title: "Update GPS", description: "Notif pergeseran titik Geofence kampus.", template: "📍 *PEMBARUAN TITIK LOKASI ABSENSI* 📍\n\nHalo rekan-rekan mahasiswa Dept. RKG!\nTerdapat pembaruan pada titik pusat radar Lokasi Absensi (Geofence) yang berlaku mulai hari ini.\n\n• Titik Lokasi Baru: *[Nama Lokasi Geofence]*\n• Jangkauan Radar: *[Radius]* Meter\n\nPastikan Anda berada di area gedung tersebut dan selalu mengizinkan akses GPS pada browser Anda sebelum melakukan absensi di: [Link]" },
   { id: 14, title: "Ubah Password", description: "Kredensial baru hasil reset admin.", template: "🔑 *PEMBARUAN KATA SANDI AKUN* 🔑\n\nHalo *[Nama Lengkap]*,\nKata sandi (Password) untuk akun absensi Dept. RKG Anda baru saja di-reset oleh Administrator.\n\nBerikut adalah kredensial terbaru Anda:\n👤 NIM: *[NIM]*\n🔐 Sandi Baru: *[Password]*\n\nSegera gunakan sandi ini untuk mengakses portal di [Link] dan jangan bagikan kredensial ini kepada siapa pun!" },
+  { id: 15, title: "Penambahan Jadwal", description: "Notifikasi pembuatan jadwal absen baru oleh Admin.", template: "📅 *PENGUMUMAN JADWAL TAMBAHAN* 📅\n\nHalo *[Nama Lengkap]*, terdapat penambahan jadwal absensi baru pada sistem untuk kelompok Anda (*[Kelompok]*).\n\n📌 *Detail Jadwal Tambahan:*\n• Sesi Baru: *[Shift]*\n• Jam Absen Dimulai: *[Jam Sesi]* WITA\n• Batas Tutup Absen: *[Jam Tutup]* WITA\n\nPastikan Anda bersiap dan tidak terlewat untuk melakukan absensi melalui portal resmi:\n[Link]\n\nTerima kasih." },
+  { id: 16, title: "Logout Device Via Bot WA", description: "Balasan saat MHS ketik command !logout di Bot WA.", template: "🔓 *LOGOUT PERANGKAT BERHASIL* 🔓\n\nHalo *[Nama Lengkap]*,\nPermintaan pelepasan akses (Logout) perangkat Anda telah berhasil diproses oleh sistem database kami.\n\nSistem tidak lagi mengunci perangkat lama Anda. Saat Anda melakukan absensi berikutnya di [Link], perangkat baru yang Anda gunakan akan otomatis menjadi perangkat utama yang terikat dengan akun Anda.\n\nJaga selalu keamanan akun Anda! 🛡️" },
   { id: 17, title: "Hari Terakhir", description: "Pengingat cross-check di hari terakhir stase.", template: "🏁 *HARI TERAKHIR STASE DEPT. RKG* 🏁\n\nHalo *[Nama Lengkap]*, \nHari ini adalah hari terakhir untuk periode stase *[Kelompok]*.\n\nMohon segera login ke [Link] dan periksa *Rincian Kehadiran* Anda. Pastikan seluruh absensi (Hadir/Terlambat/Alpha) telah terekam dengan benar sebelum Admin menutup buku dan mengekspor laporan akhir (Excel) untuk penilaian.\n\nTerima kasih atas kerja kerasnya selama berada di Dept. RKG! Sukses selalu! ✨" },
   { id: 18, title: "Pesan Broadcast", description: "Pesan custom (pengumuman) dari Admin.", template: "📢 *PENGUMUMAN DEPT. RKG* 📢\nKepada Yth. Seluruh Mahasiswa *[Kelompok]*,\n\n*[Pesan Custom]*\n\n---\n_Pesan ini di-generate otomatis oleh Sistem Admin. Harap segera dilaksanakan._" },
+  { id: 19, title: "Reset Password via Bot WA", description: "Balasan saat MHS ketik command !reset di Bot WA.", template: "♻️ *RESET KATA SANDI BERHASIL* ♻️\n\nHalo *[Nama Lengkap]*,\nPermintaan reset kata sandi (password) Anda telah berhasil diproses secara real-time oleh sistem.\n\nBerikut adalah kredensial terbaru Anda:\n👤 NIM: *[NIM]*\n🔑 Sandi Baru: *[Password]*\n\nSilakan gunakan sandi baru ini (4 digit angka) untuk login kembali ke portal absensi:\n[Link]\n\nSegera simpan dan *jangan bagikan sandi ini kepada siapa pun!*" },
   { id: 20, title: "Rekap Admin", description: "Rangkuman total Hadir/Alpha harian untuk Admin.", template: "📈 *REKAPITULASI ABSENSI HARIAN DEPT. RKG* 📈\n\nHalo Admin, berikut adalah laporan singkat kehadiran mahasiswa untuk hari ini (*[Tanggal]*):\n\n👥 *Total Mahasiswa Aktif:* [Total Mhs] Entitas\n✅ *Hadir Tepat Waktu:* [Total Hadir] Sesi\n⚠️ *Terlambat:* [Total Terlambat] Sesi\n❌ *Tidak Hadir (Alpha):* [Total Alpha] Sesi\n\nSeluruh data telah diamankan ke Cloud. Untuk melihat rincian nama mahasiswa atau mengunduh laporan Excel, silakan akses Dashboard Utama: [Link]" },
   { id: 25, title: "Onboarding Baru", description: "Penyebaran password saat input MHS baru (Excel/Manual).", template: "🎉 *SELAMAT DATANG DI DEPT. RKG!* 🎉\n\nHalo *[Nama Lengkap]*, selamat bergabung! \nData Anda telah berhasil didaftarkan oleh Administrator ke dalam Sistem Absensi Digital Terpadu Dept. RKG.\n\nBerikut adalah rincian informasi dan kredensial akses Anda:\n👤 *Nama:* [Nama Lengkap]\n🆔 *NIM:* [NIM]\n👥 *Kelompok:* [Kelompok]\n🗓️ *Masa Stase:* [Tanggal Mulai] - [Tanggal Akhir]\n🔑 *Kata Sandi:* [Password]\n\nAgar Anda dapat mulai melakukan absensi, ikuti langkah wajib berikut:\n1. Buka portal resmi absensi di: [Link]\n2. Klik tombol \"Mulai Absensi\" di layar utama.\n3. Masukkan *NIM* dan *Kata Sandi* Anda dengan benar.\n4. Pastikan Anda *Mengizinkan (Allow)* akses Kamera dan Lokasi (GPS) pada browser HP Anda.\n5. Lakukan absensi perdana Anda sesuai jadwal yang ditentukan.\n\n⚠️ *PENTING:* Perangkat/HP pertama yang Anda gunakan untuk login akan langsung *DIKUNCI (Terikat)* dengan akun Anda. Jangan pernah menitipkan akun ke HP teman! \n\nJaga kerahasiaan kata sandi Anda. Selamat bertugas dan sukses untuk stasenya! 🏥✨" }
 ];
@@ -2509,7 +2513,7 @@ const AdminGeofence: React.FC = () => {
 };
 
 const AdminSettings: React.FC = () => {
-  const { sessions, updateSession, addSession, deleteSession, students, sendWA } = useAppContext();
+  const { sessions, updateSession, addSession, deleteSession, students, clusters, sendWA } = useAppContext();
   const [isAdding, setIsAdding] = useState(false);
   const [editingSessId, setEditingSessId] = useState<string | null>(null);
 
@@ -2535,6 +2539,22 @@ const AdminSettings: React.FC = () => {
        }
     } else {
        addSession({ ...formSess, isActive: true }); 
+
+       // TRIGGER WA SKENARIO 15: PENAMBAHAN JADWAL BARU
+       if (confirm('Jadwal baru berhasil dibuat. Apakah Anda ingin mengirimkan Broadcast Info Jadwal Tambahan ini ke seluruh mahasiswa?')) {
+           students.forEach(st => {
+               const c = clusters.find(cl=>cl.id === st.clusterId);
+               if(st.noHp) {
+                   sendWA(st.noHp, 15, {
+                       namaLengkap: st.name,
+                       kelompok: c?.name || 'Semua Kelompok',
+                       shift: formSess.name,
+                       jamSesi: formSess.startTime,
+                       jamTutup: formSess.endTime
+                   });
+               }
+           });
+       }
     }
     setIsAdding(false); setEditingSessId(null); 
     setFormSess({ name: '', startTime: '', endTime: '', toleranceMinutes: 15 });
@@ -3036,6 +3056,10 @@ const AdminCalendar: React.FC = () => {
    );
 };
 
+// ==========================================
+// ADMIN REPORTS
+// ==========================================
+
 const AdminReports: React.FC = () => {
   const { logs, sessions, clusters, students, deleteLog, sendWA } = useAppContext();
   const [search, setSearch] = useState('');
@@ -3248,7 +3272,7 @@ const AdminLayout: React.FC<{ children: React.ReactNode, activeRoute: string, se
         </div>
       </aside>
 
-      {/* UPDATE PENTING GBR 2: OVERFLOW-X-HIDDEN UNTUK MENCEGAH SCROLL KE SAMPING */}
+      {/* UPDATE PENTING: OVERFLOW-X-HIDDEN UNTUK MENCEGAH SCROLL KE SAMPING */}
       <main className="flex-1 flex flex-col relative overflow-y-auto overflow-x-hidden w-full h-screen custom-scrollbar">
         {/* RESPONSIVE HEADER & STATUS BADGE */}
         <header className="sticky top-0 p-4 md:p-6 flex justify-between md:justify-end items-center z-30 w-full bg-[#0A1628]/80 backdrop-blur-xl border-b border-cyan-900/50 shadow-[0_4px_30px_rgba(0,0,0,0.5)]">
