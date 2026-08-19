@@ -67,10 +67,10 @@ export default function ApiDocs() {
       if (dbFormats && dbFormats.length > 0) {
          setFormats(dbFormats);
          // Set default selected to the first one available
-         if (!dbFormats.find((f:any) => f.id === 25)) {
-             setSelectedScenario(dbFormats[0].id);
-         } else {
+         if (dbFormats.find((f:any) => f.id === 25)) {
              setSelectedScenario(25);
+         } else {
+             setSelectedScenario(dbFormats[0].id);
          }
       }
       setIsLoading(false);
