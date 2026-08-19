@@ -176,7 +176,7 @@ interface Session { id: string; name: string; startTime: string; endTime: string
 interface Log { id: string; nim: string; name: string; clusterName?: string; timestamp: string; sessionName: string; status: 'Hadir' | 'Terlambat'; location: { lat: number; lng: number }; photoBase64: string; deviceId: string; }
 interface Student { id: string; nim: string; name: string; password?: string; noHp?: string; deviceId?: string | null; clusterId?: string; }
 interface Geofence { lat: number; lng: number; radius: number; name?: string; }
-interface AdminUser { id: string; username: string; password?: string; noHp?: string; } // UPDATE: Admin noHp for Rekap
+interface AdminUser { id: string; username: string; password?: string; noHp?: string; } 
 interface FormatWA { id: number; title: string; description: string; template: string; }
 
 type SyncStatus = 'offline' | 'synced' | 'syncing' | 'error';
@@ -407,7 +407,6 @@ const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
 
   // ==========================================
   // ADMIN CRON (PENGGANTI NODE CRON SERVER)
-  // Berjalan di Background jika ada Admin yang aktif membuka Dashboard
   // Menangani Skenario 1, 2, 4, 9, 17, 20
   // ==========================================
   useEffect(() => {
@@ -489,10 +488,37 @@ const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
                          });
 
                          // LOGIKA SKENARIO 9 (SP OTOMATIS JIKA ALPHA >= 3)
+                         // -> FIX ERROR KOMPILASI LOGIC TYPE
                          if (stAkhir === 'Alpha') {
-                             // Hitung total alpha secara historis
-                             const totalAlphaHist = logs.filter(l => l.nim === st.nim && l.status === 'Alpha').length + 1; // +1 with today
-                             const totalTelatHist = logs.filter(l => l.nim === st.nim && l.status === 'Terlambat').length;
+                             // Hitung total alpha dan telat secara historis dengan benar
+                             let totalAlphaHist = 0;
+                             let totalTelatHist = 0;
+                             if (c && c.startDate) {
+                                 const startD = new Date(c.startDate);
+                                 const endD = new Date();
+                                 for (let d = new Date(startD); d <= endD; d.setDate(d.getDate() + 1)) {
+                                     if (d > new Date()) break;
+                                     const dateStrLocal = getLocalYYYYMMDD(d);
+                                     sessions.forEach(s => {
+                                         if (s.isActive) {
+                                             const pastLog = logs.find(l => l.nim === st.nim && getLocalYYYYMMDD(l.timestamp) === dateStrLocal && l.sessionName === s.name);
+                                             if (pastLog) {
+                                                 if (pastLog.status === 'Terlambat') totalTelatHist++;
+                                             } else {
+                                                 const [eH, eM] = s.endTime.split(':').map(Number);
+                                                 const eTotal = eH * 60 + eM + s.toleranceMinutes;
+                                                 const isToday = dateStrLocal === todayStr;
+                                                 if (isToday) {
+                                                    const cMins = now.getHours() * 60 + now.getMinutes();
+                                                    if (cMins > eTotal) totalAlphaHist++;
+                                                 } else {
+                                                    if (d < new Date(new Date().setHours(0,0,0,0))) totalAlphaHist++;
+                                                 }
+                                             }
+                                         }
+                                     });
+                                 }
+                             }
                              
                              if (totalAlphaHist >= 3) { // Threshold SP Otomatis: 3x Alpha
                                  const spFlagKey = `wa_scen9_${st.nim}_${totalAlphaHist}`; // Flag per tingkat SP
@@ -1129,10 +1155,12 @@ const QRScanner: React.FC<{ activeSessionName: string, onComplete: (data: {nim: 
 
       if (foundStudent.deviceId && foundStudent.deviceId !== finalDeviceId) {
         // TRIGGER WA SKENARIO 11: LOGIN ILEGAL
-        sendWA(foundStudent.noHp || '', 11, { 
-            namaLengkap: foundStudent.name, 
-            jamAbsen: new Date().toLocaleTimeString('id-ID', {hour: '2-digit', minute:'2-digit'}) 
-        });
+        if (foundStudent.noHp) {
+            sendWA(foundStudent.noHp, 11, { 
+                namaLengkap: foundStudent.name, 
+                jamAbsen: new Date().toLocaleTimeString('id-ID', {hour: '2-digit', minute:'2-digit'}) 
+            });
+        }
         setError('⚠️ Keamanan Sistem: Akun NIM ini sudah terikat di HP lain.'); return;
       }
       if (!foundStudent.deviceId) updateStudent(foundStudent.id, { deviceId: finalDeviceId });
@@ -1219,6 +1247,7 @@ const QRScanner: React.FC<{ activeSessionName: string, onComplete: (data: {nim: 
           </div>
         )}
       </div>
+      <style>{`@keyframes scan { 0% { transform: translateY(-100%); } 50% { transform: translateY(100%); } 100% { transform: translateY(-100%); } }`}</style>
     </div>
   );
 };
@@ -1356,12 +1385,10 @@ const AttendanceWizard: React.FC = () => {
           {step === 2 && <LocationCheck onComplete={(d) => { setData(prev => ({...prev, location: d})); setStep(3); }} />}
           {step === 3 && <QRScanner activeSessionName={activeSessionRef.current} onComplete={(d) => { setData(prev => ({...prev, ...d})); setStep(4); }} />}
           
-          {/* DI SINILAH TRIGGER SKENARIO 3 (BERHASIL ABSEN) DIJALANKAN */}
           {step === 4 && <SelfieCapture onComplete={(photo) => { 
              const logData = { ...data, photoBase64: photo } as Omit<Log, 'id' | 'timestamp'>;
              addLog(logData); 
 
-             // TRIGGER WA SKENARIO 3: BERHASIL ABSEN
              const student = students.find(s => s.nim === logData.nim);
              if (student && student.noHp) {
                  sendWA(student.noHp, 3, {
