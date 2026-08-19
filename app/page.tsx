@@ -6,7 +6,7 @@ import {
   BarChart3, Settings, FileText, LogOut, Users, Download, Plus, Trash2,
   RefreshCcw, ChevronRight, Fingerprint, Map, Activity, Key, Upload, Database, Navigation,
   Printer, X, CreditCard, Eye, EyeOff, Lock, ShieldCheck, Loader2, User, Cloud, CloudOff,
-  ServerCrash, Maximize, Menu, Network, Edit, Calendar, UserX, ScanFace, ActivitySquare, MessageSquare, Megaphone
+  ServerCrash, Maximize, Menu, Network, Edit, Calendar, UserX, ScanFace, ActivitySquare, MessageSquare, Megaphone, Send
 } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, AreaChart, Area } from 'recharts';
 
@@ -121,7 +121,6 @@ const calculateDistance = (lat1: number, lon1: number, lat2: number, lon2: numbe
   return R * c; 
 };
 
-// EXPORT TO EXCEL DYNAMICALLY
 const exportToExcel = async (logs: Log[]) => {
   try {
     const XLSX = await loadXlsx();
@@ -177,7 +176,7 @@ interface Session { id: string; name: string; startTime: string; endTime: string
 interface Log { id: string; nim: string; name: string; clusterName?: string; timestamp: string; sessionName: string; status: 'Hadir' | 'Terlambat'; location: { lat: number; lng: number }; photoBase64: string; deviceId: string; }
 interface Student { id: string; nim: string; name: string; password?: string; noHp?: string; deviceId?: string | null; clusterId?: string; }
 interface Geofence { lat: number; lng: number; radius: number; name?: string; }
-interface AdminUser { id: string; username: string; password?: string; }
+interface AdminUser { id: string; username: string; password?: string; noHp?: string; } // UPDATE: Admin noHp for Rekap
 interface FormatWA { id: number; title: string; description: string; template: string; }
 
 type SyncStatus = 'offline' | 'synced' | 'syncing' | 'error';
@@ -211,6 +210,7 @@ interface AppContextType {
   updateFormat: (id: number, updates: Partial<FormatWA>) => void;
   forceManualSync: () => Promise<void>;
   studentLogout: () => void;
+  sendWA: (noHp: string, scenarioId: number, payloadData: any) => Promise<void>;
 }
 
 const defaultSessions: Session[] = [
@@ -244,7 +244,7 @@ const initialDefaultFormatsWA: FormatWA[] = [
 const AppContext = createContext<AppContextType | null>(null);
 
 // ==========================================
-// APP PROVIDER
+// APP PROVIDER (DENGAN ADMIN CRON REAL-TIME)
 // ==========================================
 const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [isAppLoading, setIsAppLoading] = useState(true);
@@ -365,18 +365,198 @@ const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
 
   const updateFormat = (id: number, updates: Partial<FormatWA>) => saveFormats(formats.map(f => f.id === id ? { ...f, ...updates } : f));
 
+  // ==========================================
+  // FUNGSI GLOBAL TRIGGER WHATSAPP API
+  // ==========================================
+  const sendWA = async (noHp: string, scenarioId: number, payloadData: any) => {
+      if(!noHp) return;
+      try {
+          // Fallback Link URL origin untuk dikirimkan ke pesan WA
+          if (!payloadData.link && typeof window !== 'undefined') {
+              payloadData.link = window.location.origin;
+          }
+          await fetch('/api/wa', {
+              method: 'POST',
+              headers: {'Content-Type': 'application/json'},
+              body: JSON.stringify({ no_hp: noHp, scenario: scenarioId, data: payloadData })
+          });
+      } catch(e) { console.error("WA API Trigger Error:", e); }
+  };
+
   const studentLogout = () => {
      if(!confirm('Apakah Anda yakin ingin logout / keluar dari akun mahasiswa di perangkat ini?')) return;
      const ownerNim = localStorage.getItem('axaxyz_device_owner');
      if (ownerNim) {
         const student = students.find(s => s.nim === ownerNim);
-        if (student) updateStudent(student.id, { deviceId: null });
+        if (student) {
+            updateStudent(student.id, { deviceId: null });
+            // TRIGGER WA SKENARIO 5: KEAMANAN LOGOUT
+            if (student.noHp) {
+                sendWA(student.noHp, 5, { 
+                    namaLengkap: student.name, 
+                    jamAbsen: new Date().toLocaleTimeString('id-ID', {hour: '2-digit', minute:'2-digit'}) 
+                });
+            }
+        }
      }
      localStorage.removeItem('axaxyz_device_id');
      localStorage.removeItem('axaxyz_device_owner');
      alert('Anda telah berhasil keluar dari sistem absensi di perangkat ini.');
      window.location.reload();
   };
+
+  // ==========================================
+  // ADMIN CRON (PENGGANTI NODE CRON SERVER)
+  // Berjalan di Background jika ada Admin yang aktif membuka Dashboard
+  // Menangani Skenario 1, 2, 4, 9, 17, 20
+  // ==========================================
+  useEffect(() => {
+     if (typeof window === 'undefined') return;
+     const isAdmin = localStorage.getItem('axaxyz_admin_auth') === 'true';
+     if (!isAdmin || !isCloudSync) return; // Hanya aktif saat cloud sync (Redis) nyala
+
+     const cronInterval = setInterval(async () => {
+         const now = new Date();
+         const currentHHMM = now.toLocaleTimeString('id-ID', {hour: '2-digit', minute:'2-digit', hour12: false});
+         const todayStr = getLocalYYYYMMDD(now);
+
+         for (const sess of sessions) {
+             if (!sess.isActive) continue;
+
+             // SKENARIO 1: PEMBUKAAN SESI (Tepat jam startTime)
+             if (sess.startTime === currentHHMM) {
+                 const flagKey = `wa_scen1_${todayStr}_${sess.id}`;
+                 const isSent = await CloudStore.get(flagKey);
+                 if (!isSent) {
+                     await CloudStore.set(flagKey, true); // Lock to avoid duplicate
+                     students.forEach(st => {
+                         const c = clusters.find(cl=>cl.id === st.clusterId);
+                         sendWA(st.noHp || '', 1, { 
+                             namaLengkap: st.name, 
+                             kelompok: c?.name, 
+                             shift: sess.name, 
+                             jamSesi: sess.startTime, 
+                             jamTutup: sess.endTime 
+                         });
+                     });
+                 }
+             }
+
+             // SKENARIO 2: PENGINGAT SISA WAKTU (Tepat jam endTime, sisa waktu tolerance)
+             if (sess.endTime === currentHHMM) {
+                 const flagKey = `wa_scen2_${todayStr}_${sess.id}`;
+                 const isSent = await CloudStore.get(flagKey);
+                 if (!isSent) {
+                     await CloudStore.set(flagKey, true);
+                     students.forEach(st => {
+                         const hasLogged = logs.some(l => l.nim === st.nim && l.sessionName === sess.name && getLocalYYYYMMDD(l.timestamp) === todayStr);
+                         if (!hasLogged && st.noHp) {
+                             sendWA(st.noHp, 2, { 
+                                 namaLengkap: st.name, 
+                                 shift: sess.name, 
+                                 jamTutup: sess.endTime 
+                             });
+                         }
+                     });
+                 }
+             }
+
+             // SKENARIO 4 & 9: REKAP AKHIR & SP OTOMATIS (1 Menit setelah Tolerance habis)
+             const [endH, endM] = sess.endTime.split(':').map(Number);
+             const endTotal = endH * 60 + endM + sess.toleranceMinutes;
+             const currentTotal = now.getHours() * 60 + now.getMinutes();
+
+             if (currentTotal === endTotal + 1) { 
+                 const flagKey = `wa_scen4_${todayStr}_${sess.id}`;
+                 const isSent = await CloudStore.get(flagKey);
+                 if (!isSent) {
+                     await CloudStore.set(flagKey, true);
+                     
+                     students.forEach(async (st) => {
+                         const c = clusters.find(cl=>cl.id === st.clusterId);
+                         const log = logs.find(l => l.nim === st.nim && l.sessionName === sess.name && getLocalYYYYMMDD(l.timestamp) === todayStr);
+                         const stAkhir = log ? log.status : 'Alpha';
+                         const jAbsen = log ? new Date(log.timestamp).toLocaleTimeString('id-ID', {hour:'2-digit', minute:'2-digit'}) : '-';
+                         
+                         // Kirim Skenario 4 (Rekap Akhir Harian per Shift)
+                         sendWA(st.noHp || '', 4, { 
+                             namaLengkap: st.name, 
+                             shift: sess.name, 
+                             jamTutup: sess.endTime, 
+                             statusAkhir: stAkhir, 
+                             jamAbsen: jAbsen, 
+                             kelompok: c?.name 
+                         });
+
+                         // LOGIKA SKENARIO 9 (SP OTOMATIS JIKA ALPHA >= 3)
+                         if (stAkhir === 'Alpha') {
+                             // Hitung total alpha secara historis
+                             const totalAlphaHist = logs.filter(l => l.nim === st.nim && l.status === 'Alpha').length + 1; // +1 with today
+                             const totalTelatHist = logs.filter(l => l.nim === st.nim && l.status === 'Terlambat').length;
+                             
+                             if (totalAlphaHist >= 3) { // Threshold SP Otomatis: 3x Alpha
+                                 const spFlagKey = `wa_scen9_${st.nim}_${totalAlphaHist}`; // Flag per tingkat SP
+                                 const isSpSent = await CloudStore.get(spFlagKey);
+                                 if (!isSpSent) {
+                                     await CloudStore.set(spFlagKey, true);
+                                     sendWA(st.noHp || '', 9, {
+                                         namaLengkap: st.name,
+                                         kelompok: c?.name,
+                                         totalAlpha: totalAlphaHist,
+                                         totalTerlambat: totalTelatHist
+                                     });
+                                 }
+                             }
+                         }
+                     });
+                 }
+             }
+         }
+
+         // SKENARIO 17: HARI TERAKHIR STASE (Cek Jam 10:00 Pagi)
+         if (currentHHMM === '10:00') {
+             const flagKey = `wa_scen17_${todayStr}`;
+             const isSent = await CloudStore.get(flagKey);
+             if (!isSent) {
+                 await CloudStore.set(flagKey, true);
+                 students.forEach(st => {
+                     const c = clusters.find(cl=>cl.id === st.clusterId);
+                     if (c && c.endDate === todayStr) {
+                         sendWA(st.noHp || '', 17, { namaLengkap: st.name, kelompok: c.name });
+                     }
+                 });
+             }
+         }
+
+         // SKENARIO 20: REKAP ADMIN (Cek Jam 23:50 Malam)
+         if (currentHHMM === '23:50') {
+             const flagKey = `wa_scen20_${todayStr}`;
+             const isSent = await CloudStore.get(flagKey);
+             if (!isSent) {
+                 await CloudStore.set(flagKey, true);
+                 const tHadir = logs.filter(l => getLocalYYYYMMDD(l.timestamp) === todayStr && l.status === 'Hadir').length;
+                 const tTelat = logs.filter(l => getLocalYYYYMMDD(l.timestamp) === todayStr && l.status === 'Terlambat').length;
+                 const activeSessCount = sessions.filter(s=>s.isActive).length;
+                 const tAlpha = (students.length * activeSessCount) - (tHadir + tTelat);
+                 
+                 admins.forEach(ad => { 
+                    if (ad.noHp) { // Kirim ke admin jika nomor HP nya didaftarkan
+                        sendWA(ad.noHp, 20, {
+                            tanggal: new Date().toLocaleDateString('id-ID', {weekday: 'long', day:'numeric', month:'long'}),
+                            totalMhs: students.length,
+                            totalHadir: tHadir,
+                            totalTerlambat: tTelat,
+                            totalAlpha: tAlpha > 0 ? tAlpha : 0
+                        });
+                    }
+                 });
+             }
+         }
+         
+     }, 60000); // Jalan setiap 1 Menit
+     
+     return () => clearInterval(cronInterval);
+  }, [isCloudSync, sessions, students, logs, clusters, admins]);
 
   if (isAppLoading) {
     return (
@@ -399,7 +579,7 @@ const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
       isCloudSync, syncStatus, clusters, sessions, logs, students, geofence, admins, formats,
       addCluster, updateCluster, deleteCluster, addLog, deleteLog, updateSession, addSession, deleteSession, 
       addStudent, updateStudent, bulkAddStudents, deleteStudent, updateGeofence, forceManualSync, studentLogout,
-      addAdmin, updateAdmin, deleteAdmin, updateFormat
+      addAdmin, updateAdmin, deleteAdmin, updateFormat, sendWA
     }}>
       {children}
     </AppContext.Provider>
@@ -743,9 +923,6 @@ const StudentDashboard: React.FC<{ onStartAbsen: () => void, linkedNim: string |
   );
 };
 
-// ==========================================
-// PORTAL MAHASISWA WIZARD / KOMPONEN LAINNYA
-// ==========================================
 const TimeCheck: React.FC<{ onComplete: (data: { sessionName: string; status: 'Hadir' | 'Terlambat' }) => void }> = ({ onComplete }) => {
   const { sessions } = useAppContext();
   const [currentTime, setCurrentTime] = useState(new Date());
@@ -880,7 +1057,7 @@ const LocationCheck: React.FC<{ onComplete: (loc: {lat: number, lng: number}) =>
 };
 
 const QRScanner: React.FC<{ activeSessionName: string, onComplete: (data: {nim: string, name: string, deviceId: string, clusterName?: string}) => void }> = ({ activeSessionName, onComplete }) => {
-  const { students, updateStudent, clusters, logs } = useAppContext();
+  const { students, updateStudent, clusters, logs, sendWA } = useAppContext();
   const [nimInput, setNimInput] = useState('');
   const [passInput, setPassInput] = useState('');
   const [error, setError] = useState('');
@@ -951,6 +1128,11 @@ const QRScanner: React.FC<{ activeSessionName: string, onComplete: (data: {nim: 
       if (foundStudent.clusterId) clusterName = clusters.find(c => c.id === foundStudent.clusterId)?.name || '';
 
       if (foundStudent.deviceId && foundStudent.deviceId !== finalDeviceId) {
+        // TRIGGER WA SKENARIO 11: LOGIN ILEGAL
+        sendWA(foundStudent.noHp || '', 11, { 
+            namaLengkap: foundStudent.name, 
+            jamAbsen: new Date().toLocaleTimeString('id-ID', {hour: '2-digit', minute:'2-digit'}) 
+        });
         setError('⚠️ Keamanan Sistem: Akun NIM ini sudah terikat di HP lain.'); return;
       }
       if (!foundStudent.deviceId) updateStudent(foundStudent.id, { deviceId: finalDeviceId });
@@ -1037,7 +1219,6 @@ const QRScanner: React.FC<{ activeSessionName: string, onComplete: (data: {nim: 
           </div>
         )}
       </div>
-      <style>{`@keyframes scan { 0% { transform: translateY(-100%); } 50% { transform: translateY(100%); } 100% { transform: translateY(-100%); } }`}</style>
     </div>
   );
 };
@@ -1126,7 +1307,7 @@ const SuccessScreen: React.FC<{ reset: () => void }> = ({ reset }) => (
 );
 
 const AttendanceWizard: React.FC = () => {
-  const { addLog, studentLogout } = useAppContext();
+  const { addLog, studentLogout, students, sendWA } = useAppContext();
   const [step, setStep] = useState(0); 
   const [data, setData] = useState<Partial<Log>>({});
   const [linkedNim, setLinkedNim] = useState<string | null>(null);
@@ -1140,21 +1321,6 @@ const AttendanceWizard: React.FC = () => {
 
   return (
     <div className="min-h-screen flex flex-col font-sans text-slate-100 overflow-hidden relative radiology-bg">
-      <style>{`
-        .radiology-bg {
-           background-color: #020617;
-           background-image: 
-             radial-gradient(circle at 15% 50%, rgba(6, 182, 212, 0.08), transparent 25%),
-             radial-gradient(circle at 85% 30%, rgba(59, 130, 246, 0.08), transparent 25%),
-             linear-gradient(rgba(6, 182, 212, 0.03) 1px, transparent 1px),
-             linear-gradient(90deg, rgba(6, 182, 212, 0.03) 1px, transparent 1px);
-           background-size: 100% 100%, 100% 100%, 30px 30px, 30px 30px;
-           background-position: 0 0, 0 0, 0 0, 0 0;
-           animation: pulse-bg 10s ease-in-out infinite alternate;
-        }
-        @keyframes pulse-bg { 0% { background-color: #020617; } 100% { background-color: #050b14; } }
-      `}</style>
-      
       <header className="w-full p-4 md:p-6 flex justify-between items-center relative z-20 border-b border-cyan-500/20 bg-[#0A1628]/80 backdrop-blur-xl shadow-[0_4px_30px_rgba(0,0,0,0.5)]">
         <div className="flex items-center gap-4">
           <div className="w-12 h-12 bg-[#050B14] border border-cyan-500/50 rounded-xl flex items-center justify-center shadow-[0_0_15px_rgba(6,182,212,0.4)] p-2"><img src="/axalogo.png" alt="DEPT. RKG" className="w-full h-full object-contain" onError={(e) => { e.currentTarget.style.display = 'none'; e.currentTarget.nextElementSibling?.classList.remove('hidden'); }} /><ActivitySquare className="text-cyan-400 w-full h-full hidden" /></div>
@@ -1189,13 +1355,33 @@ const AttendanceWizard: React.FC = () => {
           {step === 1 && <TimeCheck onComplete={(d) => { activeSessionRef.current = d.sessionName; setData(prev => ({...prev, ...d})); setStep(2); }} />}
           {step === 2 && <LocationCheck onComplete={(d) => { setData(prev => ({...prev, location: d})); setStep(3); }} />}
           {step === 3 && <QRScanner activeSessionName={activeSessionRef.current} onComplete={(d) => { setData(prev => ({...prev, ...d})); setStep(4); }} />}
-          {step === 4 && <SelfieCapture onComplete={(photo) => { addLog({ ...data, photoBase64: photo } as Omit<Log, 'id' | 'timestamp'>); setStep(5); }} />}
+          
+          {/* DI SINILAH TRIGGER SKENARIO 3 (BERHASIL ABSEN) DIJALANKAN */}
+          {step === 4 && <SelfieCapture onComplete={(photo) => { 
+             const logData = { ...data, photoBase64: photo } as Omit<Log, 'id' | 'timestamp'>;
+             addLog(logData); 
+
+             // TRIGGER WA SKENARIO 3: BERHASIL ABSEN
+             const student = students.find(s => s.nim === logData.nim);
+             if (student && student.noHp) {
+                 sendWA(student.noHp, 3, {
+                     namaLengkap: student.name,
+                     nim: student.nim,
+                     kelompok: logData.clusterName || 'Tanpa Kelompok',
+                     shift: logData.sessionName,
+                     jamAbsen: new Date().toLocaleTimeString('id-ID', {hour: '2-digit', minute:'2-digit'})
+                 });
+             }
+             
+             setStep(5); 
+          }} />}
           {step === 5 && <SuccessScreen reset={reset} />}
         </div>
       </main>
     </div>
   );
 };
+
 // ==========================================
 // ADMIN AREA
 // ==========================================
@@ -1228,7 +1414,6 @@ const AdminLogin: React.FC<{ onLogin: () => void }> = ({ onLogin }) => {
     setErr('');
     await new Promise(resolve => setTimeout(resolve, 800));
 
-    // Verify Env Fallback OR Custom Admin Logic
     const envUser = process.env.NEXT_PUBLIC_ADMIN_USER;
     const envPass = process.env.NEXT_PUBLIC_ADMIN_PASS;
 
@@ -1320,15 +1505,12 @@ const AdminLogin: React.FC<{ onLogin: () => void }> = ({ onLogin }) => {
 const AdminDashboardHome: React.FC = () => {
   const { logs, students, clusters, sessions } = useAppContext();
   
-  // Date Range and Filters
   const { startObj, endObj, FilterUI } = useDateFilter();
   const [selectedCluster, setSelectedCluster] = useState('All');
 
-  // Dynamic Total Days Calculation for robust Alpha metrics
   const diffTime = Math.abs(endObj.getTime() - startObj.getTime());
   const totalDaysInRange = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) || 1;
 
-  // Filter Logs based on Date & Cluster (Waktu Lokal)
   const filteredLogs = logs.filter(l => {
     const logDate = new Date(l.timestamp);
     const inDateRange = logDate >= startObj && logDate <= endObj;
@@ -1342,7 +1524,6 @@ const AdminDashboardHome: React.FC = () => {
 
   const filteredStudents = selectedCluster === 'All' ? students : students.filter(s => s.clusterId === selectedCluster);
 
-  // Advanced Student Stats Detail Calculation (For Table)
   const activeSessions = sessions.filter(s => s.isActive);
   
   const studentStats = filteredStudents.map(student => {
@@ -1352,20 +1533,17 @@ const AdminDashboardHome: React.FC = () => {
      let alpha = 0;
      let belumAbsen = 0;
      
-     // Evaluate each day in the date range
      const rangeStart = new Date(startObj);
      const rangeEnd = new Date(endObj); 
      const todayLocal = getLocalYYYYMMDD(new Date());
 
      for (let d = new Date(rangeStart); d <= rangeEnd; d.setDate(d.getDate() + 1)) {
-         // Stop checking if day is in the future
          if (d > new Date()) break;
 
          const dateStrLocal = getLocalYYYYMMDD(d);
          const isToday = dateStrLocal === todayLocal;
          
          activeSessions.forEach(sess => {
-             // Sinkronisasi Bug Fix: Validasi dengan konversi ke YYYY-MM-DD Lokal
              const log = studentLogs.find(l => getLocalYYYYMMDD(l.timestamp) === dateStrLocal && l.sessionName === sess.name);
              if (log) {
                  if (log.status === 'Hadir') hadir++;
@@ -1377,10 +1555,9 @@ const AdminDashboardHome: React.FC = () => {
                      const endTotal = endH * 60 + endM;
                      const endWithTol = endTotal + sess.toleranceMinutes;
                      
-                     if (currentMinutes > endWithTol) alpha++; // completely missed
-                     else belumAbsen++; // Masih punya waktu untuk absen
+                     if (currentMinutes > endWithTol) alpha++; 
+                     else belumAbsen++; 
                  } else {
-                     // Check specifically if the loop date is strictly in the past
                      if (d < new Date(new Date().setHours(0,0,0,0))) {
                         alpha++; 
                      }
@@ -1392,14 +1569,12 @@ const AdminDashboardHome: React.FC = () => {
      return { ...student, hadir, terlambat, alpha, belumAbsen };
   });
 
-  // Basic Stats for Top Cards
   const totalLogsCount = filteredLogs.length;
   const onTimeCount = filteredLogs.filter(l => l.status === 'Hadir').length;
   const lateCount = filteredLogs.filter(l => l.status === 'Terlambat').length;
   const totalAlphaCount = studentStats.reduce((acc, curr) => acc + curr.alpha, 0);
   const totalBelumAbsenCount = studentStats.reduce((acc, curr) => acc + curr.belumAbsen, 0);
 
-  // Chart 1: Daily Trend (Area Chart)
   const dailyDataMap: Record<string, { date: string; Hadir: number; Terlambat: number }> = {};
   filteredLogs.forEach(log => {
      const dateStr = new Date(log.timestamp).toLocaleDateString('id-ID', {day: 'numeric', month: 'short'});
@@ -1409,7 +1584,6 @@ const AdminDashboardHome: React.FC = () => {
   });
   const trendData = Object.values(dailyDataMap);
   
-  // Chart 2: Pie Chart Overall
   const pieData = [
      { name: 'Tepat Waktu', value: onTimeCount, color: '#10b981' }, 
      { name: 'Terlambat', value: lateCount, color: '#f59e0b' },
@@ -1419,7 +1593,6 @@ const AdminDashboardHome: React.FC = () => {
   return (
     <div className="space-y-6 animate-in fade-in duration-500 pb-10">
       
-      {/* FILTER SECTION */}
       <div className="bg-[#0A1628]/80 backdrop-blur-md border border-cyan-500/20 p-5 md:p-6 rounded-[1.5rem] flex flex-col xl:flex-row gap-5 justify-between items-start xl:items-end shadow-lg">
          <div>
             <h2 className="text-xl md:text-2xl font-black text-cyan-50 tracking-widest uppercase">Dashboard Absensi</h2>
@@ -1439,7 +1612,6 @@ const AdminDashboardHome: React.FC = () => {
          </div>
       </div>
 
-      {/* STATS WIDGETS DENGAN 5 CARD */}
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4 md:gap-5">
         {[
           { title: 'Total Rekam Absen', val: totalLogsCount, icon: ActivitySquare, color: 'text-cyan-400', bg: 'bg-cyan-500/10', border: 'border-cyan-500/30' },
@@ -1460,10 +1632,7 @@ const AdminDashboardHome: React.FC = () => {
         ))}
       </div>
 
-      {/* CHARTS SECTION */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-5 min-h-[350px]">
-        
-        {/* TREND CHART */}
         <div className="lg:col-span-2 bg-[#0A1628]/60 backdrop-blur-md border border-cyan-500/20 p-6 rounded-[1.5rem] flex flex-col shadow-lg relative overflow-hidden">
           <div className="absolute top-0 right-0 w-32 h-32 bg-cyan-600/10 rounded-bl-[100px] pointer-events-none"></div>
           <h3 className="text-sm font-black text-cyan-50 mb-6 tracking-widest uppercase flex items-center gap-2"><Activity className="w-4 h-4 text-cyan-400"/> Tren Absensi Harian</h3>
@@ -1493,7 +1662,6 @@ const AdminDashboardHome: React.FC = () => {
           </div>
         </div>
 
-        {/* PIE CHART */}
         <div className="bg-[#0A1628]/60 backdrop-blur-md border border-cyan-500/20 p-6 rounded-[1.5rem] flex flex-col shadow-lg">
           <h3 className="text-sm font-black text-cyan-50 mb-6 tracking-widest uppercase">Komposisi Kehadiran</h3>
           <div className="flex-1 w-full min-h-[250px]">
@@ -1509,7 +1677,6 @@ const AdminDashboardHome: React.FC = () => {
              ) : <div className="h-full flex items-center justify-center text-cyan-800 font-mono text-xs uppercase">Grafik Kosong</div>}
           </div>
           
-          {/* Custom Legend */}
           <div className="flex justify-center gap-4 mt-2">
              {pieData.map(d => (
                 <div key={d.name} className="flex items-center gap-1.5 text-[9px] font-bold uppercase tracking-wider text-slate-300">
@@ -1520,7 +1687,6 @@ const AdminDashboardHome: React.FC = () => {
           </div>
         </div>
         
-        {/* REKAPITULASI KEHADIRAN MAHASISWA */}
         <div className="lg:col-span-3 bg-[#0A1628]/60 backdrop-blur-md border border-cyan-500/20 p-6 rounded-[1.5rem] flex flex-col shadow-lg relative overflow-hidden">
           <div className="absolute top-0 right-0 w-64 h-64 bg-cyan-600/5 rounded-bl-[100px] pointer-events-none"></div>
           
@@ -1676,7 +1842,7 @@ const AdminClusters: React.FC = () => {
 };
 
 const AdminStudents: React.FC = () => {
-  const { students, addStudent, updateStudent, bulkAddStudents, deleteStudent, clusters } = useAppContext();
+  const { students, addStudent, updateStudent, bulkAddStudents, deleteStudent, clusters, sendWA } = useAppContext();
   const [isAdding, setIsAdding] = useState(false);
   const [newS, setNewS] = useState({ name: '', nim: '', password: '', clusterId: '', noHp: '' });
   const [editingStudent, setEditingStudent] = useState<Student | null>(null);
@@ -1688,6 +1854,10 @@ const AdminStudents: React.FC = () => {
   
   const [selectedStudentForKTM, setSelectedStudentForKTM] = useState<Student | null>(null);
   const [isBroadcasting, setIsBroadcasting] = useState(false);
+  
+  // Custom Broadcast State
+  const [isCustomBroadcastOpen, setIsCustomBroadcastOpen] = useState(false);
+  const [customMessage, setCustomMessage] = useState('');
 
   useEffect(() => {
      const savedPass = localStorage.getItem('axaxyz_default_bulk_pass');
@@ -1713,7 +1883,23 @@ const AdminStudents: React.FC = () => {
     if(editingStudent) {
        let phone = editingStudent.noHp?.trim() || '';
        if (phone.startsWith('0')) phone = '62' + phone.substring(1);
+       
+       // CEK PERUBAHAN PASSWORD UNTUK TRIGGER WA SKENARIO 14
+       const oldStudentData = students.find(s => s.id === editingStudent.id);
+       const isPasswordChanged = oldStudentData?.password !== editingStudent.password;
+
        updateStudent(editingStudent.id, { name: editingStudent.name, nim: editingStudent.nim, noHp: phone, password: editingStudent.password, clusterId: editingStudent.clusterId });
+       
+       // TRIGGER WA SKENARIO 14: UBAH PASSWORD
+       if (isPasswordChanged && phone) {
+           sendWA(phone, 14, {
+               namaLengkap: editingStudent.name,
+               nim: editingStudent.nim,
+               password: editingStudent.password
+           });
+           alert('Sandi berhasil diubah & notifikasi WA otomatis dikirim ke mahasiswa terkait.');
+       }
+
        setEditingStudent(null);
     }
   };
@@ -1734,21 +1920,19 @@ const AdminStudents: React.FC = () => {
       const workbook = XLSX.read(data);
       const worksheet = workbook.Sheets[workbook.SheetNames[0]];
       
-      // UPGRADE: Gunakan parameter header: 1 untuk membaca Excel sebagai 2D Array ketat
       const rawData: any[][] = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
       
       const newSt: Omit<Student, 'id'>[] = [];
       let missingClusterCount = 0;
 
-      // Skip row 0 karena itu adalah Header
       for (let i = 1; i < rawData.length; i++) {
          const row = rawData[i];
          if (!row || row.length === 0) continue;
 
-         const name = row[0]; // Kolom A
-         const nim = row[1];  // Kolom B
-         let noWa = row[2] ? String(row[2]).replace(/\D/g, '') : ''; // Kolom C (Hanya ambil angka)
-         const clusterCol = row[3]; // Kolom D
+         const name = row[0]; 
+         const nim = row[1];  
+         let noWa = row[2] ? String(row[2]).replace(/\D/g, '') : ''; 
+         const clusterCol = row[3]; 
 
          if (noWa.startsWith('0')) noWa = '62' + noWa.substring(1);
 
@@ -1813,29 +1997,49 @@ const AdminStudents: React.FC = () => {
          if (!s.noHp) continue;
          const myCluster = clusters.find(c => c.id === s.clusterId);
          try {
-             const res = await fetch('/api/wa', {
-                 method: 'POST',
-                 headers: { 'Content-Type': 'application/json' },
-                 body: JSON.stringify({
-                     no_hp: s.noHp,
-                     scenario: 25,
-                     data: {
-                         namaLengkap: s.name,
-                         nim: s.nim,
-                         kelompok: myCluster?.name || 'Belum Ada Kelompok',
-                         tanggalMulai: myCluster?.startDate || 'Belum Diatur',
-                         tanggalAkhir: myCluster?.endDate || 'Belum Diatur',
-                         password: s.password || '123'
-                     }
-                 })
+             await sendWA(s.noHp, 25, {
+                 namaLengkap: s.name,
+                 nim: s.nim,
+                 kelompok: myCluster?.name || 'Belum Ada Kelompok',
+                 tanggalMulai: myCluster?.startDate || 'Belum Diatur',
+                 tanggalAkhir: myCluster?.endDate || 'Belum Diatur',
+                 password: s.password || '123'
              });
-             if (res.ok) successCount++;
-         } catch (e) {
-             console.error(e);
-         }
+             successCount++;
+         } catch (e) { console.error(e); }
      }
      setIsBroadcasting(false);
      alert(`✅ Broadcast Onboarding Selesai! Pesan dimasukkan ke antrean Bot WA untuk ${successCount}/${targetStudents.length} mahasiswa.`);
+  };
+
+  const handleCustomBroadcast = async (e: React.FormEvent) => {
+     e.preventDefault();
+     const targetStudents = filtered;
+     if (targetStudents.length === 0) return alert("❌ Tidak ada data mahasiswa pada filter saat ini.");
+     if (!customMessage.trim()) return alert("Pesan tidak boleh kosong!");
+
+     const confirmMsg = `Kirim pengumuman kustom ini ke ${targetStudents.length} mahasiswa sesuai filter saat ini?`;
+     if (!confirm(confirmMsg)) return;
+
+     setIsBroadcasting(true);
+     let successCount = 0;
+
+     for (const s of targetStudents) {
+         if (!s.noHp) continue;
+         const myCluster = clusters.find(c => c.id === s.clusterId);
+         try {
+             // TRIGGER WA SKENARIO 18: PESAN BROADCAST CUSTOM
+             await sendWA(s.noHp, 18, {
+                 kelompok: myCluster?.name || 'Semua Kelompok',
+                 pesanCustom: customMessage
+             });
+             successCount++;
+         } catch (e) { console.error(e); }
+     }
+     setIsBroadcasting(false);
+     setIsCustomBroadcastOpen(false);
+     setCustomMessage('');
+     alert(`✅ Pengumuman Terkirim! Berhasil memuat antrean untuk ${successCount}/${targetStudents.length} mahasiswa.`);
   };
 
   return (
@@ -1843,22 +2047,26 @@ const AdminStudents: React.FC = () => {
       
       {/* HEADER SECTION */}
       <div className="flex flex-col gap-6">
-        <div className="shrink-0 flex justify-between items-start">
+        <div className="shrink-0 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
           <div>
             <h2 className="text-2xl md:text-3xl font-black text-cyan-50 tracking-widest uppercase">Data Mahasiswa</h2>
             <p className="text-cyan-500/70 text-xs md:text-sm font-mono mt-1 uppercase">Kelola Data Mahasiswa, Import, & Broadcast WA</p>
           </div>
-          <button onClick={handleBroadcast} disabled={isBroadcasting} className="flex flex-col md:flex-row items-center gap-2 px-6 py-3 md:py-4 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white border border-emerald-400/50 rounded-2xl transition-all duration-300 font-black uppercase text-[10px] md:text-xs shadow-[0_0_20px_rgba(16,185,129,0.4)] disabled:opacity-50 disabled:cursor-not-allowed active:scale-95 text-center">
-            {isBroadcasting ? <Loader2 className="w-5 h-5 animate-spin" /> : <Megaphone className="w-5 h-5" />}
-            {isBroadcasting ? 'Mengirim...' : 'Broadcast Onboarding'}
-          </button>
+          <div className="flex flex-col sm:flex-row gap-3 w-full md:w-auto">
+             <button onClick={() => setIsCustomBroadcastOpen(true)} disabled={isBroadcasting} className="flex flex-1 items-center justify-center gap-2 px-5 py-3 md:py-3.5 bg-cyan-950/50 hover:bg-cyan-600 text-cyan-400 hover:text-white border border-cyan-500/50 rounded-2xl transition-all duration-300 font-black uppercase text-[10px] md:text-xs shadow-sm active:scale-95 text-center">
+               <Send className="w-4 h-4" />
+               Kirim Pengumuman
+             </button>
+             <button onClick={handleBroadcast} disabled={isBroadcasting} className="flex flex-1 items-center justify-center gap-2 px-5 py-3 md:py-3.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white border border-emerald-400/50 rounded-2xl transition-all duration-300 font-black uppercase text-[10px] md:text-xs shadow-[0_0_20px_rgba(16,185,129,0.4)] disabled:opacity-50 disabled:cursor-not-allowed active:scale-95 text-center">
+               {isBroadcasting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Megaphone className="w-4 h-4" />}
+               {isBroadcasting ? 'Mengirim...' : 'Broadcast Onboarding'}
+             </button>
+          </div>
         </div>
         
         <div className="flex flex-col xl:flex-row gap-4 w-full items-start">
-          {/* Action Buttons Row */}
           <div className="flex flex-col sm:flex-row gap-3 w-full xl:w-auto bg-[#0A1628]/80 p-3 rounded-2xl border border-cyan-500/20 shadow-lg items-center shrink-0">
              
-             {/* KELOMPOK DROPDOWN */}
              <div className="flex flex-col w-full sm:w-auto gap-1">
                <div className="flex items-center bg-[#050B14] border border-purple-500/30 rounded-xl px-2 h-11 w-full sm:w-44 focus-within:border-purple-400 transition-colors">
                   <select value={selectedClusterForBulk} onChange={e=>setSelectedClusterForBulk(e.target.value)} className="bg-transparent text-purple-100 text-xs font-bold uppercase outline-none w-full cursor-pointer appearance-none px-2 text-center sm:text-left">
@@ -1868,7 +2076,6 @@ const AdminStudents: React.FC = () => {
                </div>
              </div>
 
-             {/* SUPER UPGRADE: INPUT DEFAULT PASSWORD */}
              <div className="flex flex-col w-full sm:w-auto gap-1">
                <div className="flex items-center bg-[#050B14] border border-purple-500/30 rounded-xl px-3 h-11 w-full sm:w-32 focus-within:border-purple-400 transition-colors" title="Sandi otomatis untuk import">
                   <Key className="w-3.5 h-3.5 text-purple-400 mr-2 shrink-0" />
@@ -1886,7 +2093,6 @@ const AdminStudents: React.FC = () => {
              </button>
           </div>
 
-          {/* COMPREHENSIVE SYSTEMATIC GUIDE FOR EXCEL IMPORT */}
           <div className="bg-gradient-to-br from-[#050B14]/90 to-[#0A1628]/90 p-4 rounded-2xl border border-purple-500/40 flex flex-col sm:flex-row items-start sm:items-center gap-3 md:gap-4 shadow-[0_10px_30px_rgba(147,51,234,0.15)] relative overflow-hidden group w-full xl:flex-1">
              <div className="absolute top-0 right-0 w-32 h-32 bg-purple-600/10 rounded-bl-[100px] pointer-events-none transition-transform group-hover:scale-110"></div>
              <div className="bg-purple-950/60 p-2.5 rounded-xl border border-purple-500/50 shrink-0 relative z-10 shadow-[inset_0_0_15px_rgba(147,51,234,0.3)]">
@@ -2067,6 +2273,45 @@ const AdminStudents: React.FC = () => {
         </div>
       )}
 
+      {/* MODAL PESAN BROADCAST CUSTOM */}
+      {isCustomBroadcastOpen && (
+         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/90 backdrop-blur-xl p-4 animate-in fade-in zoom-in-95 duration-200">
+            <form onSubmit={handleCustomBroadcast} className="bg-[#0A1628] border border-cyan-500/40 p-6 md:p-8 rounded-3xl w-full max-w-2xl shadow-[0_0_50px_rgba(6,182,212,0.3)] relative radiology-bg">
+               <div className="flex justify-between items-center mb-6">
+                  <div>
+                     <h3 className="text-xl md:text-2xl font-black text-cyan-50 tracking-widest uppercase">Kirim Pengumuman WA</h3>
+                     <p className="text-cyan-500/80 text-xs font-mono uppercase mt-1">
+                        Pesan akan dikirim ke <span className="text-emerald-400 font-bold">{filtered.length} Mahasiswa</span> sesuai filter tabel.
+                     </p>
+                  </div>
+                  <button type="button" onClick={() => setIsCustomBroadcastOpen(false)} className="p-2 bg-rose-950/50 hover:bg-rose-500 hover:text-white border border-rose-500/30 rounded-xl transition-colors text-rose-400"><X className="w-5 h-5"/></button>
+               </div>
+               
+               <div className="bg-[#050B14] p-4 rounded-xl border border-cyan-500/30 mb-4">
+                  <p className="text-[10px] text-cyan-400 font-bold uppercase tracking-widest mb-1 flex items-center gap-2"><FileText className="w-4 h-4"/> Contoh Tampilan Di Bot WA:</p>
+                  <p className="text-xs text-cyan-100/70 font-mono italic">📢 *PENGUMUMAN DEPT. RKG* 📢<br/>Kepada Yth. Seluruh Mahasiswa *[Kelompok]*,<br/><br/>(Pesan Anda akan diletakkan di sini...)<br/><br/>---<br/>_Pesan ini di-generate otomatis oleh Sistem_</p>
+               </div>
+
+               <div className="space-y-1.5">
+                  <label className="text-[10px] text-cyan-500 font-bold uppercase tracking-widest ml-1">Isi Pengumuman</label>
+                  <textarea 
+                     required 
+                     rows={5}
+                     value={customMessage} 
+                     onChange={e=>setCustomMessage(e.target.value)} 
+                     className="w-full bg-[#050B14] border border-cyan-500/30 rounded-xl p-4 text-cyan-50 outline-none focus:border-cyan-400 font-mono text-sm resize-none custom-scrollbar" 
+                     placeholder="Ketik pengumuman atau info praktikum di sini..."
+                  />
+               </div>
+               
+               <button type="submit" disabled={isBroadcasting} className="w-full py-4 mt-6 bg-cyan-600 hover:bg-cyan-500 text-white font-black tracking-widest uppercase text-xs rounded-2xl transition-all duration-300 shadow-[0_10px_20px_rgba(6,182,212,0.4)] active:scale-95 border border-cyan-400/50 flex justify-center items-center gap-2 disabled:opacity-50">
+                  {isBroadcasting ? <Loader2 className="w-5 h-5 animate-spin" /> : <Send className="w-5 h-5" />}
+                  {isBroadcasting ? 'Memproses Antrean...' : 'Kirim Pengumuman Sekarang'}
+               </button>
+            </form>
+         </div>
+      )}
+
       {selectedStudentForKTM && (
          <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/95 backdrop-blur-xl p-4 animate-in fade-in zoom-in-95 duration-200">
           <style>{`
@@ -2235,7 +2480,7 @@ const AdminFormats: React.FC = () => {
 // ==========================================
 
 const AdminReports: React.FC = () => {
-  const { logs, sessions, clusters, deleteLog } = useAppContext();
+  const { logs, sessions, clusters, students, deleteLog, sendWA } = useAppContext();
   const [search, setSearch] = useState('');
   const [filterSession, setFilterSession] = useState('All');
   const [filterCluster, setFilterCluster] = useState('All');
@@ -2337,7 +2582,22 @@ const AdminReports: React.FC = () => {
                     <p className="text-[9px] text-cyan-600/70 mt-2.5 font-mono uppercase tracking-widest bg-[#050B14] inline-block px-2 py-1 rounded-md border border-cyan-900/50">{log.location.lat.toFixed(5)}, {log.location.lng.toFixed(5)}</p>
                   </td>
                   <td className="p-4 md:p-5 text-right">
-                    <button onClick={() => { if(confirm(`Yakin ingin menghapus riwayat kehadiran ${log.name}?`)) deleteLog(log.id); }} title="Hapus Riwayat" className="p-2.5 text-rose-500 hover:text-white hover:bg-rose-600 rounded-xl transition-all duration-300 border border-transparent hover:border-rose-500/50 hover:shadow-[0_0_15px_rgba(244,63,94,0.4)] active:scale-95">
+                    <button onClick={() => { 
+                       if(confirm(`Yakin ingin menghapus riwayat kehadiran ${log.name}?`)) {
+                          deleteLog(log.id); 
+                          
+                          // TRIGGER WA SKENARIO 12: PENGHAPUSAN ADMIN
+                          const st = students.find(s => s.nim === log.nim);
+                          if(st?.noHp) {
+                             sendWA(st.noHp, 12, {
+                                namaLengkap: log.name,
+                                kelompok: log.clusterName,
+                                shift: log.sessionName,
+                                tanggal: new Date(log.timestamp).toLocaleDateString('id-ID')
+                             });
+                          }
+                       }
+                    }} title="Hapus Riwayat" className="p-2.5 text-rose-500 hover:text-white hover:bg-rose-600 rounded-xl transition-all duration-300 border border-transparent hover:border-rose-500/50 hover:shadow-[0_0_15px_rgba(244,63,94,0.4)] active:scale-95">
                       <Trash2 className="w-5 h-5" />
                     </button>
                   </td>
@@ -2368,7 +2628,7 @@ const AdminReports: React.FC = () => {
 };
 
 const AdminGeofence: React.FC = () => {
-  const { geofence, updateGeofence } = useAppContext();
+  const { geofence, updateGeofence, students, sendWA } = useAppContext();
   const [lat, setLat] = useState(geofence.lat.toString());
   const [lng, setLng] = useState(geofence.lng.toString());
   const [radius, setRadius] = useState(geofence.radius.toString());
@@ -2378,6 +2638,19 @@ const AdminGeofence: React.FC = () => {
     e.preventDefault();
     updateGeofence({ lat: parseFloat(lat), lng: parseFloat(lng), radius: parseInt(radius), name: locationName });
     alert('Pengaturan lokasi absensi berhasil disimpan!');
+    
+    // TRIGGER WA SKENARIO 13: UPDATE GPS
+    if (confirm('Apakah Anda ingin mengirimkan notifikasi pembaruan titik lokasi ke seluruh mahasiswa?')) {
+        students.forEach(st => {
+           if(st.noHp) {
+              sendWA(st.noHp, 13, { 
+                 lokasiGeofence: locationName, 
+                 radius: radius.toString() 
+              });
+           }
+        });
+        alert('Notifikasi pembaruan lokasi sedang dikirim...');
+    }
   };
 
   const getMyLocation = () => {
@@ -2437,7 +2710,7 @@ const AdminGeofence: React.FC = () => {
 };
 
 const AdminSettings: React.FC = () => {
-  const { sessions, updateSession, addSession, deleteSession } = useAppContext();
+  const { sessions, updateSession, addSession, deleteSession, students, sendWA } = useAppContext();
   const [isAdding, setIsAdding] = useState(false);
   const [editingSessId, setEditingSessId] = useState<string | null>(null);
 
@@ -2447,6 +2720,20 @@ const AdminSettings: React.FC = () => {
     e.preventDefault(); 
     if (editingSessId) {
        updateSession(editingSessId, { ...formSess });
+       
+       // TRIGGER WA SKENARIO 8: PERUBAHAN JADWAL
+       if (confirm('Kirim notifikasi ke mahasiswa terkait adanya penyesuaian jadwal pada shift ini?')) {
+           students.forEach(st => {
+               if(st.noHp) {
+                   sendWA(st.noHp, 8, {
+                       namaLengkap: st.name,
+                       shift: formSess.name,
+                       jamSesi: formSess.startTime,
+                       jamTutup: formSess.endTime
+                   });
+               }
+           });
+       }
     } else {
        addSession({ ...formSess, isActive: true }); 
     }
@@ -2551,27 +2838,33 @@ const AdminSettings: React.FC = () => {
 const AdminManagement: React.FC = () => {
   const { admins, addAdmin, updateAdmin, deleteAdmin } = useAppContext();
   const [isAdding, setIsAdding] = useState(false);
-  const [newAd, setNewAd] = useState({ username: '', password: '' });
+  const [newAd, setNewAd] = useState({ username: '', password: '', noHp: '' });
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editUser, setEditUser] = useState('');
   const [editPass, setEditPass] = useState('');
+  const [editHp, setEditHp] = useState('');
 
   const handleAdd = (e: React.FormEvent) => {
     e.preventDefault();
     if(newAd.username.trim() && newAd.password.trim()) {
-       addAdmin(newAd);
+       let phone = newAd.noHp.trim();
+       if (phone.startsWith('0')) phone = '62' + phone.substring(1);
+       addAdmin({ ...newAd, noHp: phone });
        setIsAdding(false); 
-       setNewAd({ username: '', password: '' });
+       setNewAd({ username: '', password: '', noHp: '' });
     }
   };
 
   const handleUpdate = (e: React.FormEvent) => {
      e.preventDefault();
      if(editingId && editUser.trim()) {
-        updateAdmin(editingId, { username: editUser, password: editPass });
+        let phone = editHp.trim();
+        if (phone.startsWith('0')) phone = '62' + phone.substring(1);
+        updateAdmin(editingId, { username: editUser, password: editPass, noHp: phone });
         setEditingId(null); 
         setEditUser('');
         setEditPass('');
+        setEditHp('');
      }
   }
 
@@ -2590,14 +2883,18 @@ const AdminManagement: React.FC = () => {
       {isAdding && (
         <form onSubmit={handleAdd} className="bg-[#0A1628]/80 backdrop-blur-md border border-cyan-500/30 p-5 md:p-6 rounded-2xl flex flex-col md:flex-row gap-4 items-end shadow-xl animate-in slide-in-from-top-4">
           <div className="flex-1 space-y-1.5 w-full">
-            <label className="text-[10px] md:text-xs text-cyan-500 font-bold uppercase tracking-widest ml-1">Username Admin Baru</label>
+            <label className="text-[10px] md:text-xs text-cyan-500 font-bold uppercase tracking-widest ml-1">Username</label>
             <input required type="text" value={newAd.username} onChange={e=>setNewAd({...newAd, username: e.target.value})} className="w-full bg-[#050B14] border border-cyan-500/30 rounded-xl px-4 py-3.5 text-white outline-none focus:border-cyan-400 transition-colors text-sm font-mono" placeholder="Ketik Username..." />
           </div>
           <div className="flex-1 space-y-1.5 w-full">
-            <label className="text-[10px] md:text-xs text-cyan-500 font-bold uppercase tracking-widest ml-1">Password Baru</label>
+            <label className="text-[10px] md:text-xs text-cyan-500 font-bold uppercase tracking-widest ml-1">Password</label>
             <input required type="text" value={newAd.password} onChange={e=>setNewAd({...newAd, password: e.target.value})} className="w-full bg-[#050B14] border border-cyan-500/30 rounded-xl px-4 py-3.5 text-white outline-none focus:border-cyan-400 transition-colors text-sm font-mono" placeholder="Ketik Password..." />
           </div>
-          <button type="submit" className="w-full md:w-auto px-8 py-3.5 bg-cyan-600 hover:bg-cyan-500 text-white font-black uppercase tracking-widest text-xs rounded-xl transition-all duration-300 shadow-lg active:scale-95">Simpan Admin</button>
+          <div className="flex-1 space-y-1.5 w-full">
+            <label className="text-[10px] md:text-xs text-cyan-500 font-bold uppercase tracking-widest ml-1">No WA (Menerima Rekap)</label>
+            <input required type="text" value={newAd.noHp} onChange={e=>setNewAd({...newAd, noHp: e.target.value})} className="w-full bg-[#050B14] border border-cyan-500/30 rounded-xl px-4 py-3.5 text-white outline-none focus:border-cyan-400 transition-colors text-sm font-mono" placeholder="08xxx / 628xxx" />
+          </div>
+          <button type="submit" className="w-full md:w-auto px-8 py-3.5 bg-cyan-600 hover:bg-cyan-500 text-white font-black uppercase tracking-widest text-xs rounded-xl transition-all duration-300 shadow-lg active:scale-95">Simpan</button>
         </form>
       )}
 
@@ -2614,6 +2911,10 @@ const AdminManagement: React.FC = () => {
                          <Key className="w-5 h-5 text-cyan-600" />
                          <input required placeholder="Password" type="text" value={editPass} onChange={e=>setEditPass(e.target.value)} className="w-full bg-[#050B14] border border-cyan-500/50 rounded-lg px-3 py-2 text-white outline-none text-sm font-mono" />
                      </div>
+                     <div className="flex gap-2">
+                         <MessageSquare className="w-5 h-5 text-cyan-600" />
+                         <input required placeholder="No WA (08xxx)" type="text" value={editHp} onChange={e=>setEditHp(e.target.value)} className="w-full bg-[#050B14] border border-cyan-500/50 rounded-lg px-3 py-2 text-white outline-none text-sm font-mono" />
+                     </div>
                      <div className="flex gap-2 justify-end mt-2">
                          <button type="submit" className="bg-emerald-500/20 text-emerald-400 p-2 rounded-lg border border-emerald-500/30 flex-1 flex justify-center"><CheckCircle2 className="w-4 h-4"/></button>
                          <button type="button" onClick={()=>setEditingId(null)} className="bg-rose-500/20 text-rose-400 p-2 rounded-lg border border-rose-500/30 flex-1 flex justify-center"><X className="w-4 h-4"/></button>
@@ -2625,11 +2926,11 @@ const AdminManagement: React.FC = () => {
                         <div className="w-10 h-10 bg-cyan-950/50 rounded-xl flex items-center justify-center border border-cyan-500/30"><ShieldCheck className="w-5 h-5 text-cyan-400" /></div>
                         <div>
                            <h3 className="font-bold text-white text-base tracking-wide font-mono">{a.username}</h3>
-                           <p className="text-[10px] text-cyan-500 tracking-widest uppercase mt-0.5">Admin Dashboard</p>
+                           <p className="text-[10px] text-cyan-500 tracking-widest uppercase mt-0.5">{a.noHp || 'No WA Kosong'}</p>
                         </div>
                      </div>
                      <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                        <button onClick={()=>{setEditingId(a.id); setEditUser(a.username); setEditPass(a.password || '');}} className="flex-1 flex justify-center items-center gap-2 py-2 bg-blue-500/10 hover:bg-blue-500/20 text-blue-400 border border-blue-500/20 rounded-lg text-[10px] uppercase font-bold tracking-wider"><Edit className="w-3.5 h-3.5"/> Edit</button>
+                        <button onClick={()=>{setEditingId(a.id); setEditUser(a.username); setEditPass(a.password || ''); setEditHp(a.noHp || '');}} className="flex-1 flex justify-center items-center gap-2 py-2 bg-blue-500/10 hover:bg-blue-500/20 text-blue-400 border border-blue-500/20 rounded-lg text-[10px] uppercase font-bold tracking-wider"><Edit className="w-3.5 h-3.5"/> Edit</button>
                         <button onClick={()=>{if(confirm(`Yakin ingin menghapus Admin ${a.username}?`)) deleteAdmin(a.id);}} className="flex-1 flex justify-center items-center gap-2 py-2 bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/20 rounded-lg text-[10px] uppercase font-bold tracking-wider"><Trash2 className="w-3.5 h-3.5"/> Hapus</button>
                      </div>
                   </>
@@ -2652,7 +2953,6 @@ const AdminLayout: React.FC<{ children: React.ReactNode, activeRoute: string, se
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const handleLogout = () => { localStorage.removeItem('axaxyz_admin_auth'); setRoute('admin-login'); };
 
-  // UPGRADE: Tambahkan Menu "Manajemen Format"
   const navItems = [
     { id: 'admin-dashboard', icon: ActivitySquare, label: 'Dashboard Utama' },
     { id: 'admin-clusters', icon: Network, label: 'Data Kelompok' },
@@ -2761,7 +3061,6 @@ export default function App() {
       link.type = 'image/png';
       document.title = "Sistem Absensi Mahasiswa - DEPT. RKG";
 
-      // SEO Google Site Verification (Gold Standard GSC)
       let metaGsc = document.querySelector("meta[name='google-site-verification']");
       if (!metaGsc) {
         metaGsc = document.createElement('meta');
