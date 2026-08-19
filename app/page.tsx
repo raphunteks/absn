@@ -2119,7 +2119,7 @@ const AdminStudents: React.FC = () => {
         <div className="overflow-x-auto custom-scrollbar">
           <table className="w-full text-left border-collapse min-w-[800px]">
             <thead>
-              <tr className="bg-[#050B14]/80 border-b border-cyan-500/30 text-cyan-500 text-[10px] tracking-[0.2em] uppercase font-black">
+              <tr className="bg-[#050B14]/80 border-b border-cyan-500/20 text-cyan-500 text-[10px] tracking-[0.2em] uppercase font-black">
                 <th className="p-4 md:p-5 whitespace-nowrap">NIM</th>
                 <th className="p-4 md:p-5 whitespace-nowrap">Nama Mahasiswa</th>
                 <th className="p-4 md:p-5 whitespace-nowrap">Kelompok</th>
@@ -2200,7 +2200,7 @@ const AdminStudents: React.FC = () => {
                        {clusters.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
                     </select>
                  </div>
-                 <button type="submit" className="w-full py-4 mt-6 bg-cyan-600 hover:bg-cyan-500 text-white font-black tracking-widest uppercase text-xs rounded-2xl transition-all duration-300 shadow-[0_10px_20px_rgba(6,182,212,0.4)] active:scale-95 border border-cyan-400/50">
+                 <button type="submit" className="w-full py-4 mt-6 bg-cyan-600 hover:bg-cyan-500 text-white font-black tracking-widest uppercase text-xs rounded-xl transition-all duration-300 shadow-[0_10px_20px_rgba(6,182,212,0.4)] active:scale-95 border border-cyan-400/50">
                     Simpan Perubahan
                  </button>
               </div>
@@ -2408,83 +2408,6 @@ const AdminReports: React.FC = () => {
   );
 };
 
-// ==========================================
-// ADMIN FORMATS (CRUD REALTIME TEMPLATE WA)
-// ==========================================
-const AdminFormats: React.FC = () => {
-  const { formats, updateFormat } = useAppContext();
-  const [editingId, setEditingId] = useState<number | null>(null);
-  const [editTemplate, setEditTemplate] = useState('');
-
-  const handleEdit = (f: ChatFormat) => {
-    setEditingId(f.id);
-    setEditTemplate(f.template);
-  };
-
-  const handleSave = (id: number) => {
-    updateFormat(id, editTemplate);
-    setEditingId(null);
-  };
-
-  return (
-    <div className="space-y-6 animate-in fade-in duration-500 pb-10">
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-        <div>
-          <h2 className="text-2xl md:text-3xl font-black text-cyan-50 tracking-widest uppercase">Manajemen Format WA</h2>
-          <p className="text-cyan-500/70 text-xs md:text-sm font-mono uppercase mt-1">Ubah Template Pesan Bot WhatsApp secara Real-Time</p>
-        </div>
-      </div>
-
-      <div className="bg-[#0A1628]/80 backdrop-blur-xl border border-cyan-500/20 p-5 rounded-2xl shadow-lg mb-6">
-         <h3 className="text-xs font-black uppercase text-cyan-400 mb-3 tracking-widest flex items-center gap-2"><FileText className="w-4 h-4"/> Variabel Dinamis (Gunakan ini di dalam teks):</h3>
-         <div className="flex flex-wrap gap-2 text-[10px] font-mono font-bold">
-            {['[Nama Lengkap]', '[NIM]', '[Kelompok]', '[Shift]', '[Jam Sesi]', '[Jam Tutup]', '[Jam Absen]', '[Tanggal Mulai]', '[Tanggal Akhir]', '[Password]', '[Link]'].map(v => (
-              <span key={v} className="bg-[#050B14] text-purple-300 px-2 py-1 rounded border border-purple-500/30">{v}</span>
-            ))}
-         </div>
-      </div>
-
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
-        {formats.map((f) => (
-          <div key={f.id} className="bg-[#0A1628]/60 backdrop-blur-md border border-cyan-500/20 p-5 rounded-2xl flex flex-col gap-4 group hover:border-cyan-500/50 transition-all shadow-lg relative overflow-hidden">
-             <div className="flex justify-between items-start">
-               <div>
-                 <span className="bg-cyan-900 text-cyan-300 px-2 py-1 rounded-md text-[9px] font-black tracking-widest uppercase border border-cyan-500/40">ID Skenario: {f.id}</span>
-                 <h3 className="text-base font-black text-white uppercase mt-3 tracking-wider">{f.title}</h3>
-                 <p className="text-[10px] text-cyan-500/80 font-mono leading-relaxed mt-1">{f.description}</p>
-               </div>
-               {editingId !== f.id && (
-                 <button onClick={() => handleEdit(f)} className="p-2 bg-blue-500/10 hover:bg-blue-500/20 text-blue-400 border border-blue-500/20 rounded-lg transition-all active:scale-95">
-                   <Edit className="w-4 h-4" />
-                 </button>
-               )}
-             </div>
-
-             {editingId === f.id ? (
-               <div className="flex flex-col gap-3 mt-2">
-                 <textarea 
-                   className="w-full bg-[#050B14] border border-cyan-500/50 rounded-xl p-3 text-cyan-50 outline-none focus:border-cyan-400 font-mono text-xs leading-relaxed min-h-[150px] custom-scrollbar" 
-                   value={editTemplate} 
-                   onChange={(e) => setEditTemplate(e.target.value)} 
-                 />
-                 <div className="flex gap-2 justify-end">
-                   <button onClick={() => setEditingId(null)} className="px-4 py-2 bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/20 rounded-lg text-[10px] font-black uppercase tracking-wider transition-all">Batal</button>
-                   <button onClick={() => handleSave(f.id)} className="px-4 py-2 bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-400 border border-emerald-500/30 rounded-lg text-[10px] font-black uppercase tracking-wider transition-all flex items-center gap-2"><CheckCircle2 className="w-3.5 h-3.5"/> Simpan Ke Cloud</button>
-                 </div>
-               </div>
-             ) : (
-               <div className="bg-[#050B14] border border-cyan-900/50 p-4 rounded-xl mt-2 relative">
-                  <pre className="text-[10px] text-cyan-100 font-mono whitespace-pre-wrap leading-relaxed">{f.template}</pre>
-               </div>
-             )}
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-};
-
-
 const AdminGeofence: React.FC = () => {
   const { geofence, updateGeofence } = useAppContext();
   const [lat, setLat] = useState(geofence.lat.toString());
@@ -2666,6 +2589,82 @@ const AdminSettings: React.FC = () => {
   );
 };
 
+// ==========================================
+// ADMIN FORMATS (CRUD REALTIME TEMPLATE WA)
+// ==========================================
+const AdminFormats: React.FC = () => {
+  const { formats, updateFormat } = useAppContext();
+  const [editingId, setEditingId] = useState<number | null>(null);
+  const [editTemplate, setEditTemplate] = useState('');
+
+  const handleEdit = (f: ChatFormat) => {
+    setEditingId(f.id);
+    setEditTemplate(f.template);
+  };
+
+  const handleSave = (id: number) => {
+    updateFormat(id, editTemplate);
+    setEditingId(null);
+  };
+
+  return (
+    <div className="space-y-6 animate-in fade-in duration-500 pb-10">
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+        <div>
+          <h2 className="text-2xl md:text-3xl font-black text-cyan-50 tracking-widest uppercase">Manajemen Format WA</h2>
+          <p className="text-cyan-500/70 text-xs md:text-sm font-mono uppercase mt-1">Ubah Template Pesan Bot WhatsApp secara Real-Time</p>
+        </div>
+      </div>
+
+      <div className="bg-[#0A1628]/80 backdrop-blur-xl border border-cyan-500/20 p-5 rounded-2xl shadow-lg mb-6">
+         <h3 className="text-xs font-black uppercase text-cyan-400 mb-3 tracking-widest flex items-center gap-2"><FileText className="w-4 h-4"/> Variabel Dinamis (Gunakan ini di dalam teks):</h3>
+         <div className="flex flex-wrap gap-2 text-[10px] font-mono font-bold">
+            {['[Nama Lengkap]', '[NIM]', '[Kelompok]', '[Shift]', '[Jam Sesi]', '[Jam Tutup]', '[Jam Absen]', '[Tanggal Mulai]', '[Tanggal Akhir]', '[Password]', '[Link]'].map(v => (
+              <span key={v} className="bg-[#050B14] text-purple-300 px-2 py-1 rounded border border-purple-500/30">{v}</span>
+            ))}
+         </div>
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+        {formats.map((f) => (
+          <div key={f.id} className="bg-[#0A1628]/60 backdrop-blur-md border border-cyan-500/20 p-5 rounded-2xl flex flex-col gap-4 group hover:border-cyan-500/50 transition-all shadow-lg relative overflow-hidden">
+             <div className="flex justify-between items-start">
+                <div>
+                  <span className="bg-cyan-900 text-cyan-300 px-2 py-1 rounded-md text-[9px] font-black tracking-widest uppercase border border-cyan-500/40">ID Skenario: {f.id}</span>
+                  <h3 className="text-base font-black text-white uppercase mt-3 tracking-wider">{f.title}</h3>
+                  <p className="text-[10px] text-cyan-500/80 font-mono leading-relaxed mt-1">{f.description}</p>
+                </div>
+                {editingId !== f.id && (
+                  <button onClick={() => handleEdit(f)} className="p-2 bg-blue-500/10 hover:bg-blue-500/20 text-blue-400 border border-blue-500/20 rounded-lg transition-all active:scale-95">
+                    <Edit className="w-4 h-4" />
+                  </button>
+                )}
+             </div>
+
+             {editingId === f.id ? (
+                <div className="flex flex-col gap-3 mt-2">
+                  <textarea 
+                    className="w-full bg-[#050B14] border border-cyan-500/50 rounded-xl p-3 text-cyan-50 outline-none focus:border-cyan-400 font-mono text-xs leading-relaxed min-h-[150px] custom-scrollbar" 
+                    value={editTemplate} 
+                    onChange={(e) => setEditTemplate(e.target.value)} 
+                  />
+                  <div className="flex gap-2 justify-end">
+                    <button onClick={() => setEditingId(null)} className="px-4 py-2 bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/20 rounded-lg text-[10px] font-black uppercase tracking-wider transition-all">Batal</button>
+                    <button onClick={() => handleSave(f.id)} className="px-4 py-2 bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-400 border border-emerald-500/30 rounded-lg text-[10px] font-black uppercase tracking-wider transition-all flex items-center gap-2"><CheckCircle2 className="w-3.5 h-3.5"/> Simpan Ke Cloud</button>
+                  </div>
+                </div>
+             ) : (
+                <div className="bg-[#050B14] border border-cyan-900/50 p-4 rounded-xl mt-2 relative">
+                   <pre className="text-[10px] text-cyan-100 font-mono whitespace-pre-wrap leading-relaxed">{f.template}</pre>
+                </div>
+             )}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+};
+
 const AdminManagement: React.FC = () => {
   const { admins, addAdmin, updateAdmin, deleteAdmin } = useAppContext();
   const [isAdding, setIsAdding] = useState(false);
@@ -2777,6 +2776,7 @@ const AdminLayout: React.FC<{ children: React.ReactNode, activeRoute: string, se
     { id: 'admin-reports', icon: FileText, label: 'Riwayat Absensi' },
     { id: 'admin-geofence', icon: Map, label: 'Pengaturan Lokasi' },
     { id: 'admin-settings', icon: Calendar, label: 'Jadwal Absen' },
+    { id: 'admin-formats', icon: MessageSquare, label: 'Manajemen Format' },
     { id: 'admin-management', icon: ShieldCheck, label: 'Kelola Admin' },
   ];
 
@@ -2904,13 +2904,14 @@ export default function App() {
       {route === 'student' && <AttendanceWizard />}
       {route === 'admin-login' && <AdminLogin onLogin={() => setRoute('admin-dashboard')} />}
       
-      {['admin-dashboard', 'admin-students', 'admin-clusters', 'admin-settings', 'admin-reports', 'admin-geofence', 'admin-management'].includes(route) && (
+      {['admin-dashboard', 'admin-students', 'admin-clusters', 'admin-settings', 'admin-formats', 'admin-reports', 'admin-geofence', 'admin-management'].includes(route) && (
         <AdminLayout activeRoute={route} setRoute={setRoute}>
           {route === 'admin-dashboard' && <AdminDashboardHome />}
           {route === 'admin-students' && <AdminStudents />}
           {route === 'admin-clusters' && <AdminClusters />}
           {route === 'admin-geofence' && <AdminGeofence />}
           {route === 'admin-settings' && <AdminSettings />}
+          {route === 'admin-formats' && <AdminFormats />}
           {route === 'admin-reports' && <AdminReports />}
           {route === 'admin-management' && <AdminManagement />}
         </AdminLayout>
