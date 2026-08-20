@@ -3349,8 +3349,9 @@ const AdminLayout: React.FC<{ children: React.ReactNode, activeRoute: string, se
         
         <nav className="flex-1 p-4 md:p-5 space-y-3 overflow-y-auto custom-scrollbar">
           {navItems.map(item => (
-            <button key={item.id} onClick={() => { setRoute(item.id); setIsMobileMenuOpen(false); }} className={cn("w-full flex items-center gap-4 px-5 py-4 rounded-xl transition-all duration-300 text-xs font-black tracking-widest uppercase active:scale-[0.98] border", activeRoute === item.id ? "bg-cyan-950/60 text-cyan-300 border-cyan-500/50 shadow-[inset_0_0_20px_rgba(6,182,212,0.2)] shadow-[0_0_15px_rgba(6,182,212,0.2)]" : "text-cyan-600/70 hover:bg-[#050B14] hover:text-cyan-400 border-transparent hover:border-cyan-900/50")}>
-              <item.icon className={cn("w-5 h-5 transition-transform duration-300", activeRoute === item.id && "scale-110 drop-shadow-[0_0_8px_rgba(6,182,212,0.8)]")} /> {item.label}
+            <button key={item.id} onClick={() => { setRoute(item.id); setIsMobileMenuOpen(false); }} className={cn("w-full flex items-center text-left gap-4 px-5 py-4 rounded-xl transition-all duration-300 text-xs font-black tracking-widest uppercase active:scale-[0.98] border", activeRoute === item.id ? "bg-cyan-950/60 text-cyan-300 border-cyan-500/50 shadow-[inset_0_0_20px_rgba(6,182,212,0.2)] shadow-[0_0_15px_rgba(6,182,212,0.2)]" : "text-cyan-600/70 hover:bg-[#050B14] hover:text-cyan-400 border-transparent hover:border-cyan-900/50")}>
+              <item.icon className={cn("w-5 h-5 shrink-0 transition-transform duration-300", activeRoute === item.id && "scale-110 drop-shadow-[0_0_8px_rgba(6,182,212,0.8)]")} /> 
+              <span className="whitespace-nowrap">{item.label}</span>
             </button>
           ))}
         </nav>
