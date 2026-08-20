@@ -2,6 +2,12 @@ import { NextResponse, NextRequest } from 'next/server';
 import calendar2026Raw from './calender2026.json';
 
 // =====================================================================
+// MATIKAN CACHE NEXT.JS AGAR BOT PULL SELALU MENDAPATKAN DATA REALTIME
+// =====================================================================
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
+
+// =====================================================================
 // REDIS CLIENT UNTUK CLOUD SYNC TEMPLATE WA & QUEUE BOT
 // =====================================================================
 class Redis {
@@ -76,7 +82,7 @@ const safeParse = (data: any) => {
 };
 
 // =====================================================================
-// FALLBACK SEEDING TEMPLATES (TERMASUK SKENARIO 15, 16, & 19 BARU)
+// FALLBACK SEEDING TEMPLATES (TERMASUK SKENARIO BARU)
 // =====================================================================
 const defaultFormats = [
   { id: 1, title: "Pembukaan Sesi", description: "Dikirim tepat saat jam shift dimulai.", template: "🔔 *NOTIFIKASI ABSENSI DIBUKA* 🔔\n\nHalo *[Nama Lengkap]*, sesi absensi untuk *[Shift]* Dept. RKG hari ini telah resmi *DIBUKA*.\n\n📋 *Detail Sesi Absensi:*\n• Kelompok: *[Kelompok]*\n• Jam Tepat Waktu: *[Jam Sesi]* WITA\n• Batas Tutup Sesi: *[Jam Tutup]* WITA\n\nYuk, segera lakukan validasi kehadiran Anda sekarang melalui portal resmi kami:\n[Link]\n\nSelamat bertugas! 🏥" },
@@ -300,7 +306,7 @@ export async function POST(request: Request) {
       .replace(/\[Total Alpha\]/g, String(data.totalAlpha || '0'))
       .replace(/\[Link\]/g, String(link));
 
-    // Variabel Gabungan Khusus [Status Kehadiran]
+    // Variabel Gabungan Khusus [Status Kehadiran] dengan Fallback
     if (data.statusAkhir) {
       let strStatus = "";
       if (data.statusAkhir === "Hadir") strStatus = `🟢 *TEPAT WAKTU / HADIR* (Terekam pada: *${data.jamAbsen}* WITA)`;
@@ -308,6 +314,9 @@ export async function POST(request: Request) {
       else strStatus = `🔴 *TIDAK HADIR (ALPHA)* (Tidak ada data rekam jejak masuk)`;
 
       messageText = messageText.replace(/\[Status Kehadiran\]/g, strStatus);
+    } else if (messageText.includes('[Status Kehadiran]')) {
+      // Fallback jika frontend lupa mengirim status
+      messageText = messageText.replace(/\[Status Kehadiran\]/g, `⚪ *STATUS BELUM DIKETAHUI*`);
     }
 
     // PUSH KE MESSAGE QUEUE (REDIS)
