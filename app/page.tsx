@@ -253,7 +253,7 @@ const initialDefaultFormatsWA: FormatWA[] = [
 const AppContext = createContext<AppContextType | null>(null);
 
 // ==========================================
-// APP PROVIDER (CRON JOB DIHAPUS, PINDAH KE BACKEND BOT)
+// APP PROVIDER 
 // ==========================================
 const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [isAppLoading, setIsAppLoading] = useState(true);
@@ -288,6 +288,7 @@ const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
         hd = await CloudStore.get('axaxyz_holidays');
       }
 
+      // Fallback ke LocalStorage jika Cloud Kosong
       if (!c) c = JSON.parse(localStorage.getItem('axaxyz_clusters') || 'null');
       if (!s) s = JSON.parse(localStorage.getItem('axaxyz_sessions') || 'null');
       if (!l) l = JSON.parse(localStorage.getItem('axaxyz_logs') || 'null');
@@ -297,19 +298,38 @@ const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
       if (!fw) fw = JSON.parse(localStorage.getItem('axaxyz_formats') || 'null');
       if (!hd) hd = JSON.parse(localStorage.getItem('axaxyz_holidays') || 'null');
 
-      setClusters(c || defaultClusters);
-      setSessions(s || defaultSessions);
-      setLogs(l || []);
-      setStudents(st || []);
-      setGeofence(gf || defaultGeofence);
-      setAdmins(ad || []);
-      setFormats(fw && fw.length > 0 ? fw : initialDefaultFormatsWA);
+      // Tentukan Data Final yang akan dirender (Gunakan Default jika masih kosong)
+      const finalClusters = c || defaultClusters;
+      const finalSessions = s || defaultSessions;
+      const finalLogs = l || [];
+      const finalStudents = st || [];
+      const finalGeofence = gf || defaultGeofence;
+      const finalAdmins = ad || [];
+      const finalFormats = fw && fw.length > 0 ? fw : initialDefaultFormatsWA;
+      const finalHolidays = hd || [{ id: 'h1', date: '2026-08-17', name: 'HUT Kemerdekaan RI' }];
+
+      setClusters(finalClusters);
+      setSessions(finalSessions);
+      setLogs(finalLogs);
+      setStudents(finalStudents);
+      setGeofence(finalGeofence);
+      setAdmins(finalAdmins);
+      setFormats(finalFormats);
+      setHolidays(finalHolidays);
       
-      // Default Hari Libur
-      const defaultHolidaysList: Holiday[] = hd || [
-         { id: 'h1', date: '2026-08-17', name: 'HUT Kemerdekaan RI' }
-      ];
-      setHolidays(defaultHolidaysList);
+      // ✨ UPGRADE: AUTO-SEED CLOUD DATA (Solusi Ilusi Data Default)
+      // Jika data default belum ada di Cloud, otomatis simpan agar Bot WA bisa langsung membacanya
+      if (cloudAvailable) {
+         try {
+            if (!c) await CloudStore.set('axaxyz_clusters', JSON.stringify(finalClusters));
+            if (!s) await CloudStore.set('axaxyz_sessions', JSON.stringify(finalSessions));
+            if (!gf) await CloudStore.set('axaxyz_geofence', JSON.stringify(finalGeofence));
+            if (!fw) await CloudStore.set('axaxyz_formats', JSON.stringify(finalFormats));
+            if (!hd) await CloudStore.set('axaxyz_holidays', JSON.stringify(finalHolidays));
+         } catch (e) {
+            console.error("Gagal auto-seed ke cloud", e);
+         }
+      }
       
       setIsAppLoading(false);
     };
@@ -645,7 +665,7 @@ const StudentDashboard: React.FC<{ onStartAbsen: () => void, linkedNim: string |
            </div>
         </div>
         
-        <div className="bg-[#0A1628]/80 backdrop-blur-xl border border-cyan-500/20 p-5 rounded-[1.5rem] shadow-lg relative overflow-hidden group hover:border-emerald-400/50 transition-all flex flex-col justify-between">
+        <div className="bg-[#0A1628]/80 backdrop-blur-xl border border-emerald-500/20 p-5 rounded-[1.5rem] shadow-lg relative overflow-hidden group hover:border-emerald-400/50 transition-all flex flex-col justify-between">
            <div className="flex items-center gap-3 mb-4">
               <div className="w-8 h-8 md:w-10 md:h-10 rounded-full bg-emerald-500/10 flex items-center justify-center text-emerald-400 shrink-0"><CheckCircle2 className="w-4 h-4 md:w-5 md:h-5"/></div>
               <span className="text-[10px] md:text-xs font-black uppercase tracking-widest text-emerald-500 leading-tight">Tepat Waktu</span>
@@ -1738,6 +1758,7 @@ const AdminClusters: React.FC = () => {
   );
 };
 // --- AKHIR BAGIAN 1 ---
+
 const AdminStudents: React.FC = () => {
   const { students, addStudent, updateStudent, bulkAddStudents, deleteStudent, clusters, sendWA } = useAppContext();
   const [isAdding, setIsAdding] = useState(false);
@@ -2787,7 +2808,7 @@ const AdminCalendar: React.FC = () => {
             <div>
                <h3 className="text-sm font-black text-rose-200 tracking-widest uppercase mb-1">Akhir Pekan (Sabtu & Minggu) Otomatis Libur</h3>
                <p className="text-xs text-rose-200/70 font-mono leading-relaxed">
-                  Sistem Bot WA Cron Job telah dikonfigurasi untuk <strong className="text-rose-400">TIDAK mengirimkan tagihan absensi / buka shift</strong> pada setiap hari Sabtu & Minggu secara otomatis. Anda hanya perlu menambahkan hari libur di luar akhir pekan (misal: Tanggal Merah) ke dalam daftar di bawah ini.
+                 Sistem Bot WA Cron Job telah dikonfigurasi untuk <strong className="text-rose-400">TIDAK mengirimkan tagihan absensi / buka shift</strong> pada setiap hari Sabtu & Minggu secara otomatis. Anda hanya perlu menambahkan hari libur di luar akhir pekan (misal: Tanggal Merah) ke dalam daftar di bawah ini.
                </p>
             </div>
          </div>
