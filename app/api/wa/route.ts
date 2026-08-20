@@ -85,7 +85,7 @@ const defaultFormats = [
   { id: 18, title: "Pesan Broadcast", description: "Pesan custom (pengumuman) dari Admin.", template: "📢 *PENGUMUMAN DEPT. RKG* 📢\nKepada Yth. Seluruh Mahasiswa *[Kelompok]*,\n\n*[Pesan Custom]*\n\n---\n_Pesan ini di-generate otomatis oleh Sistem Admin. Harap segera dilaksanakan._" },
   { id: 19, title: "Reset Password via Bot WA", description: "Balasan saat MHS ketik command !reset di Bot WA.", template: "♻️ *RESET KATA SANDI BERHASIL* ♻️\n\nHalo *[Nama Lengkap]*,\nPermintaan reset kata sandi (password) Anda telah berhasil diproses secara real-time oleh sistem.\n\nBerikut adalah kredensial terbaru Anda:\n👤 NIM: *[NIM]*\n🔑 Sandi Baru: *[Password]*\n\nSilakan gunakan sandi baru ini (4 digit angka) untuk login kembali ke portal absensi:\n[Link]\n\nSegera simpan dan *jangan bagikan sandi ini kepada siapa pun!*" },
   { id: 20, title: "Rekap Admin", description: "Rangkuman total Hadir/Alpha harian untuk Admin.", template: "📈 *REKAPITULASI ABSENSI HARIAN DEPT. RKG* 📈\n\nHalo Admin, berikut adalah laporan singkat kehadiran mahasiswa untuk hari ini (*[Tanggal]*):\n\n👥 *Total Mahasiswa Aktif:* [Total Mhs] Entitas\n✅ *Hadir Tepat Waktu:* [Total Hadir] Sesi\n⚠️ *Terlambat:* [Total Terlambat] Sesi\n❌ *Tidak Hadir (Alpha):* [Total Alpha] Sesi\n\nSeluruh data telah diamankan ke Cloud. Untuk melihat rincian nama mahasiswa atau mengunduh laporan Excel, silakan akses Dashboard Utama: [Link]" },
-  { id: 25, title: "Onboarding Baru", description: "Penyebaran password saat input MHS baru (Excel/Manual).", template: "🎉 *SELAMAT DATANG DI DEPT. RKG!* 🎉\n\nHalo *[Nama Lengkap]*, selamat bergabung! \nData Anda telah berhasil didaftarkan oleh Administrator ke dalam Sistem Absensi Digital Terpadu Dept. RKG.\n\nBerikut adalah rincian informasi dan kredensial akses Anda:\n👤 *Nama:* [Nama Lengkap]\n🆔 *NIM:* [NIM]\n👥 *Kelompok:* [Kelompok]\n🗓️ *Masa Stase:* [Tanggal Mulai] - [Tanggal Akhir]\n🔑 *Kata Sandi:* [Password]\n\nAgar Anda dapat mulai melakukan absensi, ikuti langkah wajib berikut:\n1. Buka portal resmi absensi di: [Link]\n2. Klik tombol *\*Mulai Absensi\"* di layar utama.\n3. Masukkan *NIM* dan *Kata Sandi* Anda dengan benar.\n4. Pastikan Anda *Mengizinkan (Allow)* akses Kamera dan Lokasi (GPS) pada browser HP Anda.\n5. Lakukan absensi perdana Anda sesuai jadwal yang ditentukan.\n\n⚠️ *PENTING:* Perangkat/HP pertama yang Anda gunakan untuk login akan langsung *DIKUNCI (Terikat)* dengan akun Anda. Jangan pernah menitipkan akun ke HP teman! \n\nJaga kerahasiaan kata sandi Anda. Selamat bertugas dan sukses untuk stasenya! 🏥✨" }
+  { id: 25, title: "Onboarding Baru", description: "Penyebaran password saat input MHS baru (Excel/Manual).", template: "🎉 *SELAMAT DATANG DI DEPT. RKG!* 🎉\n\nHalo *[Nama Lengkap]*, selamat bergabung! \nData Anda telah berhasil didaftarkan oleh Administrator ke dalam Sistem Absensi Digital Terpadu Dept. RKG.\n\nBerikut adalah rincian informasi dan kredensial akses Anda:\n👤 *Nama:* [Nama Lengkap]\n🆔 *NIM:* [NIM]\n👥 *Kelompok:* [Kelompok]\n🗓️ *Masa Stase:* [Tanggal Mulai] - [Tanggal Akhir]\n🔑 *Kata Sandi:* [Password]\n\nAgar Anda dapat mulai melakukan absensi, ikuti langkah wajib berikut:\n1. Buka portal resmi absensi di: [Link]\n2. Klik tombol \"Mulai Absensi\" di layar utama.\n3. Masukkan *NIM* dan *Kata Sandi* Anda dengan benar.\n4. Pastikan Anda *Mengizinkan (Allow)* akses Kamera dan Lokasi (GPS) pada browser HP Anda.\n5. Lakukan absensi perdana Anda sesuai jadwal yang ditentukan.\n\n⚠️ *PENTING:* Perangkat/HP pertama yang Anda gunakan untuk login akan langsung *DIKUNCI (Terikat)* dengan akun Anda. Jangan pernah menitipkan akun ke HP teman! \n\nJaga kerahasiaan kata sandi Anda. Selamat bertugas dan sukses untuk stasenya! 🏥✨" }
 ];
 
 // =====================================================================
@@ -193,29 +193,53 @@ export async function POST(request: Request) {
     // SMART LOGIC: COMMAND DARI BOT WA UNTUK LOGOUT & RESET PASS
     // ============================================================
     if (scenario === 16 || scenario === 19) {
-        let students = await redis.get('axaxyz_students') || [];
-        // Pastikan format input bot wa (08xxx / 628xxx) ter-match ke database
-        let inputNoHp = no_hp.toString();
-        const studentIndex = students.findIndex((s: any) => s.noHp === inputNoHp || s.noHp === inputNoHp.replace(/^62/, '0') || s.noHp === inputNoHp.replace(/^0/, '62'));
-        
-        if (studentIndex === -1) {
-            return NextResponse.json({ success: false, error: "Nomor WA tidak terdaftar di sistem database." }, { status: 404 });
+        let rawStudents = await redis.get('axaxyz_students');
+        let students: any[] = [];
+
+        // 🛡️ SUPER FIX: Mencegah error 'findIndex is not a function' akibat Double Stringify dari Redis
+        if (typeof rawStudents === 'string') {
+            try { rawStudents = JSON.parse(rawStudents); } catch(e){}
         }
-        
+        if (typeof rawStudents === 'string') { // Antisipasi tersarang 2 lapis string
+            try { rawStudents = JSON.parse(rawStudents); } catch(e){}
+        }
+        if (Array.isArray(rawStudents)) {
+            students = rawStudents;
+        }
+
+        // Normalisasi nomor HP pencarian (Input dari bot) ke format 62...
+        let inputNoHp = String(no_hp).replace(/[^0-9]/g, '');
+        if (inputNoHp.startsWith('0')) inputNoHp = '62' + inputNoHp.substring(1);
+
+        // Cari dengan memastikan nomor database juga dinormalisasi ke format 62...
+        const studentIndex = students.findIndex((s: any) => {
+            if (!s.noHp) return false;
+            let sHp = String(s.noHp).replace(/[^0-9]/g, '');
+            if (sHp.startsWith('0')) sHp = '62' + sHp.substring(1);
+            return sHp === inputNoHp;
+        });
+
+        if (studentIndex === -1) {
+            return NextResponse.json({ 
+                success: false, 
+                error: `Nomor WhatsApp Anda (${inputNoHp}) tidak ditemukan di Database. Hubungi Admin Dept. RKG untuk mendaftarkan nomor Anda.` 
+            }, { status: 404 });
+        }
+
         const st = students[studentIndex];
-        
+
         if (scenario === 16) {
             // Process Logout Device Skenario 16
             if (!st.deviceId) {
-                return NextResponse.json({ success: false, error: "Perangkat Anda sudah dalam keadaan tidak terikat (logout)." }, { status: 400 });
+                return NextResponse.json({ success: false, error: "Akun Anda saat ini TIDAK terhubung ke HP/Perangkat mana pun (Sudah Logout)." }, { status: 400 });
             }
             students[studentIndex].deviceId = null;
             data.namaLengkap = st.name;
             data.link = data.link || "https://absensi.maksaarsyad.xyz/";
         }
-        
+
         if (scenario === 19) {
-            // Process Reset Password Skenario 19 (4 digit random number)
+            // Process Reset Password Skenario 19 (4 digit random number 1000-9999)
             const newPass = Math.floor(1000 + Math.random() * 9000).toString();
             students[studentIndex].password = newPass;
             data.namaLengkap = st.name;
@@ -272,7 +296,7 @@ export async function POST(request: Request) {
       if (data.statusAkhir === "Hadir") strStatus = `🟢 *TEPAT WAKTU / HADIR* (Terekam pada: *${data.jamAbsen}* WITA)`;
       else if (data.statusAkhir === "Terlambat") strStatus = `🟡 *TERLAMBAT* (Terekam pada: *${data.jamAbsen}* WITA)`;
       else strStatus = `🔴 *TIDAK HADIR (ALPHA)* (Tidak ada data rekam jejak masuk)`;
-      
+
       messageText = messageText.replace(/\[Status Kehadiran\]/g, strStatus);
     }
 
