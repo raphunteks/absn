@@ -7,7 +7,7 @@ import {
   RefreshCcw, ChevronRight, Fingerprint, Map, Activity, Key, Upload, Database, Navigation,
   Printer, X, CreditCard, Eye, EyeOff, Lock, ShieldCheck, Loader2, User, Cloud, CloudOff,
   ServerCrash, Maximize, Menu, Network, Edit, Calendar, UserX, ScanFace, ActivitySquare, MessageSquare, Megaphone, Send,
-  ChevronLeft, ChevronRight as ChevronRightIcon, MessageCircle
+  ChevronLeft, ChevronRight as ChevronRightIcon
 } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, AreaChart, Area } from 'recharts';
 
@@ -226,7 +226,7 @@ const defaultSessions: Session[] = [
 const defaultGeofence: Geofence = { lat: -6.200000, lng: 106.816666, radius: 500, name: 'Gedung Kampus Pusat' };
 const defaultClusters: Cluster[] = [{ id: 'c1', name: 'Angkatan 2024' }, { id: 'c2', name: 'Angkatan 2025' }];
 
-// UPDATE: FULL TEMPLATES (TERMASUK SKENARIO 15, 16, 18, 19)
+// UPDATE: FULL TEMPLATES TERMASUK SKENARIO 15, 16, & 19
 const initialDefaultFormatsWA: FormatWA[] = [
   { id: 1, title: "Pembukaan Sesi", description: "Dikirim tepat saat jam shift dimulai.", template: "🔔 *NOTIFIKASI ABSENSI DIBUKA* 🔔\n\nHalo *[Nama Lengkap]*, sesi absensi untuk *[Shift]* Dept. RKG hari ini telah resmi *DIBUKA*.\n\n📋 *Detail Sesi Absensi:*\n• Kelompok: *[Kelompok]*\n• Jam Tepat Waktu: *[Jam Sesi]* WITA\n• Batas Tutup Sesi: *[Jam Tutup]* WITA\n\nYuk, segera lakukan validasi kehadiran Anda sekarang melalui portal resmi kami:\n[Link]\n\nSelamat bertugas! 🏥" },
   { id: 2, title: "Pengingat Sisa Waktu", description: "Hanya untuk MHS yang belum absen (Sisa toleransi).", template: "⚠️ *PENGINGAT TERAKHIR ABSENSI* ⚠️\n\nPanggilan kepada *[Nama Lengkap]*! Sistem mendeteksi Anda *BELUM* melakukan absensi untuk *[Shift]* hari ini.\n\nWaktu absensi Anda hampir habis. Sesi ini akan ditutup secara permanen pada pukul *[Jam Tutup]* WITA. Jika Anda tidak melakukan absensi setelah jam tersebut, sistem akan otomatis mencatat status Anda sebagai *TIDAK HADIR (ALPHA)*.\n\nMohon segera menuju area batas kampus dan selesaikan absen Anda di sini:\n[Link]" },
@@ -254,7 +254,7 @@ const initialDefaultFormatsWA: FormatWA[] = [
 const AppContext = createContext<AppContextType | null>(null);
 
 // ==========================================
-// APP PROVIDER (DENGAN ADMIN CRON & SMART MERGE)
+// APP PROVIDER (CRON JOB TELAH DIHAPUS, DIPINDAHKAN KE BACKEND Node.js)
 // ==========================================
 const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [isAppLoading, setIsAppLoading] = useState(true);
@@ -295,32 +295,8 @@ const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
       if (!st) st = JSON.parse(localStorage.getItem('axaxyz_students') || 'null');
       if (!gf) gf = JSON.parse(localStorage.getItem('axaxyz_geofence') || 'null');
       if (!ad) ad = JSON.parse(localStorage.getItem('axaxyz_admins') || 'null');
-      if (!hd) hd = JSON.parse(localStorage.getItem('axaxyz_holidays') || 'null');
-
-      // -----------------------------------------------------
-      // SMART MERGE LOGIC UNTUK FORMATS (MENYINKRONKAN TEMPLATE BARU)
-      // -----------------------------------------------------
       if (!fw) fw = JSON.parse(localStorage.getItem('axaxyz_formats') || 'null');
-      let isFwUpdated = false;
-      
-      if (!fw || !Array.isArray(fw)) {
-         fw = [...initialDefaultFormatsWA];
-         isFwUpdated = true;
-      } else {
-         initialDefaultFormatsWA.forEach(defFmt => {
-            if (!fw.find((f: any) => f.id === defFmt.id)) {
-               fw.push(defFmt);
-               isFwUpdated = true;
-            }
-         });
-      }
-      
-      if (isFwUpdated) {
-         fw.sort((a: any, b: any) => a.id - b.id);
-         if (cloudAvailable) await CloudStore.set('axaxyz_formats', fw);
-         localStorage.setItem('axaxyz_formats', JSON.stringify(fw));
-      }
-      // -----------------------------------------------------
+      if (!hd) hd = JSON.parse(localStorage.getItem('axaxyz_holidays') || 'null');
 
       setClusters(c || defaultClusters);
       setSessions(s || defaultSessions);
@@ -328,8 +304,9 @@ const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
       setStudents(st || []);
       setGeofence(gf || defaultGeofence);
       setAdmins(ad || []);
-      setFormats(fw);
+      setFormats(fw && fw.length > 0 ? fw : initialDefaultFormatsWA);
       
+      // Default Hari Libur
       const defaultHolidaysList: Holiday[] = hd || [
          { id: 'h1', date: '2026-08-17', name: 'HUT Kemerdekaan RI' }
       ];
@@ -412,6 +389,9 @@ const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const addHoliday = (holidayData: Omit<Holiday, 'id'>) => saveHolidays([...holidays, { ...holidayData, id: Math.random().toString(36).substr(2, 9) }]);
   const deleteHoliday = (id: string) => saveHolidays(holidays.filter(h => h.id !== id));
 
+  // ==========================================
+  // FUNGSI GLOBAL TRIGGER WHATSAPP API
+  // ==========================================
   const sendWA = async (noHp: string, scenarioId: number, payloadData: any) => {
       if(!noHp) return;
       try {
@@ -446,215 +426,6 @@ const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
      alert('Anda telah berhasil keluar dari sistem absensi di perangkat ini.');
      window.location.reload();
   };
-
-  // ==========================================
-  // PERBAIKAN CRON JOB ADMIN AGAR ROBUST 
-  // (ANTI THROTTLING BROWSER & ANTI SPAM API)
-  // ==========================================
-  useEffect(() => {
-     if (typeof window === 'undefined') return;
-     const isAdmin = localStorage.getItem('axaxyz_admin_auth') === 'true';
-     if (!isAdmin || !isCloudSync) return; 
-
-     const cronInterval = setInterval(async () => {
-         const now = new Date();
-         const dayOfWeek = now.getDay(); 
-         const todayStr = getLocalYYYYMMDD(now);
-
-         const isWeekend = (dayOfWeek === 0 || dayOfWeek === 6);
-         const isCustomHoliday = holidays.some(h => h.date === todayStr);
-
-         if (isWeekend || isCustomHoliday) {
-             return; 
-         }
-
-         const currentMins = now.getHours() * 60 + now.getMinutes();
-
-         for (const sess of sessions) {
-             if (!sess.isActive) continue;
-
-             const [startH, startM] = sess.startTime.split(':').map(Number);
-             const [endH, endM] = sess.endTime.split(':').map(Number);
-             const startTotal = startH * 60 + startM;
-             const endTotal = endH * 60 + endM;
-             const closeTotal = endTotal + sess.toleranceMinutes;
-
-             // SKENARIO 1: PEMBUKAAN SESI (MENGGUNAKAN >= AGAR TIDAK TERLEWAT JIKA TAB SLEEP)
-             if (currentMins >= startTotal) {
-                 const flagKey = `wa_scen1_${todayStr}_${sess.id}`;
-                 const isSent = await CloudStore.get(flagKey);
-                 if (!isSent) {
-                     await CloudStore.set(flagKey, true); 
-                     
-                     for (const st of students) {
-                         const c = clusters.find(cl=>cl.id === st.clusterId);
-                         if (st.noHp) {
-                             sendWA(st.noHp, 1, { 
-                                 namaLengkap: st.name, 
-                                 kelompok: c?.name || 'Tanpa Kelompok', 
-                                 shift: sess.name, 
-                                 jamSesi: sess.startTime, 
-                                 jamTutup: sess.endTime 
-                             });
-                             // Anti-Spam API
-                             await new Promise(resolve => setTimeout(resolve, 500)); 
-                         }
-                     }
-                 }
-             }
-
-             // SKENARIO 2: PENGINGAT SISA WAKTU (MENGGUNAKAN >= AGAR TIDAK TERLEWAT)
-             if (currentMins >= endTotal) {
-                 const flagKey = `wa_scen2_${todayStr}_${sess.id}`;
-                 const isSent = await CloudStore.get(flagKey);
-                 if (!isSent) {
-                     await CloudStore.set(flagKey, true);
-                     
-                     for (const st of students) {
-                         const hasLogged = logs.some(l => l.nim === st.nim && l.sessionName === sess.name && getLocalYYYYMMDD(l.timestamp) === todayStr);
-                         if (!hasLogged && st.noHp) {
-                             sendWA(st.noHp, 2, { 
-                                 namaLengkap: st.name, 
-                                 shift: sess.name, 
-                                 jamTutup: sess.endTime 
-                             });
-                             // Anti-Spam API
-                             await new Promise(resolve => setTimeout(resolve, 500));
-                         }
-                     }
-                 }
-             }
-
-             // SKENARIO 4 & 9: REKAP AKHIR & SP OTOMATIS
-             if (currentMins >= closeTotal + 1) { 
-                 const flagKey = `wa_scen4_${todayStr}_${sess.id}`;
-                 const isSent = await CloudStore.get(flagKey);
-                 if (!isSent) {
-                     await CloudStore.set(flagKey, true);
-                     
-                     for (const st of students) {
-                         const c = clusters.find(cl=>cl.id === st.clusterId);
-                         const log = logs.find(l => l.nim === st.nim && l.sessionName === sess.name && getLocalYYYYMMDD(l.timestamp) === todayStr);
-                         const stAkhir = log ? log.status : 'Alpha';
-                         const jAbsen = log ? new Date(log.timestamp).toLocaleTimeString('id-ID', {hour:'2-digit', minute:'2-digit'}) : '-';
-                         
-                         if (st.noHp) {
-                             sendWA(st.noHp, 4, { 
-                                 namaLengkap: st.name, 
-                                 shift: sess.name, 
-                                 jamTutup: sess.endTime, 
-                                 statusAkhir: stAkhir, 
-                                 jamAbsen: jAbsen, 
-                                 kelompok: c?.name || 'Tanpa Kelompok'
-                             });
-                             // Anti-Spam API
-                             await new Promise(resolve => setTimeout(resolve, 500));
-                         }
-
-                         if (stAkhir === 'Alpha') {
-                             let totalAlphaHist = 0;
-                             let totalTelatHist = 0;
-                             if (c && c.startDate) {
-                                 const startD = new Date(c.startDate);
-                                 const endD = new Date();
-                                 for (let d = new Date(startD); d <= endD; d.setDate(d.getDate() + 1)) {
-                                     if (d > new Date()) break;
-                                     const dateStrLocal = getLocalYYYYMMDD(d);
-                                     
-                                     const loopDayOfWeek = d.getDay();
-                                     const loopIsWeekend = (loopDayOfWeek === 0 || loopDayOfWeek === 6);
-                                     const loopIsCustomHoliday = holidays.some(h => h.date === dateStrLocal);
-                                     if (loopIsWeekend || loopIsCustomHoliday) continue;
-
-                                     sessions.forEach(s => {
-                                         if (s.isActive) {
-                                             const pastLog = logs.find(l => l.nim === st.nim && getLocalYYYYMMDD(l.timestamp) === dateStrLocal && l.sessionName === s.name);
-                                             if (pastLog) {
-                                                 if (pastLog.status === 'Terlambat') totalTelatHist++;
-                                             } else {
-                                                 const [eH, eM] = s.endTime.split(':').map(Number);
-                                                 const eTotal = eH * 60 + eM + s.toleranceMinutes;
-                                                 const isToday = dateStrLocal === todayStr;
-                                                 if (isToday) {
-                                                    const cMins = now.getHours() * 60 + now.getMinutes();
-                                                    if (cMins > eTotal) totalAlphaHist++;
-                                                 } else {
-                                                    if (d < new Date(new Date().setHours(0,0,0,0))) totalAlphaHist++;
-                                                 }
-                                             }
-                                         }
-                                     });
-                                 }
-                             }
-                             
-                             if (totalAlphaHist >= 3) { 
-                                 const spFlagKey = `wa_scen9_${st.nim}_${totalAlphaHist}`;
-                                 const isSpSent = await CloudStore.get(spFlagKey);
-                                 if (!isSpSent) {
-                                     await CloudStore.set(spFlagKey, true);
-                                     if (st.noHp) {
-                                         sendWA(st.noHp, 9, {
-                                             namaLengkap: st.name,
-                                             kelompok: c?.name || 'Tanpa Kelompok',
-                                             totalAlpha: totalAlphaHist,
-                                             totalTerlambat: totalTelatHist
-                                         });
-                                         await new Promise(resolve => setTimeout(resolve, 500));
-                                     }
-                                 }
-                             }
-                         }
-                     }
-                 }
-             }
-         }
-
-         if (currentMins >= 10 * 60) {
-             const flagKey = `wa_scen17_${todayStr}`;
-             const isSent = await CloudStore.get(flagKey);
-             if (!isSent) {
-                 await CloudStore.set(flagKey, true);
-                 for (const st of students) {
-                     const c = clusters.find(cl=>cl.id === st.clusterId);
-                     if (c && c.endDate === todayStr) {
-                         if (st.noHp) {
-                             sendWA(st.noHp, 17, { namaLengkap: st.name, kelompok: c.name });
-                             await new Promise(resolve => setTimeout(resolve, 500));
-                         }
-                     }
-                 }
-             }
-         }
-
-         if (currentMins >= 23 * 60 + 50) {
-             const flagKey = `wa_scen20_${todayStr}`;
-             const isSent = await CloudStore.get(flagKey);
-             if (!isSent) {
-                 await CloudStore.set(flagKey, true);
-                 const tHadir = logs.filter(l => getLocalYYYYMMDD(l.timestamp) === todayStr && l.status === 'Hadir').length;
-                 const tTelat = logs.filter(l => getLocalYYYYMMDD(l.timestamp) === todayStr && l.status === 'Terlambat').length;
-                 const activeSessCount = sessions.filter(s=>s.isActive).length;
-                 const tAlpha = (students.length * activeSessCount) - (tHadir + tTelat);
-                 
-                 for (const ad of admins) { 
-                    if (ad.noHp) {
-                        sendWA(ad.noHp, 20, {
-                            tanggal: new Date().toLocaleDateString('id-ID', {weekday: 'long', day:'numeric', month:'long'}),
-                            totalMhs: students.length,
-                            totalHadir: tHadir,
-                            totalTerlambat: tTelat,
-                            totalAlpha: tAlpha > 0 ? tAlpha : 0
-                        });
-                        await new Promise(resolve => setTimeout(resolve, 500));
-                    }
-                 }
-             }
-         }
-         
-     }, 60000); 
-     
-     return () => clearInterval(cronInterval);
-  }, [isCloudSync, sessions, students, logs, clusters, admins, holidays]);
 
   if (isAppLoading) {
     return (
@@ -1664,7 +1435,7 @@ const AdminDashboardHome: React.FC = () => {
   const totalAlphaCount = studentStats.reduce((acc, curr) => acc + curr.alpha, 0);
   const totalBelumAbsenCount = studentStats.reduce((acc, curr) => acc + curr.belumAbsen, 0);
 
-  // Generate data untuk rentang secara penuh
+  // FIX BUG MELOROT & KOSONG: Generate data untuk rentang secara penuh
   const trendData = useMemo(() => {
      const dataMap: Record<string, { date: string; Hadir: number; Terlambat: number; sortKey: string }> = {};
      const rStart = new Date(startObj);
@@ -1821,9 +1592,8 @@ const AdminDashboardHome: React.FC = () => {
                       <tr key={st.id || idx} className="hover:bg-cyan-900/20 transition-colors duration-200 text-cyan-50 group">
                          <td className="p-4 font-mono text-sm tracking-wider">{st.nim}</td>
                          <td className="p-4 font-bold text-sm uppercase max-w-[200px] truncate" title={st.name}>{st.name}</td>
-                         <td className="p-4">
-                            {/* FIX BUG KELOMPOK TERPOTONG DI SINI */}
-                            <span className="inline-block whitespace-nowrap text-[9px] uppercase font-bold tracking-widest text-cyan-300 bg-cyan-950/50 border border-cyan-500/30 px-3 py-1.5 rounded-md shadow-sm">
+                         <td className="p-4 whitespace-nowrap">
+                            <span className="text-[9px] uppercase font-bold tracking-widest text-cyan-300 bg-cyan-950/50 border border-cyan-500/30 px-3 py-1.5 rounded-md shadow-sm whitespace-nowrap inline-block">
                                {clusters.find(c => c.id === st.clusterId)?.name || 'TANPA KELOMPOK'}
                             </span>
                          </td>
@@ -1947,6 +1717,7 @@ const AdminClusters: React.FC = () => {
     </div>
   );
 };
+// --- AKHIR BAGIAN 1 ---
 
 const AdminStudents: React.FC = () => {
   const { students, addStudent, updateStudent, bulkAddStudents, deleteStudent, clusters, sendWA } = useAppContext();
@@ -2011,6 +1782,29 @@ const AdminStudents: React.FC = () => {
   const handleUnlinkDevice = (id: string, name: string) => {
      if(confirm(`Konfirmasi Pelepasan Akses Perangkat (Logout HP) untuk ${name}?`)) {
         updateStudent(id, { deviceId: null });
+     }
+  };
+
+  // FUNGSI BARU: BROADCAST ONBOARDING PERORANGAN (INDIVIDU)
+  const handleIndividualBroadcast = async (s: Student) => {
+     if (!s.noHp) return alert("❌ Mahasiswa ini belum memiliki nomor WA yang terdaftar.");
+     const myCluster = clusters.find(c => c.id === s.clusterId);
+     
+     if (!confirm(`Kirim info Onboarding/Akses via WhatsApp ke ${s.name}?`)) return;
+     
+     try {
+         await sendWA(s.noHp, 25, {
+             namaLengkap: s.name,
+             nim: s.nim,
+             kelompok: myCluster?.name || 'Belum Ada Kelompok',
+             tanggalMulai: myCluster?.startDate || 'Belum Diatur',
+             tanggalAkhir: myCluster?.endDate || 'Belum Diatur',
+             password: s.password || defaultBulkPassword
+         });
+         alert(`✅ Info akses berhasil dikirim ke ${s.name}`);
+     } catch (e) {
+         console.error(e);
+         alert("❌ Gagal mengirim pesan.");
      }
   };
 
@@ -2282,7 +2076,7 @@ const AdminStudents: React.FC = () => {
 
       <div className="flex-1 bg-[#0A1628]/60 backdrop-blur-md border border-cyan-500/20 rounded-[1.5rem] overflow-hidden flex flex-col shadow-[0_15px_40px_rgba(0,0,0,0.5)] relative">
         <div className="overflow-x-auto custom-scrollbar">
-          <table className="w-full text-left border-collapse min-w-[950px]">
+          <table className="w-full text-left border-collapse min-w-[900px]">
             <thead>
               <tr className="bg-[#050B14]/80 border-b border-cyan-500/20 text-cyan-500 text-[10px] tracking-[0.2em] uppercase font-black">
                 <th className="p-4 md:p-5 whitespace-nowrap">NIM</th>
@@ -2299,9 +2093,8 @@ const AdminStudents: React.FC = () => {
                   <td className="p-4 md:p-5 font-mono text-sm tracking-wider">{st.nim}</td>
                   <td className="p-4 md:p-5 font-bold text-sm uppercase max-w-[200px] truncate">{st.name}</td>
                   <td className="p-4 md:p-5 font-mono text-xs text-blue-300">{st.noHp || '-'}</td>
-                  <td className="p-4 md:p-5">
-                     {/* FIX BUG KELOMPOK TERPOTONG DI SINI */}
-                     <span className="inline-block whitespace-nowrap text-[9px] uppercase font-bold tracking-widest text-cyan-300 bg-cyan-950/50 border border-cyan-500/30 px-3 py-1.5 rounded-md shadow-sm">
+                  <td className="p-4 md:p-5 whitespace-nowrap">
+                     <span className="text-[10px] uppercase font-bold tracking-widest text-cyan-300 bg-cyan-950/50 border border-cyan-500/30 px-3 py-1.5 rounded-md shadow-sm inline-block whitespace-nowrap">
                         {clusters.find(c => c.id === st.clusterId)?.name || 'BELUM ADA KELOMPOK'}
                      </span>
                   </td>
@@ -2316,25 +2109,10 @@ const AdminStudents: React.FC = () => {
                       </span>
                     )}
                   </td>
-                  <td className="p-4 md:p-5 text-right flex justify-end gap-2 flex-wrap">
-                    
-                    {/* TOMBOL WA ONBOARDING PERORANGAN BARU */}
-                    <button onClick={() => {
-                        if(!st.noHp) return alert('No WA mahasiswa kosong!');
-                        if(confirm(`Kirim WA Onboarding ke ${st.name}?`)) {
-                           const myCluster = clusters.find(c => c.id === st.clusterId);
-                           sendWA(st.noHp, 25, {
-                               namaLengkap: st.name,
-                               nim: st.nim,
-                               kelompok: myCluster?.name || 'Belum Ada Kelompok',
-                               tanggalMulai: myCluster?.startDate || 'Belum Diatur',
-                               tanggalAkhir: myCluster?.endDate || 'Belum Diatur',
-                               password: st.password || '123'
-                           });
-                           alert('Pesan Onboarding masuk ke antrean!');
-                        }
-                    }} title="Kirim WA Onboarding" className="p-2 md:p-2.5 text-emerald-500 hover:text-emerald-300 rounded-xl transition-all duration-300 border border-emerald-500/30 bg-emerald-950/40 hover:bg-emerald-900 active:scale-95 shadow-sm">
-                       <MessageCircle className="w-4 h-4" />
+                  <td className="p-4 md:p-5 text-right flex justify-end gap-2">
+                    {/* TOMBOL BARU: WA ONBOARDING INDIVIDU */}
+                    <button onClick={() => handleIndividualBroadcast(st)} title="Kirim Info Akses (WA)" className="p-2 md:p-2.5 text-emerald-500 hover:text-emerald-300 rounded-xl transition-all duration-300 border border-emerald-500/30 bg-emerald-950/40 hover:bg-emerald-900 active:scale-95 shadow-sm">
+                       <MessageSquare className="w-4 h-4" />
                     </button>
 
                     {st.deviceId && (
@@ -2363,7 +2141,7 @@ const AdminStudents: React.FC = () => {
       </div>
 
       {editingStudent && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/90 backdrop-blur-xl p-4 animate-in fade-in zoom-in-95 duration-200">
+        <div className="fixed inset-0 z-[1000] flex items-center justify-center bg-black/90 backdrop-blur-xl p-4 animate-in fade-in zoom-in-95 duration-200">
            <form onSubmit={handleUpdate} className="bg-[#0A1628] border border-cyan-500/40 p-6 md:p-8 rounded-3xl w-full max-w-md shadow-[0_0_50px_rgba(6,182,212,0.3)] relative radiology-bg">
               <div className="flex justify-between items-center mb-8">
                  <h3 className="text-xl md:text-2xl font-black text-cyan-50 tracking-widest uppercase">Edit Data Mahasiswa</h3>
@@ -2402,7 +2180,7 @@ const AdminStudents: React.FC = () => {
       )}
 
       {isCustomBroadcastOpen && (
-         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/90 backdrop-blur-xl p-4 animate-in fade-in zoom-in-95 duration-200">
+         <div className="fixed inset-0 z-[1000] flex items-center justify-center bg-black/90 backdrop-blur-xl p-4 animate-in fade-in zoom-in-95 duration-200">
             <form onSubmit={handleCustomBroadcast} className="bg-[#0A1628] border border-cyan-500/40 p-6 md:p-8 rounded-3xl w-full max-w-2xl shadow-[0_0_50px_rgba(6,182,212,0.3)] relative radiology-bg">
                <div className="flex justify-between items-center mb-6">
                   <div>
@@ -2440,7 +2218,7 @@ const AdminStudents: React.FC = () => {
       )}
 
       {selectedStudentForKTM && (
-         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/95 backdrop-blur-xl p-4 animate-in fade-in zoom-in-95 duration-200">
+         <div className="fixed inset-0 z-[1000] flex items-center justify-center bg-black/95 backdrop-blur-xl p-4 animate-in fade-in zoom-in-95 duration-200">
           <style>{`
             @media print {
               body * { visibility: hidden; }
@@ -2826,9 +2604,6 @@ const AdminManagement: React.FC = () => {
   );
 };
 
-// ==========================================
-// ADMIN FORMATS (WA TEMPLATE CRUD - NEW UI RESPONSIVE)
-// ==========================================
 const AdminFormats: React.FC = () => {
    const { formats, updateFormat } = useAppContext();
    const [editingFormat, setEditingFormat] = useState<FormatWA | null>(null);
@@ -2855,48 +2630,44 @@ const AdminFormats: React.FC = () => {
                <FileText className="w-5 h-5 text-cyan-400" />
                <h3 className="text-xs md:text-sm font-black text-cyan-50 tracking-widest uppercase">Variabel Dinamis (Gunakan Ini Di Dalam Teks):</h3>
             </div>
-            <div className="flex flex-wrap gap-2 md:gap-3 relative z-10">
-               {['[Nama Lengkap]', '[NIM]', '[Kelompok]', '[Shift]', '[Jam Sesi]', '[Jam Tutup]', '[Jam Absen]', '[Tanggal Mulai]', '[Tanggal Akhir]', '[Password]', '[Link]', '[Total Mhs]', '[Total Hadir]', '[Total Terlambat]', '[Total Alpha]', '[Pesan Custom]'].map(v => (
-                  <span key={v} className="bg-[#050B14] border border-cyan-500/40 text-cyan-300 px-3 py-1.5 rounded-lg text-[10px] md:text-xs font-mono font-bold shadow-[inset_0_2px_5px_rgba(0,0,0,0.5)] cursor-pointer hover:bg-cyan-600/20 hover:border-cyan-400 hover:text-cyan-50 transition-all duration-300 active:scale-95" title="Klik untuk copy" onClick={()=>{navigator.clipboard.writeText(v); alert(`Tercopy: ${v}`)}}>{v}</span>
+            <div className="flex flex-wrap gap-3 relative z-10">
+               {['[Nama Lengkap]', '[NIM]', '[Kelompok]', '[Shift]', '[Jam Sesi]', '[Jam Tutup]', '[Jam Absen]', '[Tanggal Mulai]', '[Tanggal Akhir]', '[Password]', '[Link]'].map(v => (
+                  <span key={v} className="bg-[#050B14] border border-cyan-500/40 text-cyan-300 px-3 py-1.5 rounded-lg text-xs font-mono font-bold shadow-inner cursor-pointer hover:bg-cyan-900/50 hover:text-cyan-50 transition-colors" title="Klik untuk copy" onClick={()=>{navigator.clipboard.writeText(v); alert(`Tercopy: ${v}`)}}>{v}</span>
                ))}
             </div>
          </div>
 
-         {/* MODAL EDIT SKENARIO (DESAIN SESUAI TANGKAPAN LAYAR 3) */}
          {editingFormat && (
-            <div className="fixed inset-0 z-[100] flex items-center justify-center bg-[#020617]/95 backdrop-blur-sm p-4 md:p-6 animate-in fade-in zoom-in-95 duration-300">
-               <form onSubmit={handleSave} className="bg-[#050B14] border border-cyan-500/40 p-6 md:p-8 rounded-[2rem] w-full max-w-4xl shadow-[0_0_50px_rgba(6,182,212,0.15)] relative flex flex-col max-h-[95vh] md:max-h-[90vh]">
-                  
-                  <div className="flex justify-between items-start mb-6 shrink-0 border-b border-cyan-900/50 pb-5">
+            <div className="fixed inset-0 z-[1000] flex items-center justify-center bg-black/90 backdrop-blur-xl p-4 animate-in fade-in zoom-in-95 duration-200">
+               <form onSubmit={handleSave} className="bg-[#0A1628] border border-cyan-500/40 p-6 md:p-8 rounded-3xl w-full max-w-3xl shadow-[0_0_50px_rgba(6,182,212,0.3)] relative radiology-bg flex flex-col h-[90vh] md:h-[80vh]">
+                  <div className="flex justify-between items-center mb-6 shrink-0">
                      <div>
-                        <h3 className="text-xl md:text-3xl font-black text-cyan-50 tracking-[0.1em] uppercase leading-tight">Edit ID Skenario: {editingFormat.id}</h3>
-                        <p className="text-cyan-400 text-xs md:text-sm font-mono mt-1.5 tracking-wider">{editingFormat.title}</p>
+                        <h3 className="text-xl md:text-2xl font-black text-cyan-50 tracking-widest uppercase mb-1">Edit ID Skenario: {editingFormat.id}</h3>
+                        <p className="text-cyan-400 text-xs font-mono">{editingFormat.title}</p>
                      </div>
-                     <button type="button" onClick={() => setEditingFormat(null)} className="p-2 md:p-2.5 bg-rose-950/30 hover:bg-rose-600 text-rose-400 hover:text-white border border-rose-500/30 rounded-xl transition-all active:scale-90 shadow-sm shrink-0">
-                        <X className="w-5 h-5"/>
-                     </button>
+                     <button type="button" onClick={() => setEditingFormat(null)} className="p-2 bg-rose-950/50 hover:bg-rose-500 hover:text-white border border-rose-500/30 rounded-xl transition-colors text-rose-400"><X className="w-5 h-5"/></button>
                   </div>
                   
-                  <div className="flex-1 overflow-y-auto custom-scrollbar pr-1 md:pr-2 flex flex-col gap-5">
-                     <div className="bg-[#0A1628]/60 p-4 md:p-5 rounded-2xl border border-cyan-500/20 shrink-0">
-                        <p className="text-cyan-500 text-[10px] md:text-xs font-black uppercase tracking-[0.15em] mb-2 flex items-center gap-2">Deskripsi Pemicu Bot:</p>
-                        <p className="text-cyan-50 text-xs md:text-sm font-mono leading-relaxed">{editingFormat.description}</p>
+                  <div className="flex-1 overflow-hidden flex flex-col gap-4">
+                     <div className="bg-[#050B14] p-4 rounded-xl border border-cyan-500/30 shrink-0">
+                        <p className="text-cyan-500 text-xs font-bold uppercase tracking-widest mb-1">Deskripsi Pemicu Bot:</p>
+                        <p className="text-cyan-50 text-sm font-mono">{editingFormat.description}</p>
                      </div>
                      
-                     <div className="flex flex-col flex-1 relative group bg-[#0A1628]/40 border border-cyan-500/30 rounded-2xl overflow-hidden focus-within:border-cyan-400 transition-colors shadow-inner min-h-[300px]">
-                        <div className="absolute top-4 right-4 bg-cyan-950/80 px-3 py-1.5 rounded-lg text-[9px] text-cyan-400 font-black tracking-widest uppercase pointer-events-none border border-cyan-500/30 shadow-sm z-10">Editor Mode</div>
+                     <div className="flex flex-col flex-1 relative group">
                         <textarea 
                            required 
                            value={editingFormat.template} 
                            onChange={e=>setEditingFormat({...editingFormat, template: e.target.value})} 
-                           className="w-full h-full min-h-[300px] bg-transparent p-5 md:p-6 text-cyan-50 outline-none font-mono text-[11px] md:text-sm resize-none custom-scrollbar leading-relaxed"
+                           className="w-full flex-1 bg-[#050B14] border border-cyan-500/50 rounded-2xl p-5 text-cyan-100 outline-none focus:border-cyan-300 font-mono text-sm shadow-inner resize-none custom-scrollbar leading-relaxed transition-colors"
                            placeholder="Ketik template pesan WhatsApp di sini..."
                         />
+                        <div className="absolute top-4 right-4 bg-cyan-900/50 px-2 py-1 rounded text-[10px] text-cyan-400 font-bold uppercase pointer-events-none opacity-50 group-focus-within:opacity-100 transition-opacity">Editor Mode</div>
                      </div>
                   </div>
 
-                  <div className="mt-6 shrink-0 flex justify-end border-t border-cyan-900/50 pt-6">
-                     <button type="submit" className="w-full md:w-auto px-10 py-4 bg-gradient-to-r from-cyan-600 to-cyan-400 hover:from-cyan-500 hover:to-cyan-300 text-black font-black tracking-[0.15em] uppercase text-xs md:text-sm rounded-2xl transition-all duration-300 shadow-[0_10px_20px_rgba(6,182,212,0.3)] active:scale-95 border border-cyan-300/50 flex justify-center items-center gap-3">
+                  <div className="mt-6 shrink-0 flex justify-end">
+                     <button type="submit" className="w-full md:w-auto px-10 py-4 bg-cyan-600 hover:bg-cyan-500 text-white font-black tracking-widest uppercase text-xs rounded-2xl transition-all duration-300 shadow-[0_10px_20px_rgba(6,182,212,0.4)] active:scale-95 border border-cyan-400/50 flex justify-center items-center gap-3">
                         <CheckCircle2 className="w-5 h-5"/> Simpan Perubahan Template
                      </button>
                   </div>
@@ -2904,27 +2675,26 @@ const AdminFormats: React.FC = () => {
             </div>
          )}
 
-         {/* GRID SKENARIO */}
-         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5 md:gap-6">
+         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             {formats.map(f => (
-               <div key={f.id} className="bg-[#0A1628]/60 backdrop-blur-md border border-cyan-500/20 p-5 md:p-6 rounded-[1.5rem] flex flex-col group hover:border-cyan-400/50 transition-all duration-300 shadow-[0_10px_30px_rgba(0,0,0,0.3)] relative overflow-hidden h-[380px] md:h-[400px]">
-                  <div className="absolute top-0 right-0 w-32 h-32 bg-cyan-600/5 rounded-bl-[100px] pointer-events-none group-hover:scale-110 transition-transform"></div>
+               <div key={f.id} className="bg-[#0A1628]/60 backdrop-blur-md border border-cyan-500/20 p-6 rounded-3xl flex flex-col group hover:border-cyan-500/50 transition-all duration-300 shadow-[0_10px_30px_rgba(0,0,0,0.3)] relative overflow-hidden h-[400px]">
+                  <div className="absolute top-0 right-0 w-32 h-32 bg-blue-600/5 rounded-bl-[100px] pointer-events-none group-hover:scale-110 transition-transform"></div>
                   
                   <div className="flex justify-between items-start mb-4 relative z-10 shrink-0">
-                     <div className="pr-4">
-                        <div className="inline-block px-3 py-1.5 bg-cyan-950/60 border border-cyan-500/30 text-cyan-300 text-[9px] md:text-[10px] font-black tracking-widest uppercase rounded-lg mb-3 shadow-sm">
+                     <div>
+                        <div className="inline-block px-3 py-1 bg-cyan-950/60 border border-cyan-500/30 text-cyan-300 text-[10px] font-black tracking-widest uppercase rounded-lg mb-3 shadow-sm">
                            ID Skenario: {f.id}
                         </div>
-                        <h3 className="font-black text-white text-base md:text-lg tracking-widest uppercase leading-tight line-clamp-2">{f.title}</h3>
-                        <p className="text-[10px] md:text-xs text-cyan-500/80 font-mono mt-2 line-clamp-2 leading-relaxed">{f.description}</p>
+                        <h3 className="font-black text-white text-lg tracking-widest uppercase">{f.title}</h3>
+                        <p className="text-xs text-cyan-500/80 font-mono mt-1 pr-4">{f.description}</p>
                      </div>
-                     <button onClick={() => setEditingFormat(f)} className="p-2.5 md:p-3 bg-blue-950/40 hover:bg-blue-600 hover:text-white text-blue-400 border border-blue-500/30 rounded-xl transition-all duration-300 active:scale-95 shadow-sm shrink-0">
-                        <Edit className="w-4 h-4 md:w-5 md:h-5"/>
+                     <button onClick={() => setEditingFormat(f)} className="p-2.5 bg-blue-950/40 hover:bg-blue-600 hover:text-white text-blue-400 border border-blue-500/30 rounded-xl transition-all duration-300 active:scale-95 shadow-sm">
+                        <Edit className="w-4 h-4"/>
                      </button>
                   </div>
 
-                  <div className="flex-1 bg-[#050B14]/80 p-4 md:p-5 rounded-2xl border border-cyan-500/10 overflow-y-auto custom-scrollbar relative z-10 shadow-[inset_0_2px_10px_rgba(0,0,0,0.5)] group-hover:border-cyan-500/30 transition-colors">
-                     <pre className="text-[10px] md:text-[11px] font-mono text-cyan-100/70 whitespace-pre-wrap break-words leading-relaxed font-medium">
+                  <div className="flex-1 bg-[#050B14] p-5 rounded-2xl border border-cyan-500/10 overflow-y-auto custom-scrollbar relative z-10 shadow-inner group-hover:border-cyan-500/30 transition-colors">
+                     <pre className="text-[11px] font-mono text-cyan-100/90 whitespace-pre-wrap break-words leading-relaxed font-medium">
                         {f.template}
                      </pre>
                   </div>
@@ -3218,7 +2988,7 @@ const AdminReports: React.FC = () => {
                   <td className="p-4 md:p-5">
                      <p className="font-bold text-cyan-50 text-sm uppercase tracking-wide truncate max-w-[200px] mb-1">{log.name}</p>
                      <p className="text-xs text-cyan-400/80 font-mono tracking-widest">{log.nim}</p>
-                     <p className="text-[9px] mt-2 inline-block whitespace-nowrap px-2 py-0.5 bg-cyan-950 text-cyan-300 rounded border border-cyan-500/20 font-bold uppercase tracking-wider">{log.clusterName || 'Tanpa Kelompok'}</p>
+                     <p className="text-[9px] mt-2 inline-block px-2 py-0.5 bg-cyan-950 text-cyan-300 rounded border border-cyan-500/20 font-bold uppercase tracking-wider">{log.clusterName || 'Tanpa Kelompok'}</p>
                   </td>
                   <td className="p-4 md:p-5">
                      <p className="text-cyan-50 font-black font-mono text-base tracking-wider mb-1 drop-shadow-md">{new Date(log.timestamp).toLocaleTimeString('id-ID')}</p>
@@ -3263,7 +3033,7 @@ const AdminReports: React.FC = () => {
       </div>
       
       {previewImage && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-[#050B14]/95 backdrop-blur-2xl p-4 animate-in fade-in zoom-in-95 duration-300" onClick={() => setPreviewImage(null)}>
+        <div className="fixed inset-0 z-[1000] flex items-center justify-center bg-[#050B14]/95 backdrop-blur-2xl p-4 animate-in fade-in zoom-in-95 duration-300" onClick={() => setPreviewImage(null)}>
           <div className="relative max-w-3xl w-full flex flex-col items-center justify-center">
             <button onClick={() => setPreviewImage(null)} className="absolute -top-14 md:-top-16 right-0 md:-right-8 p-3 bg-rose-950/50 hover:bg-rose-500 hover:text-white rounded-xl transition-all duration-300 text-rose-400 shadow-[0_0_15px_rgba(244,63,94,0.2)] active:scale-90 border border-rose-500/30">
               <X className="w-6 h-6"/>
@@ -3344,7 +3114,7 @@ const AdminLayout: React.FC<{ children: React.ReactNode, activeRoute: string, se
         </div>
       </aside>
 
-      {/* OVERFLOW-X-HIDDEN UNTUK MENCEGAH SCROLL KE SAMPING */}
+      {/* UPDATE PENTING: OVERFLOW-X-HIDDEN UNTUK MENCEGAH SCROLL KE SAMPING */}
       <main className="flex-1 flex flex-col relative overflow-y-auto overflow-x-hidden w-full h-screen custom-scrollbar">
         {/* RESPONSIVE HEADER & STATUS BADGE */}
         <header className="sticky top-0 p-4 md:p-6 flex justify-between md:justify-end items-center z-30 w-full bg-[#0A1628]/80 backdrop-blur-xl border-b border-cyan-900/50 shadow-[0_4px_30px_rgba(0,0,0,0.5)]">
