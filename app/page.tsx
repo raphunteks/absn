@@ -1019,6 +1019,465 @@ const StudentDashboard: React.FC<{ onStartAbsen: () => void, linkedNim: string |
   );
 };
 
+const TimeCheck: React.FC<{ onComplete: (data: { sessionName: string; status: 'Hadir' | 'Terlambat' }) => void }> = ({ onComplete }) => {
+  const { sessions } = useAppContext();
+  const [currentTime, setCurrentTime] = useState(new Date());
+
+  useEffect(() => {
+    const timer = setInterval(() => setCurrentTime(new Date()), 1000);
+    return () => clearInterval(timer);
+  }, []);
+
+  const activeSession = useMemo(() => {
+    const currentMinutes = currentTime.getHours() * 60 + currentTime.getMinutes();
+    for (const session of sessions) {
+      if (!session.isActive) continue;
+      const [startH, startM] = session.startTime.split(':').map(Number);
+      const [endH, endM] = session.endTime.split(':').map(Number);
+      const startTotal = startH * 60 + startM;
+      const endTotal = endH * 60 + endM;
+      const endWithTolerance = endTotal + session.toleranceMinutes;
+
+      if (currentMinutes >= startTotal && currentMinutes <= endWithTolerance) {
+        const isLate = currentMinutes > endTotal;
+        return { session, status: isLate ? 'Terlambat' : 'Hadir', endTotal, endWithTolerance };
+      }
+    }
+    return null;
+  }, [currentTime, sessions]);
+
+  return (
+    <div className="flex flex-col items-center justify-center p-4 md:p-8 space-y-6 md:space-y-8 animate-in fade-in zoom-in duration-500 w-full">
+      <div className="relative animate-[pulse_4s_ease-in-out_infinite]">
+        <div className="absolute inset-0 bg-cyan-600/30 blur-[40px] rounded-full"></div>
+        <Clock className="w-20 h-20 md:w-24 md:h-24 text-cyan-400 relative z-10 drop-shadow-[0_0_20px_rgba(6,182,212,0.8)]" />
+      </div>
+      <div className="text-center space-y-2 relative z-10">
+        <h2 className="text-4xl md:text-5xl font-black text-white tracking-widest drop-shadow-md font-mono">{format(currentTime, 'HH:mm:ss')}</h2>
+        <p className="text-sm md:text-base text-cyan-400/70 font-medium uppercase tracking-widest">{currentTime.toLocaleDateString('id-ID', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</p>
+      </div>
+
+      <div className="w-full max-w-md bg-[#0A1628]/80 backdrop-blur-xl border border-cyan-500/20 p-5 md:p-6 rounded-3xl shadow-[0_20px_50px_rgba(0,0,0,0.5)] transition-all duration-300 relative z-10">
+        {activeSession ? (
+          <div className="space-y-6">
+            <div className="flex items-center justify-between p-4 bg-[#050B14]/80 border border-cyan-500/10 rounded-2xl relative overflow-hidden">
+              <div className="absolute left-0 top-0 w-1 h-full bg-cyan-500"></div>
+              <div className="pl-2">
+                <p className="text-cyan-50 font-black text-lg md:text-xl tracking-wide">{activeSession.session.name}</p>
+                <p className="text-xs md:text-sm text-cyan-400/80 font-mono mt-1">{activeSession.session.startTime} - {activeSession.session.endTime}</p>
+                <p className="text-[10px] md:text-xs text-slate-500 mt-2 font-mono uppercase">
+                  Batas Hadir: {activeSession.session.endTime} | Tutup Sesi: {Math.floor(activeSession.endWithTolerance / 60).toString().padStart(2, '0')}:{(activeSession.endWithTolerance % 60).toString().padStart(2, '0')}
+                </p>
+              </div>
+              <span className={cn("px-4 py-2 text-xs font-black uppercase tracking-widest rounded-xl shadow-lg border", activeSession.status === 'Hadir' ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/30" : "bg-amber-500/10 text-amber-400 border-amber-500/30")}>
+                {activeSession.status}
+              </span>
+            </div>
+            <button onClick={() => onComplete({ sessionName: activeSession.session.name, status: activeSession.status as 'Hadir' | 'Terlambat' })} className="w-full py-4 bg-cyan-600 hover:bg-cyan-500 text-white font-black uppercase tracking-widest rounded-2xl transition-all duration-300 shadow-[0_0_20px_rgba(6,182,212,0.4)] hover:shadow-[0_0_30px_rgba(6,182,212,0.6)] flex items-center justify-center gap-3 active:scale-[0.98]">
+              Lanjut Cek Lokasi <ScanFace className="w-5 h-5" />
+            </button>
+          </div>
+        ) : (
+          <div className="p-6 bg-rose-950/30 border border-rose-500/30 rounded-2xl text-rose-400 flex flex-col items-center gap-3 text-center">
+            <AlertCircle className="w-12 h-12 animate-pulse drop-shadow-[0_0_15px_rgba(244,63,94,0.5)]" />
+            <p className="font-black text-lg uppercase tracking-widest text-rose-200">Belum Waktunya</p>
+            <p className="text-xs font-mono text-rose-400/80">Saat ini tidak ada jadwal absensi yang sedang aktif.</p>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
+const LocationCheck: React.FC<{ onComplete: (loc: {lat: number, lng: number}) => void }> = ({ onComplete }) => {
+  const { geofence } = useAppContext();
+  const [status, setStatus] = useState<'loading' | 'success' | 'error'>('loading');
+  const [distance, setDistance] = useState<number | null>(null);
+  const [errorMsg, setErrorMsg] = useState('');
+
+  const checkLocation = useCallback(() => {
+    setStatus('loading');
+    if (!navigator.geolocation) {
+      setStatus('error'); setErrorMsg('Akses lokasi (GPS) pada browser Anda tidak diizinkan.'); return;
+    }
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        const { latitude, longitude } = position.coords;
+        const dist = calculateDistance(latitude, longitude, geofence.lat, geofence.lng);
+        setDistance(dist);
+        if (dist <= geofence.radius) {
+          setStatus('success');
+          setTimeout(() => onComplete({ lat: latitude, lng: longitude }), 1500);
+        } else {
+          setStatus('error');
+          setErrorMsg(`Anda berada di luar jangkauan area absen (${geofence.name || 'Lokasi Kampus'}).`);
+        }
+      },
+      (error) => { setStatus('error'); setErrorMsg('Sinyal GPS lemah atau belum diaktifkan. Pastikan GPS menyala.'); },
+      { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+    );
+  }, [onComplete, geofence]);
+
+  useEffect(() => { checkLocation(); }, [checkLocation]);
+
+  return (
+    <div className="flex flex-col items-center justify-center p-4 md:p-8 space-y-6 max-w-md mx-auto animate-in slide-in-from-right duration-500 w-full">
+      <div className="w-32 h-32 bg-[#0A1628] rounded-full flex items-center justify-center border-2 border-cyan-500/20 relative overflow-hidden shadow-[0_0_40px_rgba(6,182,212,0.15)] z-10">
+        {status === 'loading' && <div className="absolute inset-0 border-[6px] border-cyan-500/20 border-t-cyan-500 rounded-full animate-spin"></div>}
+        <Navigation className={cn("w-12 h-12 relative z-10 transition-colors duration-500", status === 'error' ? 'text-rose-400' : 'text-cyan-400')} />
+      </div>
+      <div className="text-center space-y-2 w-full bg-[#0A1628]/80 backdrop-blur-xl border border-cyan-500/20 p-6 md:p-8 rounded-3xl shadow-[0_20px_50px_rgba(0,0,0,0.5)]">
+        <h3 className="text-2xl font-black text-white tracking-widest uppercase">Cek Lokasi</h3>
+        {status === 'loading' && <p className="text-cyan-400/60 font-mono text-xs uppercase tracking-widest mt-2">Mencari lokasi perangkat Anda...</p>}
+        {status === 'success' && (
+          <div className="text-emerald-400 space-y-3 mt-6">
+            <ActivitySquare className="w-16 h-16 mx-auto drop-shadow-[0_0_20px_rgba(16,185,129,0.8)]" />
+            <p className="font-black text-xl uppercase tracking-widest text-emerald-300">Lokasi Sesuai</p>
+            <p className="text-xs text-emerald-500/80 font-mono mt-1">Jarak Anda: {Math.round(distance || 0)}m dari titik pusat absen.</p>
+          </div>
+        )}
+        {status === 'error' && (
+          <div className="space-y-6 mt-4">
+            <div className="p-5 bg-rose-950/40 border border-rose-500/40 rounded-2xl">
+              <p className="text-xs font-black text-rose-200 uppercase tracking-wide leading-relaxed">{errorMsg}</p>
+              {distance && <p className="text-[10px] text-rose-400 mt-3 font-mono bg-rose-950 inline-block px-3 py-1.5 rounded-lg border border-rose-500/20">Jarak saat ini: {Math.round(distance)}m (Maksimal: {geofence.radius}m)</p>}
+            </div>
+            <button onClick={checkLocation} className="w-full py-4 bg-transparent border border-cyan-500/50 hover:bg-cyan-500/10 text-cyan-400 rounded-2xl text-xs uppercase font-black flex items-center justify-center gap-3">
+              <RefreshCcw className="w-4 h-4" /> Cek Ulang Lokasi
+            </button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
+const QRScanner: React.FC<{ activeSessionName: string, onComplete: (data: {nim: string, name: string, deviceId: string, clusterName?: string}) => void }> = ({ activeSessionName, onComplete }) => {
+  const { students, updateStudent, clusters, logs, sendWA } = useAppContext();
+  const [nimInput, setNimInput] = useState('');
+  const [passInput, setPassInput] = useState('');
+  const [error, setError] = useState('');
+  const [isScanning, setIsScanning] = useState(false);
+  const [isAutoLoggingIn, setIsAutoLoggingIn] = useState(true);
+
+  const qrScannerRef = useRef<any>(null);
+
+  useEffect(() => {
+     const checkAutoLogin = () => {
+        const ownerNim = localStorage.getItem('axaxyz_device_owner');
+        const finalDeviceId = localStorage.getItem('axaxyz_device_id');
+
+        if (ownerNim && finalDeviceId && students.length > 0) {
+           const foundStudent = students.find(s => s.nim === ownerNim);
+           if (foundStudent && foundStudent.deviceId === finalDeviceId) {
+              const todayLocal = getLocalYYYYMMDD(new Date());
+              const alreadyAttended = logs.some(l => l.nim === ownerNim && l.sessionName === activeSessionName && getLocalYYYYMMDD(l.timestamp) === todayLocal);
+
+              if (alreadyAttended) {
+                 setError(`⚠️ Halo ${foundStudent.name}, Anda sudah absen pada sesi ${activeSessionName} untuk hari ini.`);
+                 setIsAutoLoggingIn(false); return;
+              }
+              const clusterName = foundStudent.clusterId ? clusters.find(c => c.id === foundStudent.clusterId)?.name : '';
+              onComplete({ nim: ownerNim, name: foundStudent.name, deviceId: finalDeviceId, clusterName });
+              return;
+           }
+        }
+        setIsAutoLoggingIn(false);
+     };
+     const timer = setTimeout(checkAutoLogin, 800);
+     return () => clearTimeout(timer);
+  }, [students, logs, activeSessionName, clusters, onComplete]);
+
+
+  const handleVerify = (scannedNim?: string) => {
+    setError('');
+    const targetNim = scannedNim || nimInput;
+    if (!targetNim) { setError('Masukkan atau scan NIM Anda terlebih dahulu.'); return; }
+
+    const todayLocal = getLocalYYYYMMDD(new Date());
+    const alreadyAttended = logs.some(l => l.nim === targetNim && l.sessionName === activeSessionName && getLocalYYYYMMDD(l.timestamp) === todayLocal);
+
+    let studentName = 'Mahasiswa Belum Terdaftar';
+    if (students.length > 0) {
+      const foundStudent = students.find(s => s.nim === targetNim);
+      if (foundStudent) studentName = foundStudent.name;
+    }
+
+    if (alreadyAttended) {
+      setError(`⚠️ Gagal: ${studentName} sudah tercatat hadir pada sesi ${activeSessionName} hari ini.`); return;
+    }
+
+    let clusterName = '';
+    let finalDeviceId = localStorage.getItem('axaxyz_device_id');
+    if (!finalDeviceId) {
+      finalDeviceId = Math.random().toString(36).substring(2, 15);
+      localStorage.setItem('axaxyz_device_id', finalDeviceId);
+    }
+
+    if (students.length > 0) {
+      if (!passInput && !scannedNim) { setError('Kata sandi diperlukan.'); return; }
+      const foundStudent = students.find(s => s.nim === targetNim);
+      if (!foundStudent) { setError('Akses ditolak: NIM tidak terdaftar.'); return; }
+      
+      if (!scannedNim && foundStudent.password !== passInput) { setError('Akses ditolak: Kata sandi salah.'); return; }
+      studentName = foundStudent.name;
+      if (foundStudent.clusterId) clusterName = clusters.find(c => c.id === foundStudent.clusterId)?.name || '';
+
+      if (foundStudent.deviceId && foundStudent.deviceId !== finalDeviceId) {
+        if (foundStudent.noHp) {
+            sendWA(foundStudent.noHp, 11, { 
+                namaLengkap: foundStudent.name, 
+                jamAbsen: new Date().toLocaleTimeString('id-ID', {hour: '2-digit', minute:'2-digit'}) 
+            });
+        }
+        setError('⚠️ Keamanan Sistem: Akun NIM ini sudah terikat di HP lain.'); return;
+      }
+      if (!foundStudent.deviceId) updateStudent(foundStudent.id, { deviceId: finalDeviceId });
+    } else {
+      let deviceOwner = localStorage.getItem('axaxyz_device_owner');
+      if (!deviceOwner) localStorage.setItem('axaxyz_device_owner', targetNim); 
+      else if (deviceOwner !== targetNim) { setError('⚠️ Perangkat ini sudah digunakan mahasiswa lain.'); return; }
+    }
+
+    localStorage.setItem('axaxyz_device_owner', targetNim);
+    onComplete({ nim: targetNim, name: studentName, deviceId: finalDeviceId, clusterName });
+  };
+
+  const startScanner = async () => {
+    setIsScanning(true); setError('');
+    try {
+      const { Html5Qrcode } = await import('html5-qrcode');
+      setTimeout(() => {
+        try {
+          const html5QrCode = new Html5Qrcode("qr-reader-box");
+          qrScannerRef.current = html5QrCode;
+          html5QrCode.start({ facingMode: "environment" }, { fps: 10, qrbox: { width: 250, height: 250 } }, (decodedText: string) => {
+              setNimInput(decodedText);
+              html5QrCode.stop().then(() => { setIsScanning(false); handleVerify(decodedText); });
+            }, () => {} 
+          ).catch((err: any) => { setError('Gagal membuka kamera scanner.'); setIsScanning(false); });
+        } catch (err) { setError('Terjadi masalah pada modul kamera.'); setIsScanning(false); }
+      }, 100);
+    } catch (error) { setError('Scanner QR belum siap.'); setIsScanning(false); }
+  };
+
+  const stopScanner = () => { if (qrScannerRef.current) qrScannerRef.current.stop().catch(() => {}); setIsScanning(false); };
+
+  if (isAutoLoggingIn) return <div className="p-8 text-center flex flex-col items-center justify-center space-y-4 relative z-10"><Loader2 className="w-12 h-12 text-cyan-400 animate-spin"/><p className="text-cyan-300 font-mono uppercase tracking-widest text-xs animate-pulse">Menyiapkan sistem untuk Anda...</p></div>;
+
+  return (
+    <div className="flex flex-col items-center justify-center p-4 md:p-8 space-y-6 max-w-md mx-auto animate-in slide-in-from-right duration-500 w-full">
+      <div className="w-full bg-[#0A1628]/80 backdrop-blur-xl border border-cyan-500/20 p-6 md:p-8 rounded-3xl shadow-[0_20px_50px_rgba(0,0,0,0.5)] z-10 relative">
+        <div className="text-center mb-8">
+          <div className="w-20 h-20 bg-[#050B14] border border-cyan-500/50 rounded-2xl flex items-center justify-center mx-auto mb-5">
+            {isScanning ? <Camera className="w-10 h-10 text-cyan-400 animate-pulse" /> : <QrCode className="w-10 h-10 text-cyan-400" />}
+          </div>
+          <h3 className="text-2xl font-black text-white mb-2 tracking-widest uppercase">Masuk Akun</h3>
+          <p className="text-cyan-500/70 text-xs font-mono uppercase tracking-wide">Pindai QR Code atau Input Manual</p>
+        </div>
+
+        {isScanning ? (
+          <div className="space-y-4 animate-in fade-in zoom-in">
+             <div className="relative w-full rounded-2xl overflow-hidden border border-cyan-500 bg-black aspect-square">
+                <div id="qr-reader-box" className="w-full h-full opacity-80 mix-blend-screen"></div>
+                <div className="absolute inset-0 pointer-events-none bg-[linear-gradient(transparent_50%,rgba(6,182,212,0.1)_50%)] bg-[length:100%_4px]"></div>
+                <div className="absolute inset-0 pointer-events-none"><div className="w-full h-full bg-gradient-to-b from-transparent via-cyan-500/30 to-transparent animate-[scan_2s_ease-in-out_infinite] border-b-2 border-cyan-400"></div></div>
+             </div>
+             <button onClick={stopScanner} className="w-full py-4 bg-transparent border border-rose-500/50 text-rose-400 rounded-xl font-black transition-all uppercase tracking-widest text-xs">Batalkan Kamera</button>
+          </div>
+        ) : (
+          <div className="space-y-6">
+            <button onClick={startScanner} className="w-full py-4 bg-cyan-600/20 border border-cyan-500/50 text-cyan-400 font-black tracking-widest uppercase text-xs rounded-2xl flex justify-center items-center gap-3">
+              <Camera className="w-5 h-5" /> Buka Kamera Scanner
+            </button>
+            <div className="relative flex items-center py-2 opacity-40">
+               <div className="flex-grow border-t border-cyan-500/50"></div>
+               <span className="flex-shrink-0 mx-4 text-cyan-300 text-[9px] font-mono tracking-[0.3em] uppercase">Atau Input Manual</span>
+               <div className="flex-grow border-t border-cyan-500/50"></div>
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-[9px] text-cyan-500/80 font-bold uppercase tracking-[0.2em] ml-1">Nomor Induk Mahasiswa (NIM)</label>
+              <div className="flex items-center bg-[#050B14] border border-cyan-500/30 rounded-xl overflow-hidden focus-within:border-cyan-400 transition-all duration-300">
+                 <div className="pl-4 pr-2 text-cyan-600"><Fingerprint className="w-5 h-5"/></div>
+                 <input type="text" placeholder="Ketik NIM..." className="w-full bg-transparent py-4 pr-4 text-cyan-50 font-mono outline-none" value={nimInput} onChange={(e) => setNimInput(e.target.value)} />
+              </div>
+            </div>
+            {students.length > 0 && (
+              <div className="space-y-1.5">
+                <label className="text-[9px] text-cyan-500/80 font-bold uppercase tracking-[0.2em] ml-1">Kata Sandi (Password)</label>
+                <div className="flex items-center bg-[#050B14] border border-cyan-500/30 rounded-xl overflow-hidden focus-within:border-cyan-400 transition-all duration-300">
+                   <div className="pl-4 pr-2 text-cyan-600"><Key className="w-5 h-5"/></div>
+                   <input type="password" placeholder="Ketik Sandi..." className="w-full bg-transparent py-4 pr-4 text-cyan-50 font-mono outline-none" value={passInput} onChange={(e) => setPassInput(e.target.value)} />
+                </div>
+              </div>
+            )}
+            {error && <div className="p-4 bg-rose-950/40 border border-rose-500/40 rounded-xl flex items-start gap-3"><AlertCircle className="w-5 h-5 text-rose-400 shrink-0 mt-0.5" /><p className="text-xs font-mono text-rose-200 uppercase tracking-wide">{error}</p></div>}
+            <button onClick={() => handleVerify()} className="w-full py-4 mt-4 bg-cyan-600 hover:bg-cyan-500 text-white font-black tracking-widest uppercase text-xs rounded-2xl shadow-[0_0_20px_rgba(6,182,212,0.4)]">Lanjut Verifikasi</button>
+          </div>
+        )}
+      </div>
+      <style>{`@keyframes scan { 0% { transform: translateY(-100%); } 50% { transform: translateY(100%); } 100% { transform: translateY(-100%); } }`}</style>
+    </div>
+  );
+};
+
+const SelfieCapture: React.FC<{ onComplete: (base64: string) => void }> = ({ onComplete }) => {
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const streamRef = useRef<MediaStream | null>(null);
+  const [image, setImage] = useState<string | null>(null);
+
+  const startCamera = async () => {
+    try {
+      const mediaStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "user", aspectRatio: 16 / 9 } });
+      streamRef.current = mediaStream;
+      if (videoRef.current) videoRef.current.srcObject = mediaStream;
+    } catch (err) { console.error("Camera access failed", err); }
+  };
+
+  useEffect(() => {
+    startCamera();
+    return () => { if (streamRef.current) streamRef.current.getTracks().forEach(track => track.stop()); };
+  }, []);
+
+  const capture = useCallback(() => {
+    if (videoRef.current) {
+      const canvas = document.createElement('canvas');
+      canvas.width = videoRef.current.videoWidth;
+      canvas.height = videoRef.current.videoHeight;
+      const ctx = canvas.getContext('2d');
+      if (ctx) {
+        ctx.drawImage(videoRef.current, 0, 0, canvas.width, canvas.height);
+        setImage(canvas.toDataURL('image/jpeg', 0.8));
+      }
+    }
+  }, []);
+
+  return (
+    <div className="flex flex-col items-center justify-center p-4 md:p-6 space-y-6 w-full max-w-md mx-auto animate-in slide-in-from-right duration-500 z-10 relative">
+      <div className="text-center">
+        <h3 className="text-2xl md:text-3xl font-black text-white tracking-widest uppercase">Foto Bukti Hadir</h3>
+        <p className="text-cyan-500/70 text-xs font-mono uppercase mt-2">Posisikan wajah di tengah kamera</p>
+      </div>
+      <div className="w-full bg-[#050B14] rounded-3xl overflow-hidden border-2 border-cyan-500/50 aspect-[3/4] md:aspect-video flex items-center justify-center relative shadow-[0_0_40px_rgba(6,182,212,0.3)]">
+        {!image ? <video ref={videoRef} autoPlay playsInline muted className="w-full h-full object-cover transform scale-x-[-1]" /> : <img src={image} alt="Selfie Absen" className="w-full h-full object-cover" />}
+        <div className="absolute inset-0 pointer-events-none bg-[linear-gradient(transparent_95%,rgba(6,182,212,0.1)_100%),linear-gradient(90deg,transparent_95%,rgba(6,182,212,0.1)_100%)] bg-[length:40px_40px]"></div>
+        {!image && (
+           <div className="absolute inset-0 pointer-events-none flex items-center justify-center">
+              <div className="relative w-56 h-72">
+                 <div className="absolute top-0 left-0 w-8 h-8 border-t-2 border-l-2 border-cyan-400"></div>
+                 <div className="absolute top-0 right-0 w-8 h-8 border-t-2 border-r-2 border-cyan-400"></div>
+                 <div className="absolute bottom-0 left-0 w-8 h-8 border-b-2 border-l-2 border-cyan-400"></div>
+                 <div className="absolute bottom-0 right-0 w-8 h-8 border-b-2 border-r-2 border-cyan-400"></div>
+                 <div className="absolute w-full h-[1px] bg-cyan-400 shadow-[0_0_10px_rgba(6,182,212,1)] animate-[scan_3s_ease-in-out_infinite]"></div>
+              </div>
+           </div>
+        )}
+      </div>
+      <div className="w-full mt-4">
+        {!image ? (
+          <button onClick={capture} className="w-full py-5 border-2 border-cyan-500 hover:bg-cyan-500/20 text-cyan-400 font-black tracking-widest uppercase text-sm rounded-2xl flex items-center justify-center gap-4 transition-all">
+             <div className="w-6 h-6 rounded-full border-[3px] border-cyan-400 flex items-center justify-center"><div className="w-2 h-2 rounded-full bg-cyan-400 animate-ping"></div></div>
+             Ambil Foto Selfie
+          </button>
+        ) : (
+          <div className="flex gap-4">
+            <button onClick={() => { setImage(null); startCamera(); }} className="flex-1 py-4 border border-rose-500/50 text-rose-400 font-bold uppercase rounded-xl text-xs tracking-widest">Ulangi</button>
+            <button onClick={() => onComplete(image)} className="flex-[2] py-4 bg-cyan-600 text-white font-black uppercase rounded-xl flex items-center justify-center gap-3 text-xs tracking-widest shadow-[0_0_20px_rgba(6,182,212,0.4)]"><CheckCircle2 className="w-5 h-5" /> Gunakan Foto Ini</button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
+const SuccessScreen: React.FC<{ reset: () => void }> = ({ reset }) => (
+  <div className="flex flex-col items-center justify-center p-8 space-y-8 text-center animate-in zoom-in duration-500 w-full z-10 relative">
+    <div className="relative">
+       <div className="absolute inset-0 bg-emerald-500/20 blur-[50px] rounded-full"></div>
+       <div className="w-36 h-36 bg-[#050B14] border border-emerald-500/50 rounded-full flex items-center justify-center relative z-10 animate-bounce shadow-[0_0_40px_rgba(16,185,129,0.3)]"><ShieldCheck className="w-20 h-20 text-emerald-400" /></div>
+    </div>
+    <div className="space-y-4">
+       <h2 className="text-3xl md:text-4xl font-black text-emerald-300 tracking-widest uppercase">Absensi Berhasil!</h2>
+       <p className="text-cyan-500/70 text-xs font-mono uppercase tracking-wide max-w-sm mx-auto leading-relaxed">Data kehadiran, jam, lokasi, dan foto selfie Anda telah berhasil disimpan.</p>
+    </div>
+    <button onClick={reset} className="px-10 py-4 border border-cyan-500 text-cyan-400 rounded-2xl font-black tracking-widest uppercase text-sm mt-8 transition-all hover:bg-cyan-500/20 shadow-[0_0_20px_rgba(6,182,212,0.2)]">Selesai</button>
+  </div>
+);
+
+const AttendanceWizard: React.FC = () => {
+  const { addLog, studentLogout, students, sendWA } = useAppContext();
+  const [step, setStep] = useState(0); 
+  const [data, setData] = useState<Partial<Log>>({});
+  const [linkedNim, setLinkedNim] = useState<string | null>(null);
+
+  const activeSessionRef = useRef<string>('');
+
+  useEffect(() => { setLinkedNim(localStorage.getItem('axaxyz_device_owner')); }, [step]); 
+
+  const reset = () => { setStep(0); setData({}); activeSessionRef.current = ''; };
+  const steps = ['Waktu', 'Lokasi', 'Identitas', 'Verifikasi'];
+
+  return (
+    <div className="min-h-screen flex flex-col font-sans text-slate-100 overflow-hidden relative radiology-bg">
+      <header className="w-full p-4 md:p-6 flex justify-between items-center relative z-20 border-b border-cyan-500/20 bg-[#0A1628]/80 backdrop-blur-xl shadow-[0_4px_30px_rgba(0,0,0,0.5)]">
+        <div className="flex items-center gap-4">
+          <div className="w-12 h-12 bg-[#050B14] border border-cyan-500/50 rounded-xl flex items-center justify-center shadow-[0_0_15px_rgba(6,182,212,0.4)] p-2"><img src="/axalogo.png" alt="DEPT. RKG" className="w-full h-full object-contain" onError={(e) => { e.currentTarget.style.display = 'none'; e.currentTarget.nextElementSibling?.classList.remove('hidden'); }} /><ActivitySquare className="text-cyan-400 w-full h-full hidden" /></div>
+          <div className="flex flex-col"><span className="font-black text-lg md:text-2xl tracking-[0.2em] text-cyan-50 uppercase drop-shadow-[0_0_10px_rgba(6,182,212,0.5)]">DEPT. RKG</span><span className="text-[8px] md:text-[10px] text-cyan-400 font-mono tracking-widest uppercase mt-0.5">Sistem Absensi Mahasiswa</span></div>
+        </div>
+        <div className="flex items-center gap-3">
+           {linkedNim && <div className="hidden md:flex items-center gap-2 px-3 py-1.5 bg-[#050B14] border border-cyan-500/30 rounded-lg"><User className="w-3.5 h-3.5 text-cyan-400" /><span className="text-[10px] font-mono text-cyan-300 tracking-widest">{linkedNim}</span></div>}
+           {linkedNim ? <button onClick={studentLogout} className="text-[9px] md:text-[10px] font-black px-4 py-2 bg-rose-950/50 border border-rose-500/50 hover:bg-rose-500 hover:text-white rounded-lg text-rose-400 tracking-[0.15em] uppercase shadow-[0_0_10px_rgba(244,63,94,0.2)] transition-all flex items-center gap-2"><LogOut className="w-3 h-3" /> Keluar</button> : <div className="text-[9px] md:text-[10px] font-black px-4 py-2 bg-cyan-950/50 border border-cyan-500/50 rounded-lg text-cyan-300 tracking-[0.15em] uppercase shadow-[0_0_10px_rgba(6,182,212,0.2)]">Portal Mahasiswa</div>}
+        </div>
+      </header>
+
+      <main className="flex-1 flex flex-col relative z-10 w-full max-w-[1400px] mx-auto px-4 py-6 md:py-10 overflow-y-auto overflow-x-hidden custom-scrollbar">
+        {step > 0 && step < 5 && (
+          <div className="mb-8 md:mb-16 max-w-2xl mx-auto w-full px-2 relative z-20">
+            <div className="flex justify-between relative">
+              <div className="absolute top-1/2 -translate-y-1/2 left-0 w-full h-[2px] bg-cyan-950"></div>
+              <div className="absolute top-1/2 -translate-y-1/2 left-0 h-[2px] bg-cyan-400 transition-all duration-700 ease-in-out shadow-[0_0_10px_rgba(6,182,212,0.8)]" style={{ width: `${((step - 1) / (steps.length - 1)) * 100}%` }}></div>
+              {steps.map((label, idx) => {
+                const isActive = step === idx + 1; const isPassed = step > idx + 1;
+                return (
+                  <div key={label} className="relative z-10 flex flex-col items-center gap-3">
+                    <div className={cn("w-10 h-10 md:w-12 md:h-12 rounded-full flex items-center justify-center text-xs md:text-sm font-black border-2 transition-all duration-500 bg-[#050B14]", isActive ? "border-cyan-400 text-cyan-400 shadow-[0_0_20px_rgba(6,182,212,0.6)] scale-110" : isPassed ? "border-cyan-600 text-cyan-500" : "border-cyan-900 text-cyan-800")}><div>{isPassed ? <CheckCircle2 className="w-5 h-5 md:w-6 md:h-6" /> : idx + 1}</div></div>
+                    <span className={cn("text-[9px] md:text-[10px] font-mono absolute -bottom-7 w-max tracking-widest uppercase", isActive ? "text-cyan-400 font-bold" : isPassed ? "text-cyan-600" : "text-cyan-900")}>{label}</span>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+        <div className="flex-1 flex items-center justify-center w-full pt-4">
+          {step === 0 && <StudentDashboard onStartAbsen={() => setStep(1)} linkedNim={linkedNim} />}
+          {step === 1 && <TimeCheck onComplete={(d) => { activeSessionRef.current = d.sessionName; setData(prev => ({...prev, ...d})); setStep(2); }} />}
+          {step === 2 && <LocationCheck onComplete={(d) => { setData(prev => ({...prev, location: d})); setStep(3); }} />}
+          {step === 3 && <QRScanner activeSessionName={activeSessionRef.current} onComplete={(d) => { setData(prev => ({...prev, ...d})); setStep(4); }} />}
+          
+          {step === 4 && <SelfieCapture onComplete={(photo) => { 
+             const logData = { ...data, photoBase64: photo } as Omit<Log, 'id' | 'timestamp'>;
+             addLog(logData); 
+
+             const student = students.find(s => s.nim === logData.nim);
+             if (student && student.noHp) {
+                 sendWA(student.noHp, 3, {
+                     namaLengkap: student.name,
+                     nim: student.nim,
+                     kelompok: logData.clusterName || 'Tanpa Kelompok',
+                     shift: logData.sessionName,
+                     jamAbsen: new Date().toLocaleTimeString('id-ID', {hour: '2-digit', minute:'2-digit'})
+                 });
+             }
+             
+             setStep(5); 
+          }} />}
+          {step === 5 && <SuccessScreen reset={reset} />}
+        </div>
+      </main>
+    </div>
+  );
+};
+
 // ==========================================
 // ADMIN AREA
 // ==========================================
@@ -1363,7 +1822,7 @@ const AdminDashboardHome: React.FC = () => {
                          <td className="p-4 font-mono text-sm tracking-wider">{st.nim}</td>
                          <td className="p-4 font-bold text-sm uppercase max-w-[200px] truncate" title={st.name}>{st.name}</td>
                          <td className="p-4">
-                            {/* FIX BUG KELOMPOK TERPOTONG */}
+                            {/* FIX BUG KELOMPOK TERPOTONG DI SINI */}
                             <span className="inline-block whitespace-nowrap text-[9px] uppercase font-bold tracking-widest text-cyan-300 bg-cyan-950/50 border border-cyan-500/30 px-3 py-1.5 rounded-md shadow-sm">
                                {clusters.find(c => c.id === st.clusterId)?.name || 'TANPA KELOMPOK'}
                             </span>
