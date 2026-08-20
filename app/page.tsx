@@ -226,7 +226,6 @@ const defaultSessions: Session[] = [
 const defaultGeofence: Geofence = { lat: -6.200000, lng: 106.816666, radius: 500, name: 'Gedung Kampus Pusat' };
 const defaultClusters: Cluster[] = [{ id: 'c1', name: 'Angkatan 2024' }, { id: 'c2', name: 'Angkatan 2025' }];
 
-// UPDATE: FULL TEMPLATES TERMASUK SKENARIO 15, 16, & 19
 const initialDefaultFormatsWA: FormatWA[] = [
   { id: 1, title: "Pembukaan Sesi", description: "Dikirim tepat saat jam shift dimulai.", template: "🔔 *NOTIFIKASI ABSENSI DIBUKA* 🔔\n\nHalo *[Nama Lengkap]*, sesi absensi untuk *[Shift]* Dept. RKG hari ini telah resmi *DIBUKA*.\n\n📋 *Detail Sesi Absensi:*\n• Kelompok: *[Kelompok]*\n• Jam Tepat Waktu: *[Jam Sesi]* WITA\n• Batas Tutup Sesi: *[Jam Tutup]* WITA\n\nYuk, segera lakukan validasi kehadiran Anda sekarang melalui portal resmi kami:\n[Link]\n\nSelamat bertugas! 🏥" },
   { id: 2, title: "Pengingat Sisa Waktu", description: "Hanya untuk MHS yang belum absen (Sisa toleransi).", template: "⚠️ *PENGINGAT TERAKHIR ABSENSI* ⚠️\n\nPanggilan kepada *[Nama Lengkap]*! Sistem mendeteksi Anda *BELUM* melakukan absensi untuk *[Shift]* hari ini.\n\nWaktu absensi Anda hampir habis. Sesi ini akan ditutup secara permanen pada pukul *[Jam Tutup]* WITA. Jika Anda tidak melakukan absensi setelah jam tersebut, sistem akan otomatis mencatat status Anda sebagai *TIDAK HADIR (ALPHA)*.\n\nMohon segera menuju area batas kampus dan selesaikan absen Anda di sini:\n[Link]" },
@@ -254,7 +253,7 @@ const initialDefaultFormatsWA: FormatWA[] = [
 const AppContext = createContext<AppContextType | null>(null);
 
 // ==========================================
-// APP PROVIDER (CRON JOB TELAH DIHAPUS, DIPINDAHKAN KE BACKEND Node.js)
+// APP PROVIDER (CRON JOB DIHAPUS, PINDAH KE BACKEND BOT)
 // ==========================================
 const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [isAppLoading, setIsAppLoading] = useState(true);
@@ -1183,7 +1182,28 @@ const AttendanceWizard: React.FC = () => {
 
   const activeSessionRef = useRef<string>('');
 
-  useEffect(() => { setLinkedNim(localStorage.getItem('axaxyz_device_owner')); }, [step]); 
+  // ========================================================
+  // 🛡️ AUTO-LOGOUT CHECKER (SINKRONISASI DENGAN DATABASE)
+  // ========================================================
+  useEffect(() => { 
+      const ownerNim = localStorage.getItem('axaxyz_device_owner');
+      const localDeviceId = localStorage.getItem('axaxyz_device_id');
+      
+      if (ownerNim && students.length > 0) {
+         const student = students.find(s => s.nim === ownerNim);
+         // Jika deviceId di database kosong (karena reset WA/Admin) atau berbeda dengan local
+         if (!student || !student.deviceId || student.deviceId !== localDeviceId) {
+             localStorage.removeItem('axaxyz_device_owner');
+             localStorage.removeItem('axaxyz_device_id');
+             setLinkedNim(null);
+             if (step !== 0) setStep(0);
+         } else {
+             setLinkedNim(ownerNim);
+         }
+      } else if (!ownerNim) {
+         setLinkedNim(null);
+      }
+  }, [students, step]); 
 
   const reset = () => { setStep(0); setData({}); activeSessionRef.current = ''; };
   const steps = ['Waktu', 'Lokasi', 'Identitas', 'Verifikasi'];
@@ -1718,7 +1738,6 @@ const AdminClusters: React.FC = () => {
   );
 };
 // --- AKHIR BAGIAN 1 ---
-
 const AdminStudents: React.FC = () => {
   const { students, addStudent, updateStudent, bulkAddStudents, deleteStudent, clusters, sendWA } = useAppContext();
   const [isAdding, setIsAdding] = useState(false);
