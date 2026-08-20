@@ -62,7 +62,7 @@ class Redis {
 }
 
 // =====================================================================
-// FALLBACK SEEDING TEMPLATES (TERMASUK SKENARIO 15, 16, & 19 BARU)
+// FALLBACK SEEDING TEMPLATES
 // =====================================================================
 const defaultFormats = [
   { id: 1, title: "Pembukaan Sesi", description: "Dikirim tepat saat jam shift dimulai.", template: "🔔 *NOTIFIKASI ABSENSI DIBUKA* 🔔\n\nHalo *[Nama Lengkap]*, sesi absensi untuk *[Shift]* Dept. RKG hari ini telah resmi *DIBUKA*.\n\n📋 *Detail Sesi Absensi:*\n• Kelompok: *[Kelompok]*\n• Jam Tepat Waktu: *[Jam Sesi]* WITA\n• Batas Tutup Sesi: *[Jam Tutup]* WITA\n\nYuk, segera lakukan validasi kehadiran Anda sekarang melalui portal resmi kami:\n[Link]\n\nSelamat bertugas! 🏥" },
@@ -83,14 +83,11 @@ const defaultFormats = [
   { id: 16, title: "Logout Device Via Bot WA", description: "Balasan saat MHS ketik command !logout di Bot WA.", template: "🔓 *LOGOUT PERANGKAT BERHASIL* 🔓\n\nHalo *[Nama Lengkap]*,\nPermintaan pelepasan akses (Logout) perangkat Anda telah berhasil diproses oleh sistem database kami.\n\nSistem tidak lagi mengunci perangkat lama Anda. Saat Anda melakukan absensi berikutnya di [Link], perangkat baru yang Anda gunakan akan otomatis menjadi perangkat utama yang terikat dengan akun Anda.\n\nJaga selalu keamanan akun Anda! 🛡️" },
   { id: 17, title: "Hari Terakhir", description: "Pengingat cross-check di hari terakhir stase.", template: "🏁 *HARI TERAKHIR STASE DEPT. RKG* 🏁\n\nHalo *[Nama Lengkap]*, \nHari ini adalah hari terakhir untuk periode stase *[Kelompok]*.\n\nMohon segera login ke [Link] dan periksa *Rincian Kehadiran* Anda. Pastikan seluruh absensi (Hadir/Terlambat/Alpha) telah terekam dengan benar sebelum Admin menutup buku dan mengekspor laporan akhir (Excel) untuk penilaian.\n\nTerima kasih atas kerja kerasnya selama berada di Dept. RKG! Sukses selalu! ✨" },
   { id: 18, title: "Pesan Broadcast", description: "Pesan custom (pengumuman) dari Admin.", template: "📢 *PENGUMUMAN DEPT. RKG* 📢\nKepada Yth. Seluruh Mahasiswa *[Kelompok]*,\n\n*[Pesan Custom]*\n\n---\n_Pesan ini di-generate otomatis oleh Sistem Admin. Harap segera dilaksanakan._" },
-  { id: 19, title: "Reset Password via Bot WA", description: "Balasan saat MHS ketik command !reset di Bot WA.", template: "♻️ *RESET KATA SANDI BERHASIL* ♻️\n\nHalo *[Nama Lengkap]*,\nPermintaan reset kata sandi (password) Anda telah berhasil diproses secara real-time oleh sistem.\n\nBerikut adalah kredensial terbaru Anda:\n👤 NIM: *[NIM]*\n🔑 Sandi Baru: *[Password]*\n\nSilakan gunakan sandi baru ini (4 digit angka) untuk login kembali ke portal absensi:\n[Link]\n\nSegera simpan dan *jangan bagikan sandi ini kepada siapa pun!*" },
+  { id: 19, title: "Reset Password via Bot WA", description: "Balasan saat MHS ketik command !reset di Bot WA.", template: "♻️ *RESET KATA SANDI BERHASIL* ♻️\n\nHalo *[Nama Lengkap]*,\nPermintaan reset kata sandi (password) Anda telah berhasil diproses secara real-time oleh sistem.\n\nBerikut adalah kredensial terbaru Anda:\n👤 NIM: *[NIM]*\n🔐 Sandi Baru: *[Password]*\n\nSilakan gunakan sandi baru ini (4 digit angka) untuk login kembali ke portal absensi:\n[Link]\n\nSegera simpan dan *jangan bagikan sandi ini kepada siapa pun!*" },
   { id: 20, title: "Rekap Admin", description: "Rangkuman total Hadir/Alpha harian untuk Admin.", template: "📈 *REKAPITULASI ABSENSI HARIAN DEPT. RKG* 📈\n\nHalo Admin, berikut adalah laporan singkat kehadiran mahasiswa untuk hari ini (*[Tanggal]*):\n\n👥 *Total Mahasiswa Aktif:* [Total Mhs] Entitas\n✅ *Hadir Tepat Waktu:* [Total Hadir] Sesi\n⚠️ *Terlambat:* [Total Terlambat] Sesi\n❌ *Tidak Hadir (Alpha):* [Total Alpha] Sesi\n\nSeluruh data telah diamankan ke Cloud. Untuk melihat rincian nama mahasiswa atau mengunduh laporan Excel, silakan akses Dashboard Utama: [Link]" },
   { id: 25, title: "Onboarding Baru", description: "Penyebaran password saat input MHS baru (Excel/Manual).", template: "🎉 *SELAMAT DATANG DI DEPT. RKG!* 🎉\n\nHalo *[Nama Lengkap]*, selamat bergabung! \nData Anda telah berhasil didaftarkan oleh Administrator ke dalam Sistem Absensi Digital Terpadu Dept. RKG.\n\nBerikut adalah rincian informasi dan kredensial akses Anda:\n👤 *Nama:* [Nama Lengkap]\n🆔 *NIM:* [NIM]\n👥 *Kelompok:* [Kelompok]\n🗓️ *Masa Stase:* [Tanggal Mulai] - [Tanggal Akhir]\n🔑 *Kata Sandi:* [Password]\n\nAgar Anda dapat mulai melakukan absensi, ikuti langkah wajib berikut:\n1. Buka portal resmi absensi di: [Link]\n2. Klik tombol \"Mulai Absensi\" di layar utama.\n3. Masukkan *NIM* dan *Kata Sandi* Anda dengan benar.\n4. Pastikan Anda *Mengizinkan (Allow)* akses Kamera dan Lokasi (GPS) pada browser HP Anda.\n5. Lakukan absensi perdana Anda sesuai jadwal yang ditentukan.\n\n⚠️ *PENTING:* Perangkat/HP pertama yang Anda gunakan untuk login akan langsung *DIKUNCI (Terikat)* dengan akun Anda. Jangan pernah menitipkan akun ke HP teman! \n\nJaga kerahasiaan kata sandi Anda. Selamat bertugas dan sukses untuk stasenya! 🏥✨" }
 ];
 
-// =====================================================================
-// AUTO-SEEDING DARI REDIS & JSON EKSTERNAL
-// =====================================================================
 async function initFormatsInRedis() {
   const redis = Redis.fromEnv();
   const existingFormats = await redis.get('axaxyz_formats');
@@ -105,7 +102,6 @@ async function initHolidaysInRedis() {
   const redis = Redis.fromEnv();
   const existingHolidays = await redis.get('axaxyz_holidays');
   if (!existingHolidays || existingHolidays.length === 0) {
-    // Dynamic import mapping for Calendar2026 JSON Object
     const rawCal: any = calendar2026Raw;
     const defaultHolidays = Object.keys(rawCal)
       .filter(key => key !== 'info' && rawCal[key].holiday)
@@ -121,9 +117,6 @@ async function initHolidaysInRedis() {
   return existingHolidays;
 }
 
-// =====================================================================
-// GET REQUEST: MENGAMBIL ANTRIAN (BOT) & MENAMPILKAN DOCS (BROWSER)
-// =====================================================================
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
   const action = searchParams.get('action');
@@ -139,42 +132,12 @@ export async function GET(request: NextRequest) {
 
   const apiDocs = {
     app_name: "Sistem Absensi Dept. RKG",
-    endpoint: "https://absensi.maksaarsyad.xyz/api/wa",
-    bot_pull_endpoint: "GET https://absensi.maksaarsyad.xyz/api/wa?action=pull",
-    method: "POST",
-    description: "REST API Gateway All-in-One: Merakit pesan dari template dinamis Redis & Memasukkannya ke dalam Queue untuk di-pull oleh Bot WA.",
-    headers: { "Content-Type": "application/json" },
-    payload_example: {
-      no_hp: "6281234567890",
-      scenario: 18,
-      data: {
-        namaLengkap: "M. Azhar Arsyad",
-        nim: "161202300030",
-        kelompok: "Cluster II 2025",
-        shift: "Shift Pagi",
-        jamSesi: "07:30",
-        jamTutup: "08:55",
-        jamAbsen: "07:45",
-        statusAkhir: "Hadir",
-        tanggalMulai: "01/08/2026",
-        tanggalAkhir: "31/08/2026",
-        password: "123",
-        radius: "500",
-        lokasiGeofence: "Gedung Rektorat",
-        pesanCustom: "Praktikum dialihkan ke Ruang B lantai 2 (Skenario 18)",
-        link: "https://absensi.maksaarsyad.xyz/"
-      }
-    },
-    smart_logic: "Untuk Bot Command !logout kirimkan scenario: 16 dan !reset kirimkan scenario: 19 hanya dengan 'no_hp'. API akan mencari nama, membuat password acak 4 digit, dan update database secara realtime.",
-    available_scenarios: "Silakan login ke Admin Panel -> Manajemen Format atau lihat UI /apidocs untuk melihat/mengatur seluruh Skenario secara dinamis."
+    endpoint: "https://absensi.maksaarsyad.xyz/api/wa"
   };
 
   return NextResponse.json(apiDocs, { status: 200 });
 }
 
-// =====================================================================
-// POST REQUEST: GENERATE WHATSAPP MESSAGE & PUSH KE QUEUE (REDIS)
-// =====================================================================
 export async function POST(request: Request) {
   try {
     const body = await request.json();
@@ -196,50 +159,54 @@ export async function POST(request: Request) {
         let rawStudents = await redis.get('axaxyz_students');
         let students: any[] = [];
 
-        // 🛡️ SUPER FIX: Mencegah error 'findIndex is not a function' akibat Double Stringify dari Redis
         if (typeof rawStudents === 'string') {
             try { rawStudents = JSON.parse(rawStudents); } catch(e){}
         }
-        if (typeof rawStudents === 'string') { // Antisipasi tersarang 2 lapis string
+        if (typeof rawStudents === 'string') {
             try { rawStudents = JSON.parse(rawStudents); } catch(e){}
         }
         if (Array.isArray(rawStudents)) {
             students = rawStudents;
         }
 
-        // Normalisasi nomor HP pencarian (Input dari bot) ke format 62...
-        let inputNoHp = String(no_hp).replace(/[^0-9]/g, '');
-        if (inputNoHp.startsWith('0')) inputNoHp = '62' + inputNoHp.substring(1);
+        let inputNoHp = String(no_hp).trim();
 
-        // Cari dengan memastikan nomor database juga dinormalisasi ke format 62...
+        // 🔍 UPGRADE LID MATCHER: Jika input berupa LID (panjang angka murni tanpa awalan 62) atau format telepon biasa
         const studentIndex = students.findIndex((s: any) => {
             if (!s.noHp) return false;
-            let sHp = String(s.noHp).replace(/[^0-9]/g, '');
-            if (sHp.startsWith('0')) sHp = '62' + sHp.substring(1);
-            return sHp === inputNoHp;
-        });
+            let sHp = String(s.noHp).trim();
+            let sLid = s.lid ? String(s.lid).trim() : '';
 
+            // Normalisasi standar 628xxx
+            let cleanInput = inputNoHp.replace(/[^0-9]/g, '');
+            if (cleanInput.startsWith('0')) cleanInput = '62' + cleanInput.substring(1);
+
+            let cleanShp = sHp.replace(/[^0-9]/g, '');
+            if (cleanShp.startsWith('0')) cleanShp = '62' + cleanShp.substring(1);
+
+            // Cocokkan nomor HP bersih atau jika bot mengirimkan LID/JID langsung
+            return cleanShp === cleanInput || sHp === inputNoHp || sLid === inputNoHp || s.noHp === no_hp;
+        });
+        
         if (studentIndex === -1) {
             return NextResponse.json({ 
                 success: false, 
                 error: `Nomor WhatsApp Anda (${inputNoHp}) tidak ditemukan di Database. Hubungi Admin Dept. RKG untuk mendaftarkan nomor Anda.` 
             }, { status: 404 });
         }
-
+        
         const st = students[studentIndex];
-
+        
         if (scenario === 16) {
-            // Process Logout Device Skenario 16
             if (!st.deviceId) {
-                return NextResponse.json({ success: false, error: "Akun Anda saat ini TIDAK terhubung ke HP/Perangkat mana pun (Sudah Logout)." }, { status: 400 });
+                return NextResponse.json({ success: false, error: "Perangkat Anda sudah dalam keadaan tidak terikat (logout)." }, { status: 400 });
             }
             students[studentIndex].deviceId = null;
             data.namaLengkap = st.name;
             data.link = data.link || "https://absensi.maksaarsyad.xyz/";
         }
-
+        
         if (scenario === 19) {
-            // Process Reset Password Skenario 19 (4 digit random number 1000-9999)
             const newPass = Math.floor(1000 + Math.random() * 9000).toString();
             students[studentIndex].password = newPass;
             data.namaLengkap = st.name;
@@ -248,11 +215,9 @@ export async function POST(request: Request) {
             data.link = data.link || "https://absensi.maksaarsyad.xyz/";
         }
 
-        // Save updated students back to Redis Realtime!
         await redis.set('axaxyz_students', students);
     }
 
-    // Pastikan Format Tersedia (Ambil langsung dari Redis)
     const formats = await initFormatsInRedis();
 
     const link = data.link || "https://absensi.maksaarsyad.xyz/";
@@ -263,12 +228,11 @@ export async function POST(request: Request) {
 
     if (!matchedFormat) {
        return NextResponse.json(
-         { success: false, error: `Skenario dengan ID ${scenario} tidak ditemukan dalam Manajemen Format di Admin.` },
+         { success: false, error: `Skenario dengan ID ${scenario} tidak ditemukan.` },
          { status: 404 }
        );
     }
 
-    // Replace String Dinamis Aman
     let messageText = matchedFormat.template
       .replace(/\[Nama Lengkap\]/g, String(data.namaLengkap || ''))
       .replace(/\[NIM\]/g, String(data.nim || ''))
@@ -290,17 +254,15 @@ export async function POST(request: Request) {
       .replace(/\[Total Alpha\]/g, String(data.totalAlpha || '0'))
       .replace(/\[Link\]/g, String(link));
 
-    // Variabel Gabungan Khusus [Status Kehadiran]
     if (data.statusAkhir) {
       let strStatus = "";
       if (data.statusAkhir === "Hadir") strStatus = `🟢 *TEPAT WAKTU / HADIR* (Terekam pada: *${data.jamAbsen}* WITA)`;
       else if (data.statusAkhir === "Terlambat") strStatus = `🟡 *TERLAMBAT* (Terekam pada: *${data.jamAbsen}* WITA)`;
       else strStatus = `🔴 *TIDAK HADIR (ALPHA)* (Tidak ada data rekam jejak masuk)`;
-
+      
       messageText = messageText.replace(/\[Status Kehadiran\]/g, strStatus);
     }
 
-    // PUSH KE MESSAGE QUEUE (REDIS)
     const currentQueue = await redis.get('axaxyz_wa_queue') || [];
     const newMessage = { 
        id: Math.random().toString(36).substr(2, 9), 
@@ -324,9 +286,6 @@ export async function POST(request: Request) {
   }
 }
 
-// =====================================================================
-// DELETE REQUEST: MENGHAPUS PESAN DARI ANTRIAN SETELAH BOT BERHASIL
-// =====================================================================
 export async function DELETE(request: Request) {
   try {
     const { message_id } = await request.json();
